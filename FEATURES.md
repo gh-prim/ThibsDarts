@@ -18,21 +18,21 @@ Système de comptage automatique des scores aux fléchettes pour Thibault.
 |---|---|---|
 | 301 / 501 | Options double out, double in, legs et sets | V1 |
 | Around the clock | 1 à 20 dans l'ordre, variantes doubles ou triples | V1 |
-| Cricket | Fermer 15 à 20 + bull | V2 |
-| Killer | Chacun a un numéro, devient killer via son double, retire des vies aux autres | V2 |
-| Shanghai | Une cible par manche, simple + double + triple en une volée = victoire | V2 |
-| Halve-it | Cibles imposées, cible ratée = score divisé par 2 | V3 |
-| Bob's 27 | Doubles 1 à 20, on gagne ou perd la valeur du double | V3 |
+| Cricket | Fermer 15 à 20 + bull | V1 |
+| Killer | Chacun a un numéro, devient killer via son double, retire des vies aux autres | V1 |
+| Shanghai | Une cible par manche, simple + double + triple en une volée = victoire | V1 |
+| Halve-it | Cibles imposées, cible ratée = score divisé par 2 | V2 |
+| Bob's 27 | Doubles 1 à 20, on gagne ou perd la valeur du double | V2 |
 
 ### Entraînement solo (practice)
 
 | Mode | Principe | Version |
 |---|---|---|
 | Séries libres | X volées sur une cible choisie, % de réussite | V1 |
-| Checkout trainer | Finir des scores tirés au hasard | V3 |
-| Doubles trainer | Tous les doubles, stats par double | V3 |
-| Score 99 | Moyenne sur 33 volées, suivi de progression | V3 |
-| Heatmap | Où tombent les fléchettes, groupement | V3 |
+| Checkout trainer | Finir des scores tirés au hasard | V2 |
+| Doubles trainer | Tous les doubles, stats par double | V2 |
+| Score 99 | Moyenne sur 33 volées, suivi de progression | V2 |
+| Heatmap | Où tombent les fléchettes, groupement | V2 |
 
 ## Features produit
 
@@ -55,34 +55,33 @@ Système de comptage automatique des scores aux fléchettes pour Thibault.
 - Score en cours, volée, joueur actif (V1)
 - Bouton fin de volée / fléchette hors cible (V1)
 - Boutons annuler et corriger (V1)
-- Suggestion de checkout, ex : 121 = T20 T11 D14 (V2)
+- Suggestion de checkout, ex : 121 = T20 T11 D14 (V1)
 - Design de l'interface à faire plus tard (prompts Claude Design)
 
 ### Appli iOS
 
 - Setup Wi-Fi Bluetooth (V1)
 - Création de partie : mode, joueurs, options (V1)
-- Profils joueurs avec avatar (V2)
-- Stats : moyenne par 3 fléchettes, % checkout, 180, meilleur leg, progression (V2)
-- Historique des parties (V2)
+- Profils joueurs avec avatar (V1)
+- Stats : moyenne par 3 fléchettes, % checkout, 180, meilleur leg, progression (V1)
+- Historique des parties (V1)
 
 ### Apple TV (projecteur)
 
-- Tableau des scores en grand (V2)
-- Animations sur 180, checkout, victoire (V2)
-- Annonce vocale du score façon arbitre (V2)
+- Tableau des scores en grand (V1)
+- Animations sur 180, checkout, victoire (V1)
+- Annonce vocale du score façon arbitre (V1)
 
 ### Appli web (servie par le Pi 4)
 
-- Accessible depuis le MacBook sur le réseau local (V3)
-- Stats détaillées (V3)
+- Accessible depuis le MacBook sur le réseau local (V2)
+- Stats détaillées (V2)
 
 ### IA (optionnel)
 
-- Analyse de jeu avec l'API Anthropic, éventuellement via LangGraph / LangChain (V3)
+- Analyse de jeu avec l'API Anthropic, éventuellement via LangGraph / LangChain (V2)
 
 ## Roadmap
 
-- **V1 (jouable)** : image OS custom, setup Wi-Fi Bluetooth, détection et calibration, écran 7 pouces avec cible virtuelle live, 301 / 501 multi, Around the clock, séries d'entraînement
-- **V2 (soirées)** : Apple TV, Cricket, Killer, Shanghai, profils, historique et stats de base sur iOS
-- **V3 (bonus)** : appli web, modes restants, trainers, heatmap, analyse IA
+- **V1 (jouable + soirées)** : image OS custom, setup Wi-Fi Bluetooth, détection et calibration, écran 7 pouces avec cible virtuelle live, 301 / 501 multi, Around the clock, Cricket, Killer, Shanghai, séries d'entraînement, Apple TV, profils, historique et stats de base sur iOS
+- **V2 (bonus)** : appli web, modes restants, trainers, heatmap, analyse IA

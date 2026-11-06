@@ -191,7 +191,7 @@ struct LiveGameView: View {
     }
 
     private var is180: Bool {
-        game.darts.count == 3 && game.darts.allSatisfy { $0.label == "T20" }
+        game.isX01 && game.darts.count == 3 && game.darts.allSatisfy { $0.label == "T20" }
     }
 
     private func player(_ name: String) -> LivePlayer? { game.players.first { $0.name == name } }

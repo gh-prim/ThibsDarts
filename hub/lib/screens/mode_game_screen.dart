@@ -247,6 +247,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
             'average': null,
             'legs': 0,
             'detail': _detail(i) ?? (g is KillerGame ? _lives(g, i) : null),
+            if (g is CricketGame) 'marks': [for (final m in g.marks[i]) m.clamp(0, 3)],
           },
       ],
       'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,

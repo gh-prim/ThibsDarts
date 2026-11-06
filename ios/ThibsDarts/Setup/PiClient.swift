@@ -40,17 +40,6 @@ struct SetupStatus: Decodable {
     let ssid: String?
 }
 
-enum PiError: LocalizedError {
-    case unreachable, badCode, http(Int, String)
-
-    var errorDescription: String? {
-        switch self {
-        case .unreachable: "Le Pi ne répond pas. Vérifie que ton iPhone est sur son Wi-Fi."
-        case .badCode: "Mauvais code. Regarde celui affiché sur le Pi."
-        case let .http(code, msg): "Le Pi a répondu \(code) (\(msg))."
-        }
-    }
-}
 
 /// Parle au serveur de setup du Pi 4 (port 8420).
 final class PiClient {

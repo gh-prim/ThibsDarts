@@ -363,7 +363,7 @@ struct CelebrationView: View {
 
     private var copy: String {
         if isDraw { return "\(winner) à égalité." }
-        switch (kind, isMe) {
+        return switch (kind, isMe) {
         case (.win, false): "\(winner) plie la partie. Sans forcer."
         case (.win, true): "Tu plies la partie. Sans forcer."
         case (.oneEighty, false): "Trois T20. \(winner) a même pas transpiré."

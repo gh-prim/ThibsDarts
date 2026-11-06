@@ -5,3 +5,4 @@ build/
 # iOS
 ios/*.xcodeproj
 ios/build/
+ios/ThibsDarts/Info.plist

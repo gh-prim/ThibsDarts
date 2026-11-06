@@ -55,16 +55,20 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stage(
-      child: ListenableBuilder(
-        listenable: _c,
-        builder: (context, _) => AnimatedSwitcher(
-          duration: Td.base,
-          child: switch (_c.phase) {
-            SetupPhase.waiting => _QrView(key: const ValueKey('qr'), c: _c),
-            SetupPhase.done => _WelcomeView(key: const ValueKey('done'), c: _c, onGo: _finish),
-            _ => _ProgressView(key: const ValueKey('progress'), c: _c),
-          },
+    // Material : sans lui, Flutter souligne les textes en jaune (style de debug).
+    return Material(
+      type: MaterialType.transparency,
+      child: Stage(
+        child: ListenableBuilder(
+          listenable: _c,
+          builder: (context, _) => AnimatedSwitcher(
+            duration: Td.base,
+            child: switch (_c.phase) {
+              SetupPhase.waiting => _QrView(key: const ValueKey('qr'), c: _c),
+              SetupPhase.done => _WelcomeView(key: const ValueKey('done'), c: _c, onGo: _finish),
+              _ => _ProgressView(key: const ValueKey('progress'), c: _c),
+            },
+          ),
         ),
       ),
     );

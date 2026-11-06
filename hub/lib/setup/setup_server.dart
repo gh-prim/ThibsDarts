@@ -148,9 +148,16 @@ class SetupController extends ChangeNotifier {
           final first = (body['firstName'] as String? ?? '').trim();
           final last = (body['lastName'] as String? ?? '').trim();
           final nick = (body['nickname'] as String? ?? '').trim();
+          final pin = body['pin'] as String?;
           if (first.isEmpty) return await _json(res, {'error': 'firstName'}, status: 400);
+          if (!Owner.validPin(pin)) return await _json(res, {'error': 'pin'}, status: 400);
           if (!store.photoFile.existsSync()) return await _json(res, {'error': 'photo'}, status: 400);
-          final saved = await store.save(firstName: first, lastName: last, nickname: nick.isEmpty ? first : nick);
+          final saved = await store.save(
+            firstName: first,
+            lastName: last,
+            nickname: nick.isEmpty ? first : nick,
+            pin: pin,
+          );
           _set(() {
             owner = saved;
             phase = SetupPhase.done;

@@ -82,11 +82,25 @@ void main() {
       token: token,
       body: {'firstName': 'Thibault', 'lastName': 'Hubert', 'nickname': 'Thibs'},
     );
+    expect(s, 400, reason: 'code à 4 chiffres obligatoire');
+    (s, j) = await call(
+      'POST',
+      '/api/setup/profile',
+      token: token,
+      body: {'firstName': 'Thibault', 'lastName': 'Hubert', 'nickname': 'Thibs', 'pin': '2580'},
+    );
     expect(s, 200);
     expect(c.phase, SetupPhase.done);
 
     final saved = OwnerStore.instance.load()!;
     expect(saved.nickname, 'Thibs');
     expect(saved.photoPath, isNotNull);
+    expect(saved.checkPin('2580'), isTrue);
+    expect(saved.checkPin('0000'), isFalse);
+    expect(
+      OwnerStore.instance.dir.listSync().any((f) => File(f.path).readAsStringSync().contains('2580')),
+      isFalse,
+      reason: 'jamais en clair',
+    );
   }, timeout: const Timeout(Duration(seconds: 30)));
 }

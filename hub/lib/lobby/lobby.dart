@@ -208,8 +208,15 @@ class Lobby extends ChangeNotifier {
       final seg = req.uri.pathSegments;
       final path = req.uri.path;
       if (req.method == 'GET' && (path == '/api/hello' || path == '/api/setup/hello')) {
-        return await _send(res, {'device': 'ThibsDarts', 'version': 1, 'setupDone': true, 'owner': AppState.owner});
+        return await _send(res, {
+          'device': 'ThibsDarts',
+          'version': 1,
+          'setupDone': true,
+          'owner': AppState.owner,
+          'pin': AppState.ownerProfile?.hasPin ?? false,
+        });
       }
+      if (path.startsWith('/api/owner/')) return await _ownerRoute(req, res, path);
       if (req.method == 'GET' && path == '/api/lobby') return await _send(res, _json());
       if (req.method == 'GET' && path == '/api/history') {
         final id = req.uri.queryParameters['player'];
@@ -267,6 +274,56 @@ class Lobby extends ChangeNotifier {
         await _send(res, {'error': '$e'}, status: 500);
       } catch (_) {}
     }
+  }
+
+  int _pinFails = 0;
+  DateTime? _pinLockedUntil;
+
+  /// Compte du propriétaire : son code (PIN), sa reconnexion depuis un autre iPhone, sa photo.
+  Future<void> _ownerRoute(HttpRequest req, HttpResponse res, String path) async {
+    final owner = AppState.ownerProfile;
+    if (owner == null) return _send(res, {'error': 'setup'}, status: 409);
+    if (req.method == 'GET' && path == '/api/owner/photo') {
+      final f = OwnerStore.instance.photoFile;
+      if (!f.existsSync()) return _send(res, {'error': 'photo'}, status: 404);
+      res.headers.contentType = ContentType('image', 'jpeg');
+      await res.addStream(f.openRead());
+      await res.close();
+      return;
+    }
+    if (req.method != 'POST') return _send(res, {'error': 'introuvable'}, status: 404);
+    final b = await _body(req);
+    final pin = b['pin'] as String?;
+    if (!Owner.validPin(pin)) return _send(res, {'error': 'pin'}, status: 400);
+    switch (path) {
+      case '/api/owner/pin':
+        // Cibles installées avant le PIN : le premier code choisi devient celui du propriétaire.
+        if (owner.hasPin) return _send(res, {'error': 'deja'}, status: 409);
+        AppState.setOwner(await OwnerStore.instance.write(owner.withPin(pin!)));
+        return _send(res, {'ok': true});
+      case '/api/owner/login':
+        if (!owner.hasPin) return _send(res, {'error': 'pas_de_pin'}, status: 409);
+        final now = DateTime.now();
+        if (_pinLockedUntil != null && now.isBefore(_pinLockedUntil!)) {
+          return _send(res, {'error': 'bloque', 'wait': _pinLockedUntil!.difference(now).inSeconds + 1}, status: 429);
+        }
+        if (!owner.checkPin(pin!)) {
+          _pinFails++;
+          if (_pinFails >= 5) {
+            _pinFails = 0;
+            _pinLockedUntil = now.add(const Duration(minutes: 1));
+          }
+          return _send(res, {'error': 'pin', 'left': 5 - _pinFails}, status: 403);
+        }
+        _pinFails = 0;
+        return _send(res, {
+          'firstName': owner.firstName,
+          'lastName': owner.lastName,
+          'nickname': owner.nickname,
+          'photo': OwnerStore.instance.photoFile.existsSync(),
+        });
+    }
+    return _send(res, {'error': 'introuvable'}, status: 404);
   }
 
   /// Un iPhone sur le même Wi-Fi crée la partie : le salon s'ouvre sur le Pi et il est dedans.

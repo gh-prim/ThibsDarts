@@ -79,6 +79,31 @@ void main() {
     expect(s, 409, reason: 'partie lancée');
   });
 
+  test('le propriétaire choisit son code puis se reconnecte avec', () async {
+    var (s, j) = await call('GET', '/api/hello');
+    expect(j['pin'], isFalse, reason: 'cible installée avant le PIN');
+    (s, j) = await call('POST', '/api/owner/login', body: {'pin': '1234'});
+    expect(s, 409);
+    (s, j) = await call('POST', '/api/owner/pin', body: {'pin': '12a4'});
+    expect(s, 400);
+    (s, j) = await call('POST', '/api/owner/pin', body: {'pin': '1234'});
+    expect(s, 200);
+    (s, j) = await call('POST', '/api/owner/pin', body: {'pin': '9999'});
+    expect(s, 409, reason: 'on ne remplace pas un code existant comme ça');
+    (s, j) = await call('GET', '/api/hello');
+    expect(j['pin'], isTrue);
+
+    (s, j) = await call('POST', '/api/owner/login', body: {'pin': '1234'});
+    expect(s, 200);
+    expect(j['nickname'], 'Thibs');
+    for (var i = 0; i < 5; i++) {
+      (s, j) = await call('POST', '/api/owner/login', body: {'pin': '0000'});
+    }
+    expect(s, 403);
+    (s, j) = await call('POST', '/api/owner/login', body: {'pin': '1234'});
+    expect(s, 429, reason: 'bloqué une minute après 5 erreurs');
+  });
+
   test("un pote crée la partie depuis son iPhone", () async {
     lobby.close();
     lobby.remoteOpen = null;

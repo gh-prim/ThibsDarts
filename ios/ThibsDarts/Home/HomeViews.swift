@@ -278,6 +278,16 @@ struct SalonView: View {
 
     var body: some View {
         let info = app.lobby?.info
+        if let info, info.isPlaying, let game = info.game {
+            LiveGameView(info: info, game: game, onLeave: leave)
+                .task { await poll() }
+        } else {
+            waiting(info)
+                .task { await poll() }
+        }
+    }
+
+    private func waiting(_ info: LobbyInfo?) -> some View {
         Stage {
             VStack(alignment: .leading, spacing: Td.s4) {
                 NavBar(title: "Salon de \(info?.hostName ?? "")", back: "Quitter") { leave() }
@@ -318,7 +328,6 @@ struct SalonView: View {
             .padding(.top, 6)
             .padding(.bottom, Td.s2)
         }
-        .task { await poll() }
     }
 
     private func before(_ info: LobbyInfo) -> String {
@@ -339,7 +348,8 @@ struct SalonView: View {
     private func poll() async {
         var misses = 0
         while !Task.isCancelled, let l = app.lobby {
-            try? await Task.sleep(for: .seconds(2))
+            // Pendant la partie on suit de près.
+            try? await Task.sleep(for: .seconds(l.info.isPlaying ? 1 : 2))
             do {
                 var fresh = try await LobbyAPI.lobby(at: l.base)
                 fresh.you = l.info.you

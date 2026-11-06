@@ -37,6 +37,8 @@ struct NavBar: View {
     let title: String
     var back: String?
     var onBack: (() -> Void)?
+    /// Ligne d'état verte sous le titre ("En direct du Pi").
+    var status: String?
 
     var body: some View {
         HStack(spacing: Td.s2) {
@@ -45,10 +47,19 @@ struct NavBar: View {
             } else {
                 Color.clear.frame(width: 44, height: 44)
             }
-            Text(title)
-                .font(.td(17, .semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
+            VStack(spacing: 0) {
+                Text(title)
+                    .font(.td(17, .semibold))
+                    .lineLimit(1)
+                if let status {
+                    HStack(spacing: Td.s1) {
+                        Icon(name: .check, size: 12)
+                        Text(status).font(.td(12, .medium))
+                    }
+                    .foregroundStyle(Td.succes)
+                }
+            }
+            .frame(maxWidth: .infinity)
             Color.clear.frame(width: 44, height: 44)
         }
         .frame(minHeight: 44)

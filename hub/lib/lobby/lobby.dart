@@ -56,6 +56,11 @@ class Lobby extends ChangeNotifier {
 
   HttpServer? _server;
 
+  /// Partie en direct, pour le suivi sur iPhone (null hors partie).
+  Map<String, Object?>? live;
+
+  void publishGame(Map<String, Object?> game) => live = game;
+
   String get qrPayload => Uri(
     scheme: 'thibsdarts',
     host: 'join',
@@ -92,11 +97,13 @@ class Lobby extends ChangeNotifier {
       players.add(LobbyPlayer(id: 'guest-${players.length}', name: g, guest: true));
     }
     state = LobbyState.open;
+    live = null;
     notifyListeners();
   }
 
   void close() {
     state = LobbyState.closed;
+    live = null;
     arriving = null;
     notifyListeners();
   }

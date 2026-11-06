@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game_config.dart';
+import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/dartboard.dart';
@@ -150,8 +151,39 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
+  /// Envoie l'état de la partie au salon, pour les iPhone qui suivent.
+  void _publish() {
+    final lobby = Lobby.instance;
+    if (lobby.state != LobbyState.playing) return;
+    final g = _game;
+    lobby.publishGame({
+      'mode': '${_cfg.startScore}',
+      'leg': _leg,
+      'legsToWin': _cfg.legsToWin,
+      'current': g.currentPlayer.name,
+      'next': g.nextPlayerInLine.name,
+      'turnScore': g.currentTurn.fold<int>(0, (n, d) => n + d.score),
+      'darts': [
+        for (final d in g.currentTurn) {'label': d.label, 'value': d.score},
+      ],
+      'bust': _last == ThrowOutcome.bust,
+      'checkout': g.checkoutHint?.map((d) => d.label).toList(),
+      'players': [
+        for (final p in g.players)
+          {
+            'name': p.name,
+            'remaining': p.remaining,
+            'average': p.turns.isEmpty ? null : p.average,
+            'legs': _legsWon[p.name] ?? 0,
+          },
+      ],
+      'winner': _matchOver ? g.winner!.name : null,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _publish();
     final g = _game;
     final p = g.currentPlayer;
     final turn = g.currentTurn;

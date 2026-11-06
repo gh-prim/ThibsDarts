@@ -95,6 +95,8 @@ enum LucideIcon: UInt32 {
     case bell = 57433
     case chevronRight = 57455
     case cpu = 57513
+    case crosshair = 57516
+    case trophy = 58227
 
     var glyph: String { String(UnicodeScalar(rawValue).map(Character.init) ?? " ") }
 }

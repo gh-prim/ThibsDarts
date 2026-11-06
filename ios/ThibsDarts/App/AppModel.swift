@@ -107,8 +107,36 @@ struct LobbyPlayer: Decodable, Identifiable, Hashable {
     let connected: Bool
 }
 
+struct LiveDart: Decodable, Equatable {
+    let label: String
+    let value: Int
+}
+
+struct LivePlayer: Decodable, Equatable {
+    let name: String
+    let remaining: Int
+    let average: Double?
+    let legs: Int
+}
+
+/// Partie en direct publiée par le Pi.
+struct LiveGame: Decodable, Equatable {
+    let mode: String
+    let leg: Int
+    let legsToWin: Int
+    let current: String
+    let next: String
+    let turnScore: Int
+    let darts: [LiveDart]
+    let bust: Bool
+    let checkout: [String]?
+    let players: [LivePlayer]
+    let winner: String?
+}
+
 struct LobbyInfo: Decodable, Equatable {
     let state: String
+    var game: LiveGame?
     let code: String?
     let hostName: String
     let label: String

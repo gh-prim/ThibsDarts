@@ -129,7 +129,7 @@ func frMatchDate(_ d: Date, now: Date = .now) -> String {
     let cal = Calendar.current
     let t = DateFormatter()
     t.locale = Locale(identifier: "fr_FR")
-    t.dateFormat = "H 'h' mm"
+    t.dateFormat = "H\u{00A0}'h'\u{00A0}mm"
     if cal.isDate(d, inSameDayAs: now) { return "Aujourd’hui, \(t.string(from: d))" }
     if let y = cal.date(byAdding: .day, value: -1, to: now), cal.isDate(d, inSameDayAs: y) {
         return "Hier, \(t.string(from: d))"
@@ -313,7 +313,7 @@ struct MatchRow: View {
             Avatar(name: match.opponents(me) ?? p?.name ?? "?", size: 44)
             VStack(alignment: .leading, spacing: 0) {
                 Text(match.title(me)).font(.td(15, .semibold)).foregroundStyle(Td.ink).lineLimit(1)
-                Text(frMatchDate(match.date)).font(.td(13)).foregroundStyle(Td.ink3)
+                Text(frMatchDate(match.date)).font(.td(13)).foregroundStyle(Td.ink3).lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if match.isDraw, p?.won == true {
@@ -325,6 +325,7 @@ struct MatchRow: View {
                 Text(p?.value.map(rowValue) ?? "-").font(.tdRounded(22, .heavy)).monospacedDigit().foregroundStyle(Td.ink)
                 Text(p?.valueLabel ?? "").font(.td(12, .medium)).foregroundStyle(Td.ink3)
             }
+            .fixedSize()
             Icon(name: .chevronRight, size: 18).foregroundStyle(Td.ink3)
         }
         .padding(.vertical, Td.s3).padding(.horizontal, Td.s4)
@@ -470,7 +471,10 @@ struct StatsTab: View {
                     f.dateFormat = "dd/MM"
                     return f
                 }()
-                LineChart(labels: games.map { f.string(from: $0.0) }, data: games.map(\.1))
+                let raw = games.map { f.string(from: $0.0) }
+                // Une date par jour : les parties suivantes du même jour n'ont pas d'étiquette.
+                let labels = raw.enumerated().map { i, l in i > 0 && raw[i - 1] == l ? "" : l }
+                LineChart(labels: labels, data: games.map(\.1))
             }
         }
         .padding(Td.s3)
@@ -488,9 +492,10 @@ struct HistoryTab: View {
     @State private var detail: HistoryMatch?
 
     private var modes: [String] {
-        var seen: [String] = []
-        for m in history.matches where !seen.contains(m.mode) { seen.append(m.mode) }
-        return ["Tout"] + seen
+        // Ordre des planches : X01, puis Cricket, Killer et les autres modes.
+        let order = ["501", "301", "Cricket", "Killer", "Shanghai", "Around the clock", "Halve-it", "Bob's 27"]
+        let played = Set(history.matches.map(\.mode))
+        return ["Tout"] + played.sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
     }
 
     var body: some View {

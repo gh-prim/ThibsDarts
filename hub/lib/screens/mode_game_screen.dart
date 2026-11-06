@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game_config.dart';
+import '../history/history_store.dart';
 import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../widgets/celebration.dart';
@@ -67,6 +68,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   void dispose() {
     _tagTimer?.cancel();
     _winTimer?.cancel();
+    _save();
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }
@@ -143,6 +145,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
 
   void _rematch() {
     _winTimer?.cancel();
+    _save();
+    _saved = false;
     setState(() {
       _g = _newGame();
       _hits.clear();
@@ -179,6 +183,50 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     final Bobs27Game g => "Bob's 27 · ${_doubleLabel(g.target)}",
     _ => _cfg.title,
   };
+
+  bool _saved = false;
+
+  /// Enregistre la partie finie dans l'historique (une fois, en quittant ou avant la revanche).
+  void _save() {
+    final g = _g;
+    if (!g.isFinished || _saved) return;
+    _saved = true;
+    HistoryStore.instance.add({
+      'id': '${DateTime.now().millisecondsSinceEpoch}',
+      'at': DateTime.now().toIso8601String(),
+      'mode': _cfg.title,
+      'kind': _mode.name,
+      'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,
+      'players': [
+        for (var i = 0; i < g.names.length; i++)
+          () {
+            final turns = g.turnsOf(i);
+            final (value, label) = switch (g) {
+              CricketGame() => (_marks(turns) / (turns.isEmpty ? 1 : turns.length), 'moy.'),
+              final ClockGame c => (c.done(i).toDouble(), 'cibles'),
+              KillerGame() => (g.scoreOf(i).toDouble(), 'vies'),
+              _ => (g.scoreOf(i).toDouble(), 'pts'),
+            };
+            return {
+              'id': HistoryStore.playerId(g.names[i]),
+              'name': g.names[i],
+              'won': g.winners.contains(i),
+              'darts': turns.fold<int>(0, (n, t) => n + t.length),
+              'score': g.scoreOf(i),
+              'value': value,
+              'valueLabel': label,
+            };
+          }(),
+      ],
+    });
+  }
+
+  /// Marques Cricket (20 à 15 et bull) dans une liste de tours.
+  static int _marks(List<List<DartThrow>> turns) => [
+    for (final t in turns)
+      for (final d in t)
+        if (!d.isMiss && CricketGame.numbers.contains(d.sector)) d.multiplier,
+  ].fold(0, (a, b) => a + b);
 
   List<CelebrationStat> get _winStats => [
     CelebrationStat(_g is KillerGame ? 'Vies restantes' : 'Score', '${_g.scoreOf(_g.winnerIndex!)}'),

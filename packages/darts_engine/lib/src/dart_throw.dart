@@ -7,9 +7,9 @@ class DartThrow {
   final int multiplier;
 
   const DartThrow(this.sector, [this.multiplier = 1])
-      : assert(sector == 0 || sector == 25 || (sector >= 1 && sector <= 20)),
-        assert(multiplier >= 1 && multiplier <= 3),
-        assert(sector != 25 || multiplier <= 2);
+    : assert(sector == 0 || sector == 25 || (sector >= 1 && sector <= 20)),
+      assert(multiplier >= 1 && multiplier <= 3),
+      assert(sector != 25 || multiplier <= 2);
 
   const DartThrow.miss() : this(0);
   const DartThrow.single(int s) : this(s, 1);
@@ -37,10 +37,7 @@ class DartThrow {
   }
 
   @override
-  bool operator ==(Object other) =>
-      other is DartThrow &&
-      other.sector == sector &&
-      other.multiplier == multiplier;
+  bool operator ==(Object other) => other is DartThrow && other.sector == sector && other.multiplier == multiplier;
 
   @override
   int get hashCode => Object.hash(sector, multiplier);

@@ -9,6 +9,7 @@ import 'package:flutter/painting.dart';
 import 'package:darts_engine/darts_engine.dart';
 
 import '../game_config.dart';
+import '../history/history_store.dart';
 import '../setup/owner_store.dart';
 
 /// Un joueur du salon : le propriétaire (hôte), un pote venu avec son iPhone, ou un invité.
@@ -181,6 +182,16 @@ class Lobby extends ChangeNotifier {
         return await _send(res, {'device': 'ThibsDarts', 'version': 1, 'setupDone': true, 'owner': AppState.owner});
       }
       if (req.method == 'GET' && path == '/api/lobby') return await _send(res, _json());
+      if (req.method == 'GET' && path == '/api/history') {
+        final id = req.uri.queryParameters['player'];
+        final all = id == null ? HistoryStore.instance.all() : HistoryStore.instance.forPlayer(id);
+        return await _send(res, {'matches': all});
+      }
+      if (req.method == 'GET' && seg.length == 3 && seg[0] == 'api' && seg[1] == 'history') {
+        final m = HistoryStore.instance.byId(seg[2]);
+        if (m == null) return await _send(res, {'error': 'partie'}, status: 404);
+        return await _send(res, m);
+      }
       if (req.method == 'POST' && path == '/api/lobby/join') return await _join(req, res);
       if (req.method == 'POST' && path == '/api/lobby/leave') {
         final b = await _body(req);

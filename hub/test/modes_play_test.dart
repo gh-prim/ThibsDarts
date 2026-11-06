@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:darts_engine/darts_engine.dart';
 import 'package:dartos_hub/game_config.dart';
+import 'package:dartos_hub/setup/owner_store.dart';
 import 'package:dartos_hub/screens/mode_game_screen.dart';
 import 'package:dartos_hub/widgets/dartboard.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Joue des parties entières sur le vrai écran de jeu, en touchant le plateau.
 void main() {
+  setUpAll(() => OwnerStore.useDirectory(Directory.systemTemp.createTempSync('dartos-modes').path));
+
   const m = DartThrow.miss();
 
   Future<void> open(WidgetTester t, GameMode mode, {TurnGame? game, List<String> players = const ['A', 'B']}) async {

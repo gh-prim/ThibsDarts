@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dartos_hub/game_config.dart';
+import 'package:dartos_hub/history/history_store.dart';
 import 'package:dartos_hub/lobby/lobby.dart';
 import 'package:dartos_hub/setup/owner_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,5 +76,53 @@ void main() {
     expect(AppState.photos['Max'], isNotNull);
     (s, j) = await call('POST', '/api/lobby/join', body: {'code': lobby.code, 'id': 'c', 'name': 'Lou'});
     expect(s, 409, reason: 'partie lancée');
+  });
+
+  test("l'historique d'un joueur, sans le détail des tours", () async {
+    final store = HistoryStore.instance;
+    await store.add({
+      'id': '1',
+      'at': '2026-11-06T20:00:00',
+      'mode': '501',
+      'kind': 'x01',
+      'winner': 'Thibs',
+      'players': [
+        {
+          'id': 'owner',
+          'name': 'Thibs',
+          'won': true,
+          'darts': 21,
+          'turns': [
+            {
+              'darts': ['T20'],
+            },
+          ],
+        },
+        {'id': 'phone-1', 'name': 'Lou', 'won': false, 'darts': 21},
+      ],
+    });
+    await store.add({
+      'id': '2',
+      'at': '2026-11-06T21:00:00',
+      'mode': 'Cricket',
+      'kind': 'cricket',
+      'winner': 'Max',
+      'players': [
+        {'id': 'guest:Max', 'name': 'Max', 'won': true},
+        {'id': 'phone-1', 'name': 'Lou', 'won': false},
+      ],
+    });
+    var (s, j) = await call('GET', '/api/history?player=phone-1');
+    expect(s, 200);
+    expect([for (final m in j['matches'] as List) m['id']], ['2', '1'], reason: 'la plus récente d\'abord');
+    (s, j) = await call('GET', '/api/history?player=owner');
+    final players = (j['matches'] as List).single['players'] as List;
+    expect(players.first.containsKey('turns'), isFalse);
+    (s, j) = await call('GET', '/api/history/1');
+    expect((j['players'] as List).first['turns'], isNotEmpty);
+    (s, _) = await call('GET', '/api/history/404');
+    expect(s, 404);
+    expect(HistoryStore.playerId('Thibs'), 'owner');
+    expect(HistoryStore.playerId('Zoé'), 'guest:Zoé');
   });
 }

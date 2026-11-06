@@ -1,19 +1,12 @@
 import 'dart_throw.dart';
 
 final List<DartThrow> _all = [
-  for (var s = 20; s >= 1; s--) ...[
-    DartThrow.triple(s),
-    DartThrow.double(s),
-    DartThrow.single(s),
-  ],
+  for (var s = 20; s >= 1; s--) ...[DartThrow.triple(s), DartThrow.double(s), DartThrow.single(s)],
   DartThrow.bull,
   DartThrow.outerBull,
 ];
 
-final List<DartThrow> _doubles = [
-  for (var s = 20; s >= 1; s--) DartThrow.double(s),
-  DartThrow.bull,
-];
+final List<DartThrow> _doubles = [for (var s = 20; s >= 1; s--) DartThrow.double(s), DartThrow.bull];
 
 /// Doubles préférés pour finir, du meilleur au moins bon.
 const _preferredDoubles = [20, 16, 18, 12, 10, 8, 14, 6, 4, 2, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1, 25];

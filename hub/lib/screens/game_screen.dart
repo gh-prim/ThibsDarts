@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game_config.dart';
+import '../history/history_store.dart';
 import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
@@ -76,6 +77,7 @@ class _GameScreenState extends State<GameScreen> {
   void dispose() {
     _tagTimer?.cancel();
     _winTimer?.cancel();
+    _save();
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }
@@ -118,6 +120,8 @@ class _GameScreenState extends State<GameScreen> {
   /// Revanche : mêmes joueurs, on repart de zéro, le joueur suivant commence.
   void _rematch() {
     _winTimer?.cancel();
+    _save();
+    _saved = false;
     setState(() {
       _leg = 1;
       _starter++;
@@ -132,10 +136,13 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
-  List<CelebrationStat> _winStats(String name) {
+  /// Chiffres d'un joueur sur toutes les manches : fléchettes, points, meilleur tour, essais et sorties
+  /// réussies sur double, et le détail de chaque tour (pour l'historique).
+  ({int darts, int scored, int best, int tries, int hits, List<Map<String, Object?>> rows}) _numbers(String name) {
     final legs = [...?_pastLegs[name], _game.players.firstWhere((p) => p.name == name).turns];
     var darts = 0, scored = 0, best = 0, tries = 0, hits = 0;
-    for (final turns in legs) {
+    final rows = <Map<String, Object?>>[];
+    for (final (leg, turns) in legs.indexed) {
       var rem = _cfg.startScore;
       for (final turn in turns) {
         final start = rem;
@@ -161,15 +168,65 @@ class _GameScreenState extends State<GameScreen> {
           scored += sum;
           if (sum > best) best = sum;
         }
+        rows.add({
+          'leg': leg + 1,
+          'darts': [for (final d in turn) d.label],
+          'total': bust ? 0 : sum,
+          'rest': rem,
+          'bust': bust,
+        });
       }
     }
+    return (darts: darts, scored: scored, best: best, tries: tries, hits: hits, rows: rows);
+  }
+
+  List<CelebrationStat> _winStats(String name) {
+    final n = _numbers(name);
     String fr(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
     return [
-      CelebrationStat('Moyenne 3 fléchettes', darts == 0 ? '0' : fr(scored / darts * 3)),
-      CelebrationStat('Meilleur tour', '$best'),
-      if (_cfg.doubleOut) CelebrationStat('Checkout', tries == 0 ? '0 %' : '${(hits * 100 / tries).round()} %'),
-      CelebrationStat('Fléchettes', '$darts'),
+      CelebrationStat('Moyenne 3 fléchettes', n.darts == 0 ? '0' : fr(n.scored / n.darts * 3)),
+      CelebrationStat('Meilleur tour', '${n.best}'),
+      if (_cfg.doubleOut) CelebrationStat('Checkout', n.tries == 0 ? '0 %' : '${(n.hits * 100 / n.tries).round()} %'),
+      CelebrationStat('Fléchettes', '${n.darts}'),
     ];
+  }
+
+  bool _saved = false;
+
+  /// Enregistre la partie finie dans l'historique (une fois, en quittant ou avant la revanche).
+  void _save() {
+    if (!_matchOver || _saved) return;
+    _saved = true;
+    final winner = _game.winner!.name;
+    HistoryStore.instance.add({
+      'id': '${DateTime.now().millisecondsSinceEpoch}',
+      'at': DateTime.now().toIso8601String(),
+      'mode': '${_cfg.startScore}',
+      'kind': 'x01',
+      'doubleOut': _cfg.doubleOut,
+      'legsToWin': _cfg.legsToWin,
+      'winner': winner,
+      'players': [
+        for (final name in _cfg.players)
+          () {
+            final n = _numbers(name);
+            return {
+              'id': HistoryStore.playerId(name),
+              'name': name,
+              'won': name == winner,
+              'legs': _legsWon[name] ?? 0,
+              'darts': n.darts,
+              'scored': n.scored,
+              'best': n.best,
+              'tries': n.tries,
+              'hits': n.hits,
+              'value': n.darts == 0 ? 0 : n.scored / n.darts * 3,
+              'valueLabel': 'moy.',
+              'turns': n.rows,
+            };
+          }(),
+      ],
+    });
   }
 
   void _onBoardTap(Offset p) => _throw(dartAt(p), p);

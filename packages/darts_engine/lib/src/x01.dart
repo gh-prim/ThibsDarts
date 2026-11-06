@@ -44,13 +44,10 @@ class X01Game {
   bool _turnClosed = false;
   X01Player? winner;
 
-  X01Game({
-    required List<String> playerNames,
-    this.startScore = 501,
-    this.doubleOut = true,
-  })  : assert(playerNames.isNotEmpty),
-        players = [for (final n in playerNames) X01Player(n, startScore)],
-        _turnStart = startScore;
+  X01Game({required List<String> playerNames, this.startScore = 501, this.doubleOut = true})
+    : assert(playerNames.isNotEmpty),
+      players = [for (final n in playerNames) X01Player(n, startScore)],
+      _turnStart = startScore;
 
   X01Player get currentPlayer => players[_current];
   List<DartThrow> get currentTurn => List.unmodifiable(_turn);
@@ -70,9 +67,8 @@ class X01Game {
   bool get awaitingNextPlayer => _turnClosed;
 
   /// Suggestion de sortie pour le joueur actif, ou null.
-  List<DartThrow>? get checkoutHint => doubleOut && !_turnClosed
-      ? suggestCheckout(currentPlayer.remaining, dartsLeft: dartsLeft)
-      : null;
+  List<DartThrow>? get checkoutHint =>
+      doubleOut && !_turnClosed ? suggestCheckout(currentPlayer.remaining, dartsLeft: dartsLeft) : null;
 
   ThrowOutcome throwDart(DartThrow dart) {
     if (isFinished) throw StateError('Partie terminée');

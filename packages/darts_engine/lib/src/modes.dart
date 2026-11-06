@@ -43,6 +43,13 @@ abstract class TurnGame {
   /// Joueur éliminé (Killer, Bob's 27) : il ne joue plus.
   bool isOut(int player) => false;
 
+  /// Tours joués par un joueur, tour en cours compris (stats, historique).
+  List<List<DartThrow>> turnsOf(int player) => [
+    for (final (p, t) in _history)
+      if (p == player) List.unmodifiable(t),
+    if (!_closed && _current == player && _turn.isNotEmpty) List.unmodifiable(_turn),
+  ];
+
   /// Prochain joueur encore en jeu.
   int get nextIndex {
     for (var i = 1; i <= names.length; i++) {
@@ -143,7 +150,10 @@ abstract class TurnGame {
     for (var i = 0; i < names.length; i++) {
       if (scoreOf(i) > best) best = scoreOf(i);
     }
-    winners = [for (var i = 0; i < names.length; i++) if (scoreOf(i) == best) i];
+    winners = [
+      for (var i = 0; i < names.length; i++)
+        if (scoreOf(i) == best) i,
+    ];
     winnerIndex = winners.first;
   }
 }
@@ -190,12 +200,18 @@ class CricketGame extends TurnGame {
     m[i] += close;
     hits -= close;
     if (hits > 0) {
-      final othersOpen = [for (var p = 0; p < names.length; p++) if (p != player) marks[p][i] < 3].any((x) => x);
+      final othersOpen = [
+        for (var p = 0; p < names.length; p++)
+          if (p != player) marks[p][i] < 3,
+      ].any((x) => x);
       if (othersOpen) points[player] += hits * d.sector;
       m[i] += hits;
     }
     if (m.every((x) => x >= 3)) {
-      final best = [for (var p = 0; p < names.length; p++) if (p != player) points[p]].fold<int>(0, math.max);
+      final best = [
+        for (var p = 0; p < names.length; p++)
+          if (p != player) points[p],
+      ].fold<int>(0, math.max);
       if (points[player] >= best) finish(player);
     }
     // Tout est fermé chez tout le monde : plus personne ne marque, le meilleur score gagne.
@@ -271,8 +287,7 @@ class ShanghaiGame extends TurnGame {
 /// Killer : chacun a un numéro et 3 vies. Ton double te rend killer,
 /// puis le double d'un adversaire lui retire une vie. Dernier debout gagne.
 class KillerGame extends TurnGame {
-  KillerGame(super.names, {List<int>? numbers, this.lives = 3})
-      : numbers = numbers ?? _draw(names.length) {
+  KillerGame(super.names, {List<int>? numbers, this.lives = 3}) : numbers = numbers ?? _draw(names.length) {
     resetState();
   }
 
@@ -318,7 +333,10 @@ class KillerGame extends TurnGame {
           ? '${names[owner]} perd une vie. Plus que ${life[owner]}.'
           : '${names[owner]} est éliminé.';
     }
-    final alive = [for (var i = 0; i < names.length; i++) if (!isOut(i)) i];
+    final alive = [
+      for (var i = 0; i < names.length; i++)
+        if (!isOut(i)) i,
+    ];
     if (names.length > 1 && alive.length == 1) finish(alive.single);
     if (names.length == 1 && isOut(player)) finish(player);
   }
@@ -426,7 +444,10 @@ class Bobs27Game extends TurnGame {
     final hit = turn.where((d) => d.isDouble && d.sector == target).fold<int>(0, (n, d) => n + d.score);
     if (hit == 0) points[player] -= target * 2;
     lastDelta[player] = hit == 0 ? -target * 2 : hit;
-    final alive = [for (var i = 0; i < names.length; i++) if (!isOut(i)) i];
+    final alive = [
+      for (var i = 0; i < names.length; i++)
+        if (!isOut(i)) i,
+    ];
     if (alive.isEmpty) {
       finishOnBestScore();
     } else if (names.length > 1 && alive.length == 1 && isOut(player)) {

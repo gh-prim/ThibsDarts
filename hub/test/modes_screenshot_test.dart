@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:darts_engine/darts_engine.dart';
 import 'package:dartos_hub/game_config.dart';
+import 'package:dartos_hub/setup/owner_store.dart';
 import 'package:dartos_hub/screens/mode_game_screen.dart';
 import 'package:dartos_hub/theme/tokens.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,8 @@ void play(TurnGame g, List<List<DartThrow>> turns) {
 const m = DartThrow.miss();
 
 void main() {
+  setUpAll(() => OwnerStore.useDirectory(Directory.systemTemp.createTempSync('dartos-modes').path));
+
   testWidgets('captures modes', (tester) async {
     final out = Platform.environment['SHOTS'];
     if (out == null) return;

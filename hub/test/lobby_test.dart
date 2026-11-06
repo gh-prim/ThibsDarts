@@ -98,7 +98,7 @@ void main() {
     expect(j['nickname'], 'Thibs');
     for (var i = 0; i < 5; i++) {
       (s, j) = await call('POST', '/api/owner/login', body: {'pin': '0000'});
-    }
+    expect(s, 429, reason: 'le 5e essai annonce le blocage');
     expect(s, 403);
     (s, j) = await call('POST', '/api/owner/login', body: {'pin': '1234'});
     expect(s, 429, reason: 'bloqué une minute après 5 erreurs');

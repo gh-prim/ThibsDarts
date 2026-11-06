@@ -23,7 +23,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Future<void> _open(Widget screen) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
-    if (Lobby.instance.state != LobbyState.closed) Lobby.instance.close();
+    // Une partie lancée remplace le salon : elle ferme le salon à sa sortie.
+    if (Lobby.instance.state == LobbyState.open) Lobby.instance.close();
     if (mounted) setState(() {}); // la dernière partie a pu changer
   }
 

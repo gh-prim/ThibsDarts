@@ -68,6 +68,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _tagTimer?.cancel();
+    if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }
 

@@ -13,6 +13,7 @@ dependencies:
     path: ../packages/darts_engine
   flutter_svg: ^2.3.2
   lucide_icons_flutter: ^4.0.2
+  qr: ^4.0.1
 
 dev_dependencies:
   flutter_test:

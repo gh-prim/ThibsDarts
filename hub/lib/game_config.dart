@@ -1,3 +1,5 @@
+import 'setup/owner_store.dart';
+
 /// Réglages d'une partie X01, choisis sur "Nouvelle partie".
 class GameConfig {
   const GameConfig({
@@ -21,6 +23,14 @@ class AppState {
 
   /// Compte propriétaire, créé au setup depuis l'iPhone. Seul joueur connu au départ.
   static String owner = 'Thibs';
+
+  /// Profil complet du propriétaire (photo comprise), null tant que le setup n'est pas fait.
+  static Owner? ownerProfile;
+
+  static void setOwner(Owner o) {
+    ownerProfile = o;
+    owner = o.nickname.isEmpty ? o.firstName : o.nickname;
+  }
 
   /// Dernière partie lancée, pour "Rejouer".
   static GameConfig? lastGame;

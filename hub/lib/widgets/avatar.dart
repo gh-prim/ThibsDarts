@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+
+import '../game_config.dart';
 
 import '../theme/tokens.dart';
 
@@ -15,6 +19,19 @@ class Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Le propriétaire a une vraie photo, prise à l'installation.
+    final photo = name == AppState.owner ? AppState.ownerProfile?.photoPath : null;
+    if (photo != null && File(photo).existsSync()) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: active ? Td.fluo : Td.verreBord, width: active ? 2 : 1),
+          image: DecorationImage(image: FileImage(File(photo)), fit: BoxFit.cover),
+        ),
+      );
+    }
     return Container(
       width: size,
       height: size,

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:dartos_hub/main.dart';
+import 'package:dartos_hub/setup/owner_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,10 @@ void main() {
       await _font('PermanentMarker', 'assets/fonts/PermanentMarker.ttf');
       await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
     });
+    // Propriétaire déjà créé : le boot va directement à l'accueil.
+    final data = Directory.systemTemp.createTempSync('dartos');
+    File('${data.path}/owner.json').writeAsStringSync('{"firstName":"Thibault","lastName":"","nickname":"Thibs"}');
+    OwnerStore.useDirectory(data.path);
     tester.view.physicalSize = const Size(1024, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

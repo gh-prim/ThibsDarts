@@ -9,11 +9,14 @@ enum Status { ok, busy, off, idle }
 
 /// Pastille d'état (composant StatusIndicator du design system).
 class StatusIndicator extends StatelessWidget {
-  const StatusIndicator({super.key, required this.kind, this.status = Status.ok, this.label, this.compact = false});
+  const StatusIndicator({super.key, required this.kind, this.status = Status.ok, this.label, this.detail, this.compact = false});
 
   final StatusKind kind;
   final Status status;
   final String? label;
+
+  /// Remplace le texte d'état ("Freebox-Thibs", "attend le Wi-Fi").
+  final String? detail;
   final bool compact;
 
   IconData get _icon => switch ((kind, status)) {
@@ -53,12 +56,12 @@ class StatusIndicator extends StatelessWidget {
     final off = status == Status.off;
     final ink = off ? Td.erreur : (status == Status.idle ? Td.ink3 : Td.ink);
     return Semantics(
-      label: '$text: $_statusText',
+      label: '$text: ${detail ?? _statusText}',
       child: Container(
         height: 32,
         width: compact ? 32 : null,
         padding: compact ? EdgeInsets.zero : const EdgeInsets.only(left: Td.s2, right: Td.s3),
-        alignment: Alignment.center,
+        alignment: compact ? Alignment.center : null,
         decoration: BoxDecoration(
           color: Td.verreLeger,
           borderRadius: BorderRadius.circular(999),
@@ -72,7 +75,7 @@ class StatusIndicator extends StatelessWidget {
               const SizedBox(width: Td.s2),
               Text(text, style: TdText.label.copyWith(color: ink)),
               const SizedBox(width: Td.s2),
-              Text(_statusText,
+              Text(detail ?? _statusText,
                   style: TdText.caption.copyWith(color: off ? Td.erreur : Td.ink2)),
             ],
           ],

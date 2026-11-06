@@ -5,7 +5,10 @@ import '../theme/tokens.dart';
 import '../widgets/logo.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
+import '../game_config.dart';
+import '../setup/owner_store.dart';
 import 'home_screen.dart';
+import 'setup_screen.dart';
 
 /// Démarrage (composant BootScreen du design system) :
 /// logo 120 px, barre de chargement Golden Hour, puis "Prêt. Tranquille."
@@ -34,9 +37,12 @@ class _BootScreenState extends State<BootScreen> with SingleTickerProviderStateM
 
   void _goHome() {
     if (!mounted) return;
+    // Pas encore de propriétaire : premier allumage, setup depuis l'iPhone.
+    final owner = OwnerStore.instance.load();
+    if (owner != null) AppState.setOwner(owner);
     Navigator.of(context).pushReplacement(PageRouteBuilder(
       transitionDuration: Td.lente,
-      pageBuilder: (_, _, _) => const HomeScreen(),
+      pageBuilder: (_, _, _) => owner == null ? const SetupScreen() : const HomeScreen(),
       transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
     ));
   }

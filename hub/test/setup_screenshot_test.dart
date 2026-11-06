@@ -35,10 +35,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final c = SetupController(wifi: SimulatedWifi(), store: OwnerStore.instance)..host = '192.168.1.20';
-    await tester.pumpWidget(MaterialApp(
-      theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
-      home: Scaffold(body: RepaintBoundary(child: SetupScreen(controller: c))),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
+        home: Scaffold(
+          body: RepaintBoundary(child: SetupScreen(controller: c)),
+        ),
+      ),
+    );
 
     Future<void> shot(String name) async {
       for (var i = 0; i < 10; i++) {
@@ -66,10 +70,14 @@ void main() {
     c.notifyListeners();
     await shot('setup-3-bienvenue');
 
-    await tester.pumpWidget(MaterialApp(
-      theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
-      home: RepaintBoundary(child: SalonScreen(config: const GameConfig(players: ['Thibs'], legsToWin: 2))),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
+        home: RepaintBoundary(
+          child: SalonScreen(config: const GameConfig(players: ['Thibs'], legsToWin: 2)),
+        ),
+      ),
+    );
     final l = Lobby.instance;
     l.players.add(LobbyPlayer(id: 'a', name: 'Max'));
     l.players.add(LobbyPlayer(id: 'b', name: 'Inès'));

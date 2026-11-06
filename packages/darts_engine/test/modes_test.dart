@@ -90,4 +90,69 @@ void main() {
     expect(g.target[0], 2);
     expect(g.currentTurn.length, 1);
   });
+
+  test('killer : se tuer finit le tour', () {
+    final g = KillerGame(['A', 'B', 'C'], numbers: [20, 6, 3], lives: 1);
+    g.throwDart(const DartThrow.double(20));
+    g.throwDart(const DartThrow.double(20));
+    expect(g.isOut(0), isTrue);
+    expect(g.awaitingNextPlayer, isTrue);
+    g.nextPlayer();
+    expect(g.currentName, 'B');
+  });
+
+  test('killer : un éliminé ne joue plus', () {
+    final g = KillerGame(['A', 'B', 'C'], numbers: [20, 6, 3], lives: 1);
+    turn(g, [const DartThrow.double(20), const DartThrow.double(6), miss]);
+    expect(g.isOut(1), isTrue);
+    expect(g.currentName, 'C');
+    turn(g, [miss, miss, miss]);
+    expect(g.currentName, 'A');
+  });
+
+  test('halve-it : fin après 9 manches', () {
+    final g = HalveItGame(['A']);
+    for (var i = 0; i < 9; i++) {
+      expect(g.isFinished, isFalse);
+      turn(g, [miss, miss, miss]);
+    }
+    expect(g.isFinished, isTrue);
+    expect(g.points[0], 0);
+  });
+
+  test('bob\'s 27 : D20 puis bull, 21 manches', () {
+    final g = Bobs27Game(['A']);
+    for (var r = 1; r <= 20; r++) {
+      expect(g.target, r);
+      turn(g, [DartThrow.double(r), miss, miss]);
+    }
+    expect(g.target, 25);
+    g.throwDart(DartThrow.bull);
+    g.throwDart(miss);
+    g.throwDart(miss);
+    g.nextPlayer();
+    expect(g.isFinished, isTrue);
+    expect(g.points[0], 27 + 420 + 50);
+  });
+
+  test('correction : annule une victoire', () {
+    final g = ShanghaiGame(['A', 'B']);
+    g.throwDart(const DartThrow(1));
+    g.throwDart(const DartThrow.double(1));
+    g.throwDart(const DartThrow.triple(1));
+    expect(g.isFinished, isTrue);
+    g.correctDart(2, miss);
+    expect(g.isFinished, isFalse);
+    expect(g.points[0], 3);
+  });
+
+  test('égalité aux points', () {
+    final g = HalveItGame(['A', 'B']);
+    for (var i = 0; i < 9; i++) {
+      turn(g, [miss, miss, miss]);
+      turn(g, [miss, miss, miss]);
+    }
+    expect(g.isDraw, isTrue);
+    expect(g.winners, [0, 1]);
+  });
 }

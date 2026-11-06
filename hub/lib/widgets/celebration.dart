@@ -20,6 +20,8 @@ class Celebration extends StatefulWidget {
     super.key,
     required this.kind,
     required this.winner,
+    this.tag,
+    this.copy,
     this.stats = const [],
     this.onAgain,
     this.onHome,
@@ -28,6 +30,12 @@ class Celebration extends StatefulWidget {
 
   final CelebrationKind kind;
   final String winner;
+
+  /// Texte du tag à la place de "GAGNÉ" ("ÉGALITÉ", "FINI").
+  final String? tag;
+
+  /// Phrase à la place de "X plie la partie. Sans forcer."
+  final String? copy;
   final List<CelebrationStat> stats;
   final VoidCallback? onAgain;
   final VoidCallback? onHome;
@@ -70,7 +78,9 @@ class _CelebrationState extends State<Celebration> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final win = widget.kind == CelebrationKind.win;
-    final copy = win
+    final copy = widget.copy != null
+        ? widget.copy!
+        : win
         ? '${widget.winner} plie la partie. Sans forcer.'
         : 'Trois T20. ${widget.winner} a même pas transpiré.';
     final body = Stack(
@@ -97,7 +107,11 @@ class _CelebrationState extends State<Celebration> with SingleTickerProviderStat
               mainAxisSize: MainAxisSize.min,
               children: [
                 win
-                    ? const HitTag(kind: TagKind.triple, text: 'GAGNÉ', fontSize: 112)
+                    ? HitTag(
+                        kind: TagKind.triple,
+                        text: widget.tag ?? 'GAGNÉ',
+                        fontSize: widget.tag == null ? 112 : 96,
+                      )
                     : const HitTag(kind: TagKind.oneEighty, text: '180', fontSize: 172),
                 const SizedBox(height: Td.s4 + Td.s4),
                 _up(700, Text(copy, style: TdText.inter(17, 22, 500, Td.ink), textAlign: TextAlign.center)),

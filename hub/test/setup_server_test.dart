@@ -12,7 +12,13 @@ void main() {
   final http = HttpClient();
   const base = 'http://127.0.0.1:${SetupController.port}';
 
-  Future<(int, Map<String, dynamic>)> call(String method, String path, {Object? body, String? token, List<int>? raw}) async {
+  Future<(int, Map<String, dynamic>)> call(
+    String method,
+    String path, {
+    Object? body,
+    String? token,
+    List<int>? raw,
+  }) async {
     final req = await http.openUrl(method, Uri.parse('$base$path'));
     if (token != null) req.headers.set('authorization', 'Bearer $token');
     if (raw != null) {
@@ -70,8 +76,12 @@ void main() {
 
     (s, j) = await call('PUT', '/api/setup/photo', token: token, raw: List.filled(5000, 7));
     expect(s, 200);
-    (s, j) = await call('POST', '/api/setup/profile',
-        token: token, body: {'firstName': 'Thibault', 'lastName': 'Hubert', 'nickname': 'Thibs'});
+    (s, j) = await call(
+      'POST',
+      '/api/setup/profile',
+      token: token,
+      body: {'firstName': 'Thibault', 'lastName': 'Hubert', 'nickname': 'Thibs'},
+    );
     expect(s, 200);
     expect(c.phase, SetupPhase.done);
 

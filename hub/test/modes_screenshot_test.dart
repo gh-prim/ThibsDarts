@@ -44,12 +44,18 @@ void main() {
     addTearDown(tester.view.reset);
 
     Future<void> shot(String name, GameMode mode, TurnGame g) async {
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
-        home: RepaintBoundary(
-          child: ModeGameScreen(key: ValueKey(name), config: GameConfig(players: g.names, mode: mode), game: g),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
+          home: RepaintBoundary(
+            child: ModeGameScreen(
+              key: ValueKey(name),
+              config: GameConfig(players: g.names, mode: mode),
+              game: g,
+            ),
+          ),
         ),
-      ));
+      );
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }

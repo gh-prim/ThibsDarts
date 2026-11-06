@@ -25,6 +25,11 @@ abstract class TurnGame {
   /// Index du gagnant, ou null.
   int? winnerIndex;
 
+  /// Tous les gagnants : plusieurs en cas d'égalité aux points.
+  List<int> winners = const [];
+
+  bool get isDraw => winners.length > 1;
+
   int get currentIndex => _current;
   String get currentName => names[_current];
   List<DartThrow> get currentTurn => List.unmodifiable(_turn);
@@ -61,14 +66,17 @@ abstract class TurnGame {
   void onRoundEnd() {}
 
   /// Le mode peut fermer le tour avant 3 fléchettes (victoire).
-  void finish(int player) => winnerIndex = player;
+  void finish(int player) {
+    winnerIndex = player;
+    winners = [player];
+  }
 
   void throwDart(DartThrow d) {
     if (isFinished) throw StateError('Partie terminée');
     if (_closed) throw StateError('Tour fini, appelle nextPlayer()');
     _turn.add(d);
     onDart(_current, d);
-    if (isFinished || _turn.length == 3) _closeTurn();
+    if (isFinished || _turn.length == 3 || isOut(_current)) _closeTurn();
   }
 
   void _closeTurn() {
@@ -112,6 +120,7 @@ abstract class TurnGame {
     _closed = false;
     _round = 0;
     winnerIndex = null;
+    winners = const [];
     resetState();
     for (final (_, t) in turns) {
       for (final d in t) {
@@ -130,14 +139,12 @@ abstract class TurnGame {
 
   /// Le joueur au meilleur score gagne (fin de partie aux points).
   void finishOnBestScore() {
-    var best = -1 << 30, who = 0;
+    var best = -1 << 30;
     for (var i = 0; i < names.length; i++) {
-      if (scoreOf(i) > best) {
-        best = scoreOf(i);
-        who = i;
-      }
+      if (scoreOf(i) > best) best = scoreOf(i);
     }
-    winnerIndex = who;
+    winners = [for (var i = 0; i < names.length; i++) if (scoreOf(i) == best) i];
+    winnerIndex = winners.first;
   }
 }
 
@@ -191,6 +198,8 @@ class CricketGame extends TurnGame {
       final best = [for (var p = 0; p < names.length; p++) if (p != player) points[p]].fold<int>(0, math.max);
       if (points[player] >= best) finish(player);
     }
+    // Tout est fermé chez tout le monde : plus personne ne marque, le meilleur score gagne.
+    if (!isFinished && Iterable<int>.generate(numbers.length).every(closedByAll)) finishOnBestScore();
   }
 }
 

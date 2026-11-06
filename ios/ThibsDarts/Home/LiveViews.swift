@@ -332,7 +332,7 @@ struct CelebrationView: View {
     var body: some View {
         VStack(spacing: Td.s4) {
             Spacer(minLength: 0)
-            SprayTag(text: kind == .win ? "GAGNÉ" : "180", size: kind == .win ? 72 : 120, pink: kind == .oneEighty)
+            SprayTag(text: kind == .oneEighty ? "180" : (isDraw ? "ÉGALITÉ" : "GAGNÉ"), size: kind == .win ? 72 : 120, pink: kind == .oneEighty)
                 .padding(.bottom, Td.s4)
             Text(copy)
                 .font(.td(17, .medium))
@@ -358,7 +358,11 @@ struct CelebrationView: View {
         .onAppear { up = true }
     }
 
+    /// Égalité aux points : le Pi envoie "A et B" comme gagnant.
+    private var isDraw: Bool { kind == .win && winner.contains(" et ") }
+
     private var copy: String {
+        if isDraw { return "\(winner) à égalité." }
         switch (kind, isMe) {
         case (.win, false): "\(winner) plie la partie. Sans forcer."
         case (.win, true): "Tu plies la partie. Sans forcer."

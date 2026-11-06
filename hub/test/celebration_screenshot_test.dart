@@ -31,10 +31,12 @@ void main() {
     addTearDown(tester.view.reset);
 
     Future<void> shot(String name, Widget w) async {
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
-        home: Scaffold(body: RepaintBoundary(child: w)),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
+          home: Scaffold(body: RepaintBoundary(child: w)),
+        ),
+      );
       for (var i = 0; i < 40; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }

@@ -93,7 +93,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       return;
     }
     if (_g.winner != null) {
-      AppState.lastResult = '${_g.winner} a gagné au ${_cfg.title}.';
+      AppState.lastResult = _g.isDraw ? 'Égalité au ${_cfg.title}.' : '${_g.winner} a gagné au ${_cfg.title}.';
     }
     _winTimer = Timer(const Duration(milliseconds: 1400), () {
       if (mounted && _g.isFinished) setState(() => _showWin = true);
@@ -152,6 +152,25 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   }
 
   // MARK: Textes par mode
+
+  bool get _solo => _g.names.length == 1;
+
+  /// Fin sans vrai gagnant : égalité, ou partie solo.
+  String? get _endTag => _g.isDraw ? 'ÉGALITÉ' : (_solo ? 'FINI' : null);
+
+  String? get _endCopy {
+    final g = _g;
+    if (g.isDraw) {
+      final who = [for (final i in g.winners) g.names[i]];
+      return '${who.sublist(0, who.length - 1).join(', ')} et ${who.last} à égalité, ${g.scoreOf(g.winners.first)} points.';
+    }
+    if (_solo) {
+      if (g is Bobs27Game && g.isOut(0)) return 'Sous zéro au ${_doubleLabel(g.target)}. On remet ça ?';
+      if (g is ClockGame || g is ShanghaiGame && g.round <= g.rounds) return 'Bouclé en ${g.round} tours.';
+      return 'Partie finie avec ${g.scoreOf(0)} points.';
+    }
+    return null;
+  }
 
   String get _header => switch (_g) {
     final CricketGame g => 'Cricket · Tour ${g.round}',
@@ -220,7 +239,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
             'detail': _detail(i) ?? (g is KillerGame ? _lives(g, i) : null),
           },
       ],
-      'winner': g.winner,
+      'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,
     });
   }
 
@@ -276,6 +295,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
               child: Celebration(
                 kind: CelebrationKind.win,
                 winner: g.winner!,
+                tag: _endTag,
+                copy: _endCopy,
                 stats: [
                   CelebrationStat(g is KillerGame ? 'Vies restantes' : 'Score', '${g.scoreOf(g.winnerIndex!)}'),
                   CelebrationStat('Manches', '${g.round}'),
@@ -296,8 +317,15 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
         child: const Logo(variant: LogoVariant.icon, height: 44),
       ),
       const SizedBox(width: Td.s3),
-      const Spacer(),
-      Text(_header, style: TdText.inter(15, 20, 400, Td.ink2)),
+      Expanded(
+        child: Text(
+          _header,
+          textAlign: TextAlign.right,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TdText.inter(15, 20, 400, Td.ink2),
+        ),
+      ),
     ],
   );
 

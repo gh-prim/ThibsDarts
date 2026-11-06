@@ -16,15 +16,17 @@ class ScoreDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget v = Text('$value',
-        style: TdText.rounded(140, 900, state == ScoreState.bust ? Td.erreur : Td.ink, height: 132)
-            .copyWith(letterSpacing: -4));
+    Widget v = Text(
+      '$value',
+      style: TdText.rounded(
+        140,
+        900,
+        state == ScoreState.bust ? Td.erreur : Td.ink,
+        height: 132,
+      ).copyWith(letterSpacing: -4),
+    );
     if (state == ScoreState.out) {
-      v = ShaderMask(
-        blendMode: BlendMode.srcIn,
-        shaderCallback: (r) => Td.goldenHour.createShader(r),
-        child: v,
-      );
+      v = ShaderMask(blendMode: BlendMode.srcIn, shaderCallback: (r) => Td.goldenHour.createShader(r), child: v);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,9 +37,15 @@ class ScoreDisplay extends StatelessWidget {
         v,
         if (sub != null) ...[
           const SizedBox(height: Td.s1),
-          Text(sub!,
-              style: TdText.inter(15, 20, state == ScoreState.bust ? 600 : 400,
-                  state == ScoreState.bust ? Td.erreur : Td.ink2)),
+          Text(
+            sub!,
+            style: TdText.inter(
+              15,
+              20,
+              state == ScoreState.bust ? 600 : 400,
+              state == ScoreState.bust ? Td.erreur : Td.ink2,
+            ),
+          ),
         ],
       ],
     );
@@ -65,7 +73,12 @@ class DartSlots extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       spacing: Td.s2,
-      children: [for (var i = 0; i < 3; i++) Expanded(child: _Slot(index: i, data: slots[i], height: height))],
+      children: [
+        for (var i = 0; i < 3; i++)
+          Expanded(
+            child: _Slot(index: i, data: slots[i], height: height),
+          ),
+      ],
     );
   }
 }
@@ -93,7 +106,10 @@ class _Slot extends StatelessWidget {
       _ => null,
     };
     final Widget content = switch (data.state) {
-      SlotState.empty => Text('${index + 1}', style: TdText.rounded(36, 900, Td.ink3.withValues(alpha: 0.5), height: 38)),
+      SlotState.empty => Text(
+        '${index + 1}',
+        style: TdText.rounded(36, 900, Td.ink3.withValues(alpha: 0.5), height: 38),
+      ),
       SlotState.current => const Icon(LucideIcons.crosshair, size: 36, color: Td.fluo),
       SlotState.miss => _two('Raté', '0', Td.erreur, Td.ink2),
       SlotState.error => _two(data.label ?? '?', '${data.value ?? 0}', Td.erreur, Td.erreur),
@@ -125,15 +141,15 @@ class _Slot extends StatelessWidget {
   }
 
   Widget _two(String l, String v, Color lc, Color vc) => FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(l, style: TdText.rounded(l.length > 4 ? 26 : 36, 900, lc, height: 38)),
-            Text(v, style: TdText.inter(15, 18, 500, vc)),
-          ],
-        ),
-      );
+    fit: BoxFit.scaleDown,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(l, style: TdText.rounded(l.length > 4 ? 26 : 36, 900, lc, height: 38)),
+        Text(v, style: TdText.inter(15, 18, 500, vc)),
+      ],
+    ),
+  );
 }
 
 class _DashedBorder extends CustomPainter {
@@ -189,8 +205,7 @@ class CheckoutHint extends StatelessWidget {
                 gradient: i == route.length - 1 ? Td.goldenHour : null,
                 borderRadius: BorderRadius.circular(Td.rSm),
               ),
-              child: Text(route[i],
-                  style: TdText.rounded(22, 800, i == route.length - 1 ? Td.onAccent : Td.ink)),
+              child: Text(route[i], style: TdText.rounded(22, 800, i == route.length - 1 ? Td.onAccent : Td.ink)),
             ),
           ],
         ],

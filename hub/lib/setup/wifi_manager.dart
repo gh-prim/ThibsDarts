@@ -40,7 +40,19 @@ class NmcliWifi implements WifiManager {
 
   @override
   Future<void> startHotspot(String ssid, String password) async {
-    await _nmcli(['dev', 'wifi', 'hotspot', 'ifname', iface, 'con-name', _hotspotName, 'ssid', ssid, 'password', password]);
+    await _nmcli([
+      'dev',
+      'wifi',
+      'hotspot',
+      'ifname',
+      iface,
+      'con-name',
+      _hotspotName,
+      'ssid',
+      ssid,
+      'password',
+      password,
+    ]);
   }
 
   @override
@@ -56,7 +68,11 @@ class NmcliWifi implements WifiManager {
       final parts = line.split(':');
       if (parts.length < 3 || parts[0].isEmpty || parts[0].startsWith('ThibsDarts-')) continue;
       final pct = int.tryParse(parts[1]) ?? 0;
-      final net = WifiNetwork(parts[0], signal: (pct / 25).ceil().clamp(1, 4), locked: parts[2].isNotEmpty && parts[2] != '--');
+      final net = WifiNetwork(
+        parts[0],
+        signal: (pct / 25).ceil().clamp(1, 4),
+        locked: parts[2].isNotEmpty && parts[2] != '--',
+      );
       final prev = seen[net.name];
       if (prev == null || prev.signal < net.signal) seen[net.name] = net;
     }

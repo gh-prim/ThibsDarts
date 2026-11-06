@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game_config.dart';
+import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../widgets/logo.dart';
 import '../widgets/player_card.dart';
@@ -22,6 +23,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Future<void> _open(Widget screen) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+    if (Lobby.instance.state != LobbyState.closed) Lobby.instance.close();
     if (mounted) setState(() {}); // la dernière partie a pu changer
   }
 
@@ -70,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             last == null
                                 ? 'Lance une partie ici. Les potes rejoignent depuis leur iPhone.'
                                 : 'Dernière partie : ${last.label}, avec ${players.join(', ')}.'
-                                    '${AppState.lastResult == null ? '' : ' ${AppState.lastResult}'}',
+                                      '${AppState.lastResult == null ? '' : ' ${AppState.lastResult}'}',
                             style: TdText.body,
                           ),
                           const SizedBox(height: Td.s6),
@@ -99,7 +101,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         spacing: Td.s3,
                         children: [
-                          Text(last == null ? 'Sur ce ThibsDarts' : 'Joueurs de la dernière partie', style: TdText.label),
+                          Text(
+                            last == null ? 'Sur ce ThibsDarts' : 'Joueurs de la dernière partie',
+                            style: TdText.label,
+                          ),
                           for (final p in players) PlayerCard(player: PlayerSummary(p)),
                         ],
                       ),

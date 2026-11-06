@@ -2,12 +2,7 @@ import 'setup/owner_store.dart';
 
 /// Réglages d'une partie X01, choisis sur "Nouvelle partie".
 class GameConfig {
-  const GameConfig({
-    required this.players,
-    this.startScore = 501,
-    this.doubleOut = true,
-    this.legsToWin = 1,
-  });
+  const GameConfig({required this.players, this.startScore = 501, this.doubleOut = true, this.legsToWin = 1});
 
   final List<String> players;
   final int startScore;
@@ -27,9 +22,13 @@ class AppState {
   /// Profil complet du propriétaire (photo comprise), null tant que le setup n'est pas fait.
   static Owner? ownerProfile;
 
+  /// Photos de profil par nom de joueur (propriétaire et potes venus avec leur iPhone).
+  static final Map<String, String> photos = {};
+
   static void setOwner(Owner o) {
     ownerProfile = o;
     owner = o.nickname.isEmpty ? o.firstName : o.nickname;
+    if (o.photoPath != null) photos[owner] = o.photoPath!;
   }
 
   /// Dernière partie lancée, pour "Rejouer".

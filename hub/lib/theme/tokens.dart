@@ -64,8 +64,7 @@ abstract final class Td {
 
 /// Styles de texte. Inter pour l'UI, Nunito pour les scores, Permanent Marker pour les tags.
 abstract final class TdText {
-  static TextStyle _v(String family, double size, double height, int weight, Color color,
-          {double spacing = 0}) =>
+  static TextStyle _v(String family, double size, double height, int weight, Color color, {double spacing = 0}) =>
       TextStyle(
         fontFamily: family,
         fontSize: size,
@@ -82,12 +81,22 @@ abstract final class TdText {
   static TextStyle label = _v('Inter', 13, 18, 600, Td.ink2);
   static TextStyle caption = _v('Inter', 13, 18, 400, Td.ink3);
   static TextStyle button = _v('Inter', 24, 30, 700, Td.ink);
-  static TextStyle score = _v('Nunito', 120, 120, 900, Td.ink,
-      ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+  static TextStyle score = _v(
+    'Nunito',
+    120,
+    120,
+    900,
+    Td.ink,
+  ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+
   /// Nunito en chiffres tabulaires (scores).
-  static TextStyle rounded(double size, int weight, Color color, {double? height}) =>
-      _v('Nunito', size, height ?? size * 1.1, weight, color)
-          .copyWith(fontFeatures: const [FontFeature.tabularFigures(), FontFeature.liningFigures()]);
+  static TextStyle rounded(double size, int weight, Color color, {double? height}) => _v(
+    'Nunito',
+    size,
+    height ?? size * 1.1,
+    weight,
+    color,
+  ).copyWith(fontFeatures: const [FontFeature.tabularFigures(), FontFeature.liningFigures()]);
 
   static TextStyle inter(double size, double height, int weight, Color color) =>
       _v('Inter', size, height, weight, color);

@@ -47,7 +47,11 @@ Offset boardPositionFor(DartThrow d) {
   if (d.isMiss) return polar(186, 9 * 18 + 6);
   if (d.sector == 25) return d.multiplier == 2 ? const Offset(1.5, -2) : const Offset(8, -8);
   final i = sectors.indexOf(d.sector);
-  final r = switch (d.multiplier) { 3 => 103.0, 2 => 166.0, _ => 135.0 };
+  final r = switch (d.multiplier) {
+    3 => 103.0,
+    2 => 166.0,
+    _ => 135.0,
+  };
   return polar(r, i * 18.0 + 2);
 }
 
@@ -65,28 +69,34 @@ class Dartboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 1,
-      child: LayoutBuilder(builder: (context, c) {
-        final scale = c.maxWidth / 410;
-        return GestureDetector(
-          onTapUp: onTapBoard == null
-              ? null
-              : (d) => onTapBoard!((d.localPosition - Offset(c.maxWidth / 2, c.maxHeight / 2)) / scale),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(child: CustomPaint(painter: _BoardPainter(hits: hits, aimed: aimed, dim: dim))),
-              for (final h in hits)
-                Positioned(
-                  left: c.maxWidth / 2 + h.position.dx * scale - 30,
-                  top: c.maxHeight / 2 + h.position.dy * scale - 30,
-                  width: 60,
-                  height: 60,
-                  child: _Impact(key: ValueKey('impact${h.n}${h.position}'), hit: h, scale: scale),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final scale = c.maxWidth / 410;
+          return GestureDetector(
+            onTapUp: onTapBoard == null
+                ? null
+                : (d) => onTapBoard!((d.localPosition - Offset(c.maxWidth / 2, c.maxHeight / 2)) / scale),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _BoardPainter(hits: hits, aimed: aimed, dim: dim),
+                  ),
                 ),
-            ],
-          ),
-        );
-      }),
+                for (final h in hits)
+                  Positioned(
+                    left: c.maxWidth / 2 + h.position.dx * scale - 30,
+                    top: c.maxHeight / 2 + h.position.dy * scale - 30,
+                    width: 60,
+                    height: 60,
+                    child: _Impact(key: ValueKey('impact${h.n}${h.position}'), hit: h, scale: scale),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -117,12 +127,13 @@ class _BoardPainter extends CustomPainter {
 
     canvas.drawCircle(Offset.zero, 202, Paint()..color = Td.betonNuit);
     canvas.drawCircle(
-        Offset.zero,
-        202,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..color = Td.verreBord
-          ..strokeWidth = 1 / s);
+      Offset.zero,
+      202,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = Td.verreBord
+        ..strokeWidth = 1 / s,
+    );
 
     // Ce qui est touché : "20T", "20D", "20s" (simple extérieur), "B", "OB".
     final hitKeys = <String, int>{};
@@ -135,14 +146,21 @@ class _BoardPainter extends CustomPainter {
         hitKeys['${d.sector}${const ['s', 'D', 'T'][d.multiplier - 1]}'] = d.multiplier;
       }
     }
-    final hitSectors = {for (final h in hits) if (!h.dart.isMiss && h.dart.sector != 25) h.dart.sector};
+    final hitSectors = {
+      for (final h in hits)
+        if (!h.dart.isMiss && h.dart.sector != 25) h.dart.sector,
+    };
 
     final wire = Paint()
       ..style = PaintingStyle.stroke
       ..color = Td.plateauFil
       ..strokeWidth = 0.8;
     const rings = [('S', _rOb, _rTi), ('T', _rTi, _rTo), ('s', _rTo, _rDi), ('D', _rDi, _rDo)];
-    const tripleShader = LinearGradient(colors: [Td.sunset, Td.crepuscule], begin: Alignment.topLeft, end: Alignment.bottomRight);
+    const tripleShader = LinearGradient(
+      colors: [Td.sunset, Td.crepuscule],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
 
     for (var i = 0; i < 20; i++) {
       final sec = sectors[i];
@@ -150,9 +168,16 @@ class _BoardPainter extends CustomPainter {
       final even = i % 2 == 0;
       for (final (r, r0, r1) in rings) {
         final path = _seg(r0, r1, a0, a1);
-        final key = r == 'T' ? '${sec}T' : r == 'D' ? '${sec}D' : r == 's' ? '${sec}s' : null;
+        final key = r == 'T'
+            ? '${sec}T'
+            : r == 'D'
+            ? '${sec}D'
+            : r == 's'
+            ? '${sec}s'
+            : null;
         final hit = key != null && hitKeys.containsKey(key);
-        final isAim = aimed != null &&
+        final isAim =
+            aimed != null &&
             aimed!.sector == sec &&
             ((aimed!.multiplier == 3 && r == 'T') ||
                 (aimed!.multiplier == 2 && r == 'D') ||
@@ -164,22 +189,28 @@ class _BoardPainter extends CustomPainter {
           paint.color = hit
               ? (r == 'D' ? Td.fluo : Td.sunset)
               : isAim
-                  ? Td.ciel
-                  : (r == 'S' || r == 's')
-                      ? (even ? Td.plateauNoir : Td.plateauCreme)
-                      : (even ? Td.plateauRouge : Td.plateauVert);
+              ? Td.ciel
+              : (r == 'S' || r == 's')
+              ? (even ? Td.plateauNoir : Td.plateauCreme)
+              : (even ? Td.plateauRouge : Td.plateauVert);
           if (dim && !hit && !isAim) paint.color = paint.color.withValues(alpha: 0.55);
         }
         canvas.drawPath(path, paint);
-        canvas.drawPath(path, isAim ? (Paint()
-          ..style = PaintingStyle.stroke
-          ..color = Td.ciel
-          ..strokeWidth = 0.8) : wire);
+        canvas.drawPath(
+          path,
+          isAim
+              ? (Paint()
+                  ..style = PaintingStyle.stroke
+                  ..color = Td.ciel
+                  ..strokeWidth = 0.8)
+              : wire,
+        );
       }
     }
 
     // Bull
-    Color bullC(String k, Color base) => hitKeys.containsKey(k) ? Td.crepuscule : (dim ? base.withValues(alpha: 0.55) : base);
+    Color bullC(String k, Color base) =>
+        hitKeys.containsKey(k) ? Td.crepuscule : (dim ? base.withValues(alpha: 0.55) : base);
     canvas.drawCircle(Offset.zero, _rOb, Paint()..color = bullC('OB', Td.plateauVert));
     canvas.drawCircle(Offset.zero, _rOb, wire);
     canvas.drawCircle(Offset.zero, _rB, Paint()..color = bullC('B', Td.plateauRouge));
@@ -193,7 +224,12 @@ class _BoardPainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: '$sec',
-          style: TdText.rounded(on ? 21 : 18, 800, on ? Td.sunset : (aim ? Td.ciel : Td.plateauNumero), height: on ? 21 : 18),
+          style: TdText.rounded(
+            on ? 21 : 18,
+            800,
+            on ? Td.sunset : (aim ? Td.ciel : Td.plateauNumero),
+            height: on ? 21 : 18,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -233,7 +269,10 @@ class _Impact extends StatelessWidget {
               child: Container(
                 width: 2 * 7 * scale * (0.4 + 2 * pulse),
                 height: 2 * 7 * scale * (0.4 + 2 * pulse),
-                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Td.ink, width: 1.5)),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Td.ink, width: 1.5),
+                ),
               ),
             ),
             Opacity(

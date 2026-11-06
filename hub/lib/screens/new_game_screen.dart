@@ -6,7 +6,7 @@ import '../theme/tokens.dart';
 import '../widgets/controls.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
-import 'game_screen.dart';
+import 'salon_screen.dart';
 
 /// "Choisis ton jeu" (planche NouvellePartie).
 class NewGameScreen extends StatefulWidget {
@@ -56,12 +56,16 @@ class _NewGameScreenState extends State<NewGameScreen> {
     if (m.start == null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          backgroundColor: Td.asphalteHaut,
-          duration: const Duration(seconds: 2),
-          content: Text('${m.title} arrive bientôt. Pour l’instant : 301 ou 501.',
-              style: TdText.inter(15, 20, 400, Td.ink)),
-        ));
+        ..showSnackBar(
+          SnackBar(
+            backgroundColor: Td.asphalteHaut,
+            duration: const Duration(seconds: 2),
+            content: Text(
+              '${m.title} arrive bientôt. Pour l’instant : 301 ou 501.',
+              style: TdText.inter(15, 20, 400, Td.ink),
+            ),
+          ),
+        );
       return;
     }
     setState(() => _mode = m);
@@ -69,16 +73,19 @@ class _NewGameScreenState extends State<NewGameScreen> {
 
   void _launch() {
     if (_order.isEmpty) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-      builder: (_) => GameScreen(
-        config: GameConfig(
-          players: List.of(_order),
-          startScore: _mode.start!,
-          doubleOut: _out == 'Double',
-          legsToWin: _legs,
+    // Le salon s'ouvre : les potes rejoignent avec leur iPhone, puis "Lancer".
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SalonScreen(
+          config: GameConfig(
+            players: List.of(_order),
+            startScore: _mode.start!,
+            doubleOut: _out == 'Double',
+            legsToWin: _legs,
+          ),
         ),
       ),
-    ));
+    );
   }
 
   @override
@@ -106,7 +113,10 @@ class _NewGameScreenState extends State<NewGameScreen> {
                             onPressed: () => Navigator.of(context).pop(),
                           ),
                           const SizedBox(width: Td.s3),
-                          Text('Choisis ton jeu', style: TdText.inter(28, 34, 700, Td.ink).copyWith(letterSpacing: -0.3)),
+                          Text(
+                            'Choisis ton jeu',
+                            style: TdText.inter(28, 34, 700, Td.ink).copyWith(letterSpacing: -0.3),
+                          ),
                         ],
                       ),
                     ),
@@ -187,11 +197,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
                     const Spacer(),
                     Text('Les potes rejoignent depuis leur iPhone.', style: TdText.inter(13, 18, 400, Td.ink3)),
                     const SizedBox(height: Td.s3),
-                    TdButton(
-                      label: 'Lancer',
-                      icon: LucideIcons.play,
-                      onPressed: _order.isEmpty ? null : _launch,
-                    ),
+                    TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _order.isEmpty ? null : _launch),
                   ],
                 ),
               ),

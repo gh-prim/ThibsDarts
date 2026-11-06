@@ -54,11 +54,11 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
   }
 
   String get _label => switch (_dart) {
-        DartThrow(isMiss: true) => 'Raté',
-        DartThrow(sector: 25, multiplier: 2) => 'Bull',
-        DartThrow(sector: 25) => 'Outer bull',
-        final d => d.label,
-      };
+    DartThrow(isMiss: true) => 'Raté',
+    DartThrow(sector: 25, multiplier: 2) => 'Bull',
+    DartThrow(sector: 25) => 'Outer bull',
+    final d => d.label,
+  };
 
   void _pickOnBoard(Offset p) {
     final d = dartAt(p);
@@ -87,11 +87,7 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                   children: [
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 460, maxHeight: 520),
-                      child: Dartboard(
-                        hits: widget.hits,
-                        aimed: _sector == 0 ? null : _dart,
-                        onTapBoard: _pickOnBoard,
-                      ),
+                      child: Dartboard(hits: widget.hits, aimed: _sector == 0 ? null : _dart, onTapBoard: _pickOnBoard),
                     ),
                     const SizedBox(height: Td.s2),
                     Text('Ou touche directement le secteur sur la cible.', style: TdText.inter(15, 20, 400, Td.ink2)),
@@ -118,7 +114,11 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                         Row(
                           children: [
                             Expanded(child: Text('Corriger une fléchette', style: TdText.inter(22, 28, 700, Td.ink))),
-                            TdIconButton(icon: LucideIcons.x, label: 'Fermer', onPressed: () => Navigator.of(context).pop()),
+                            TdIconButton(
+                              icon: LucideIcons.x,
+                              label: 'Fermer',
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
                           ],
                         ),
                         TdSegmented(
@@ -233,7 +233,11 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = primary ? Td.onAccent : tertiary ? Td.sunset : Td.ink;
+    final fg = primary
+        ? Td.onAccent
+        : tertiary
+        ? Td.sunset
+        : Td.ink;
     return Pressable(
       onTap: onTap,
       child: Container(

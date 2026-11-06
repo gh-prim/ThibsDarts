@@ -16,8 +16,8 @@ class HitTag extends StatefulWidget {
     final kind = d.isMiss
         ? TagKind.miss
         : d.sector == 25
-            ? TagKind.bull
-            : const [TagKind.simple, TagKind.double, TagKind.triple][d.multiplier - 1];
+        ? TagKind.bull
+        : const [TagKind.simple, TagKind.double, TagKind.triple][d.multiplier - 1];
     final text = switch (kind) {
       TagKind.miss => 'À CÔTÉ',
       TagKind.bull => d.multiplier == 2 ? 'BULL' : 'OUTER BULL',
@@ -47,14 +47,26 @@ class _HitTagState extends State<HitTag> with SingleTickerProviderStateMixin {
   }
 
   (double, Gradient, Color, double, List<(double, double, double)>) get _style => switch (widget.kind) {
-        TagKind.triple => (88, Td.goldenHour, Td.sunset, -5, const [(0.14, 0.5, 0.25), (0.52, 0.32, 0.4), (0.82, 0.62, 0.15)]),
-        TagKind.checkout => (88, Td.goldenHour, Td.sunset, -5, const [(0.2, 0.5, 0.2), (0.76, 0.42, 0.35)]),
-        TagKind.oneEighty => (172, Td.goldenHour, Td.crepuscule, -5, const [(0.16, 0.3, 0.15), (0.74, 0.38, 0.25)]),
-        TagKind.double => (64, const LinearGradient(colors: [Td.fluo, Td.fluo]), Td.fluo, -5, const [(0.3, 0.34, 0.1)]),
-        TagKind.bull => (96, const LinearGradient(colors: [Td.crepuscule, Td.sunset]), Td.crepuscule, -5, const [(0.25, 0.44, 0.2), (0.7, 0.3, 0.5)]),
-        TagKind.simple => (56, const LinearGradient(colors: [Td.ink, Td.ink]), Td.ink, -5, const []),
-        TagKind.miss => (44, const LinearGradient(colors: [Td.ink3, Td.ink3]), Td.ink3, 3, const []),
-      };
+    TagKind.triple => (
+      88,
+      Td.goldenHour,
+      Td.sunset,
+      -5,
+      const [(0.14, 0.5, 0.25), (0.52, 0.32, 0.4), (0.82, 0.62, 0.15)],
+    ),
+    TagKind.checkout => (88, Td.goldenHour, Td.sunset, -5, const [(0.2, 0.5, 0.2), (0.76, 0.42, 0.35)]),
+    TagKind.oneEighty => (172, Td.goldenHour, Td.crepuscule, -5, const [(0.16, 0.3, 0.15), (0.74, 0.38, 0.25)]),
+    TagKind.double => (64, const LinearGradient(colors: [Td.fluo, Td.fluo]), Td.fluo, -5, const [(0.3, 0.34, 0.1)]),
+    TagKind.bull => (
+      96,
+      const LinearGradient(colors: [Td.crepuscule, Td.sunset]),
+      Td.crepuscule,
+      -5,
+      const [(0.25, 0.44, 0.2), (0.7, 0.3, 0.5)],
+    ),
+    TagKind.simple => (56, const LinearGradient(colors: [Td.ink, Td.ink]), Td.ink, -5, const []),
+    TagKind.miss => (44, const LinearGradient(colors: [Td.ink3, Td.ink3]), Td.ink3, 3, const []),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -79,15 +91,16 @@ class _HitTagState extends State<HitTag> with SingleTickerProviderStateMixin {
               children: [
                 // Halo de bombe
                 Positioned(
-                  left: -size, right: -size, top: -size * 0.4, bottom: -size * 0.4,
+                  left: -size,
+                  right: -size,
+                  top: -size * 0.4,
+                  bottom: -size * 0.4,
                   child: Opacity(
                     opacity: 0.7 - 0.44 * spray,
                     child: Transform.scale(
                       scale: 0.6 + 0.4 * spray,
                       child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(colors: [c1, c1.withValues(alpha: 0)]),
-                        ),
+                        decoration: BoxDecoration(gradient: RadialGradient(colors: [c1, c1.withValues(alpha: 0)])),
                       ),
                     ),
                   ),
@@ -104,8 +117,15 @@ class _HitTagState extends State<HitTag> with SingleTickerProviderStateMixin {
                             top: box.maxHeight * 0.66,
                             child: Container(
                               width: size * 0.05,
-                              height: size * h * const Cubic(0.45, 0.05, 0.55, 0.95)
-                                  .transform(((ms - (d + 0.35) * 1000) / 1200).clamp(0, 1)),
+                              height:
+                                  size *
+                                  h *
+                                  const Cubic(
+                                    0.45,
+                                    0.05,
+                                    0.55,
+                                    0.95,
+                                  ).transform(((ms - (d + 0.35) * 1000) / 1200).clamp(0, 1)),
                               decoration: BoxDecoration(
                                 color: c1,
                                 borderRadius: BorderRadius.vertical(bottom: Radius.circular(size * 0.05)),
@@ -123,14 +143,16 @@ class _HitTagState extends State<HitTag> with SingleTickerProviderStateMixin {
                     child: Stack(
                       children: [
                         // Contour sombre (td-tag__under)
-                        Text(widget.text,
-                            style: base.copyWith(
-                              foreground: Paint()
-                                ..style = PaintingStyle.stroke
-                                ..strokeWidth = size * 0.18
-                                ..strokeJoin = StrokeJoin.round
-                                ..color = Td.beton,
-                            )),
+                        Text(
+                          widget.text,
+                          style: base.copyWith(
+                            foreground: Paint()
+                              ..style = PaintingStyle.stroke
+                              ..strokeWidth = size * 0.18
+                              ..strokeJoin = StrokeJoin.round
+                              ..color = Td.beton,
+                          ),
+                        ),
                         ShaderMask(
                           blendMode: BlendMode.srcIn,
                           shaderCallback: (r) => fill.createShader(r),

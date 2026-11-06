@@ -14,13 +14,20 @@ class Avatar extends StatelessWidget {
   final double size;
   final bool active;
 
-  String get _initials =>
-      name.trim().split(RegExp(r'\s+')).map((s) => s.characters.first).join().characters.take(2).toString().toUpperCase();
+  String get _initials => name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .map((s) => s.characters.first)
+      .join()
+      .characters
+      .take(2)
+      .toString()
+      .toUpperCase();
 
   @override
   Widget build(BuildContext context) {
     // Le propriétaire a une vraie photo, prise à l'installation.
-    final photo = name == AppState.owner ? AppState.ownerProfile?.photoPath : null;
+    final photo = AppState.photos[name];
     if (photo != null && File(photo).existsSync()) {
       return Container(
         width: size,
@@ -41,10 +48,7 @@ class Avatar extends StatelessWidget {
         color: active ? Td.fluo : Td.asphalteHaut,
         border: active ? null : Border.all(color: Td.verreBord),
       ),
-      child: Text(
-        _initials,
-        style: TdText.rounded(size * 0.38, 800, active ? Td.onAccent : Td.ink),
-      ),
+      child: Text(_initials, style: TdText.rounded(size * 0.38, 800, active ? Td.onAccent : Td.ink)),
     );
   }
 }

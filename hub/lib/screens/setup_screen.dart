@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr/qr.dart';
 
 import '../game_config.dart';
+import '../lobby/lobby.dart';
 import '../setup/setup_server.dart';
 import '../theme/tokens.dart';
 import '../widgets/game_widgets.dart';
@@ -43,7 +44,8 @@ class _SetupScreenState extends State<SetupScreen> {
   void _finish() {
     final o = _c.owner;
     if (o != null) AppState.setOwner(o);
-    _c.stop();
+    // Le serveur de setup libère le port 8420 pour celui des salons.
+    _c.stop().then((_) => Lobby.instance.serve());
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: Td.lente,

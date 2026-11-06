@@ -4,6 +4,9 @@ library;
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:dartos_hub/game_config.dart';
+import 'package:dartos_hub/lobby/lobby.dart';
+import 'package:dartos_hub/screens/salon_screen.dart';
 import 'package:dartos_hub/screens/setup_screen.dart';
 import 'package:dartos_hub/setup/owner_store.dart';
 import 'package:dartos_hub/setup/setup_server.dart';
@@ -62,5 +65,16 @@ void main() {
       ..owner = const Owner(firstName: 'Thibault', lastName: 'H', nickname: 'Thibs');
     c.notifyListeners();
     await shot('setup-3-bienvenue');
+
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
+      home: RepaintBoundary(child: SalonScreen(config: const GameConfig(players: ['Thibs'], legsToWin: 2))),
+    ));
+    final l = Lobby.instance;
+    l.players.add(LobbyPlayer(id: 'a', name: 'Max'));
+    l.players.add(LobbyPlayer(id: 'b', name: 'Inès'));
+    l.arriving = 'Lou';
+    l.notifyListeners();
+    await shot('salon');
   });
 }

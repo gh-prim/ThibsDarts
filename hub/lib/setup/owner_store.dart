@@ -10,15 +10,19 @@ class Owner {
   final String nickname;
   final String? photoPath;
 
-  Map<String, Object?> toJson() =>
-      {'firstName': firstName, 'lastName': lastName, 'nickname': nickname, 'photo': photoPath};
+  Map<String, Object?> toJson() => {
+    'firstName': firstName,
+    'lastName': lastName,
+    'nickname': nickname,
+    'photo': photoPath,
+  };
 
   static Owner fromJson(Map<String, Object?> j) => Owner(
-        firstName: j['firstName'] as String? ?? '',
-        lastName: j['lastName'] as String? ?? '',
-        nickname: j['nickname'] as String? ?? '',
-        photoPath: j['photo'] as String?,
-      );
+    firstName: j['firstName'] as String? ?? '',
+    lastName: j['lastName'] as String? ?? '',
+    nickname: j['nickname'] as String? ?? '',
+    photoPath: j['photo'] as String?,
+  );
 }
 
 /// Stockage du propriétaire sur la partition /data (ou un dossier local en dev).

@@ -97,9 +97,11 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _correct() async {
     if (_matchOver) return;
-    final c = await Navigator.of(context).push<Correction>(MaterialPageRoute(
-      builder: (_) => CorrectionScreen(turn: _game.currentTurn, hits: List.of(_hits)),
-    ));
+    final c = await Navigator.of(context).push<Correction>(
+      MaterialPageRoute(
+        builder: (_) => CorrectionScreen(turn: _game.currentTurn, hits: List.of(_hits)),
+      ),
+    );
     if (c == null || !mounted) return;
     final hadWinner = _game.winner;
     setState(() {
@@ -164,11 +166,13 @@ class _GameScreenState extends State<GameScreen> {
           bust && i == turn.length - 1
               ? SlotData(SlotState.error, label: turn[i].label, value: turn[i].score)
               : turn[i].isMiss
-                  ? const SlotData(SlotState.miss)
-                  : SlotData(SlotState.hit,
-                      label: turn[i].label,
-                      value: turn[i].score,
-                      highlight: i == turn.length - 1 && turn[i].multiplier == 3 && _tagDart != null)
+              ? const SlotData(SlotState.miss)
+              : SlotData(
+                  SlotState.hit,
+                  label: turn[i].label,
+                  value: turn[i].score,
+                  highlight: i == turn.length - 1 && turn[i].multiplier == 3 && _tagDart != null,
+                )
         else if (i == turn.length && !g.awaitingNextPlayer)
           const SlotData(SlotState.current)
         else
@@ -178,15 +182,15 @@ class _GameScreenState extends State<GameScreen> {
     final ScoreState scoreState = bust
         ? ScoreState.bust
         : hint != null
-            ? ScoreState.out
-            : ScoreState.normal;
+        ? ScoreState.out
+        : ScoreState.normal;
     final String sub = bust
         ? 'Le tour ne compte pas'
         : over
-            ? 'Tour: $turnScore'
-            : hint != null && turn.isEmpty
-                ? 'Sortie possible en ${hint.length}'
-                : 'Début de tour: ${g.turnStartScore}';
+        ? 'Tour: $turnScore'
+        : hint != null && turn.isEmpty
+        ? 'Sortie possible en ${hint.length}'
+        : 'Début de tour: ${g.turnStartScore}';
 
     final Widget info;
     if (g.isFinished) {
@@ -223,8 +227,8 @@ class _GameScreenState extends State<GameScreen> {
           status: g.winner == g.players[i]
               ? PlayerStatus.winner
               : i == g.currentIndex
-                  ? PlayerStatus.active
-                  : PlayerStatus.waiting,
+              ? PlayerStatus.active
+              : PlayerStatus.waiting,
         ),
     ];
 
@@ -253,10 +257,7 @@ class _GameScreenState extends State<GameScreen> {
                       ],
                     ),
                     const SizedBox(height: Td.s3),
-                    for (final pl in players) ...[
-                      PlayerCard(player: pl),
-                      const SizedBox(height: Td.s2),
-                    ],
+                    for (final pl in players) ...[PlayerCard(player: pl), const SizedBox(height: Td.s2)],
                     const Spacer(),
                     const Wrap(
                       spacing: Td.s2,
@@ -294,8 +295,17 @@ class _GameScreenState extends State<GameScreen> {
                           child: IgnorePointer(
                             child: Center(
                               child: g.isFinished
-                                  ? HitTag(key: ValueKey(_tagKey), kind: TagKind.checkout, text: 'CHECKOUT $turnScore', fontSize: 64)
-                                  : HitTag.forDart(_tagDart!, key: ValueKey(_tagKey), fontSize: _tagDart!.isMiss ? 48 : 72),
+                                  ? HitTag(
+                                      key: ValueKey(_tagKey),
+                                      kind: TagKind.checkout,
+                                      text: 'CHECKOUT $turnScore',
+                                      fontSize: 64,
+                                    )
+                                  : HitTag.forDart(
+                                      _tagDart!,
+                                      key: ValueKey(_tagKey),
+                                      fontSize: _tagDart!.isMiss ? 48 : 72,
+                                    ),
                             ),
                           ),
                         ),
@@ -308,19 +318,30 @@ class _GameScreenState extends State<GameScreen> {
                             child: Center(
                               child: Transform.rotate(
                                 angle: -6 * 3.14159 / 180,
-                                child: Text('BUST',
-                                    style: const TextStyle(
-                                      fontFamily: 'PermanentMarker',
-                                      fontSize: 88,
-                                      height: 92 / 88,
-                                      color: Td.erreur,
-                                      shadows: [Shadow(color: Color(0x99000000), blurRadius: 24, offset: Offset(0, 4))],
-                                    )),
+                                child: Text(
+                                  'BUST',
+                                  style: const TextStyle(
+                                    fontFamily: 'PermanentMarker',
+                                    fontSize: 88,
+                                    height: 92 / 88,
+                                    color: Td.erreur,
+                                    shadows: [Shadow(color: Color(0x99000000), blurRadius: 24, offset: Offset(0, 4))],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      if (over) Positioned(left: 24, right: 24, top: 0, bottom: 0, child: Center(child: _RemoveDarts(turnScore: turnScore, next: g.nextPlayerInLine))),
+                      if (over)
+                        Positioned(
+                          left: 24,
+                          right: 24,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _RemoveDarts(turnScore: turnScore, next: g.nextPlayerInLine),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -359,7 +380,11 @@ class _GameScreenState extends State<GameScreen> {
                           onPressed: _outOfBoard,
                         ),
                         TdButton(
-                          label: _matchOver ? 'Terminer' : g.isFinished ? 'Manche suivante' : 'Fin de tour',
+                          label: _matchOver
+                              ? 'Terminer'
+                              : g.isFinished
+                              ? 'Manche suivante'
+                              : 'Fin de tour',
                           icon: LucideIcons.arrowRight,
                           variant: g.awaitingNextPlayer ? TdButtonVariant.primary : TdButtonVariant.secondary,
                           height: Td.ciblePi,
@@ -396,10 +421,7 @@ class _RemoveDarts extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(Td.rXl),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: _panel(),
-      ),
+      child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18), child: _panel()),
     );
   }
 
@@ -419,8 +441,11 @@ class _RemoveDarts extends StatelessWidget {
           const SizedBox(height: Td.s3),
           Text('Retire tes fléchettes.', style: TdText.inter(28, 34, 700, Td.ink), textAlign: TextAlign.center),
           const SizedBox(height: Td.s3),
-          Text('Tour à $turnScore. Les caméras attendent une cible vide.',
-              style: TdText.inter(17, 22, 400, Td.ink2), textAlign: TextAlign.center),
+          Text(
+            'Tour à $turnScore. Les caméras attendent une cible vide.',
+            style: TdText.inter(17, 22, 400, Td.ink2),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: Td.s4),
           Row(
             mainAxisSize: MainAxisSize.min,

@@ -18,9 +18,9 @@ enum WifiState { idle, connecting, ok, error }
 /// sur le port 8420. L'iPhone s'appaire avec le code, donne le Wi-Fi, puis le profil.
 class SetupController extends ChangeNotifier {
   SetupController({WifiManager? wifi, OwnerStore? store, Random? random})
-      : wifi = wifi ?? WifiManager.create(),
-        store = store ?? OwnerStore.instance,
-        _rnd = random ?? Random.secure() {
+    : wifi = wifi ?? WifiManager.create(),
+      store = store ?? OwnerStore.instance,
+      _rnd = random ?? Random.secure() {
     code = List.generate(4, (_) => _rnd.nextInt(10)).join();
     hotspotPassword = List.generate(10, (_) => _alphabet[_rnd.nextInt(_alphabet.length)]).join();
   }
@@ -83,9 +83,13 @@ class SetupController extends ChangeNotifier {
       final ifs = await NetworkInterface.list(type: InternetAddressType.IPv4);
       // Le hotspot NetworkManager est en 10.42.0.1 ; sinon la première adresse privée.
       final all = [for (final i in ifs) ...i.addresses.map((a) => a.address)];
-      return all.firstWhere((a) => a.startsWith('10.42.'),
-          orElse: () => all.firstWhere((a) => a.startsWith('192.168.') || a.startsWith('10.') || a.startsWith('172.'),
-              orElse: () => all.isEmpty ? '127.0.0.1' : all.first));
+      return all.firstWhere(
+        (a) => a.startsWith('10.42.'),
+        orElse: () => all.firstWhere(
+          (a) => a.startsWith('192.168.') || a.startsWith('10.') || a.startsWith('172.'),
+          orElse: () => all.isEmpty ? '127.0.0.1' : all.first,
+        ),
+      );
     } catch (_) {
       return null;
     }
@@ -185,11 +189,7 @@ class SetupController extends ChangeNotifier {
     }
   }
 
-  Map<String, Object?> _status() => {
-        'phase': phase.name,
-        'wifi': wifiState.name,
-        'ssid': ssid,
-      };
+  Map<String, Object?> _status() => {'phase': phase.name, 'wifi': wifiState.name, 'ssid': ssid};
 
   static Future<Map<String, Object?>> _body(HttpRequest req) async {
     final text = await utf8.decoder.bind(req).join();

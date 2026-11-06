@@ -147,8 +147,12 @@ class TdSegmented extends StatelessWidget {
                   ),
                   child: Text(
                     o,
-                    style: TdText.inter(touch ? 22 : 15, touch ? 28 : 20, touch ? 700 : 600,
-                        disabled.contains(o) ? Td.desactiveInk : (o == value ? Td.beton : Td.ink2)),
+                    style: TdText.inter(
+                      touch ? 22 : 15,
+                      touch ? 28 : 20,
+                      touch ? 700 : 600,
+                      disabled.contains(o) ? Td.desactiveInk : (o == value ? Td.beton : Td.ink2),
+                    ),
                   ),
                 ),
               ),
@@ -197,7 +201,14 @@ class TdStepper extends StatelessWidget {
 
 /// Tuile de mode de jeu (ModeTile).
 class ModeTile extends StatelessWidget {
-  const ModeTile({super.key, required this.glyph, required this.title, required this.desc, this.selected = false, this.onTap});
+  const ModeTile({
+    super.key,
+    required this.glyph,
+    required this.title,
+    required this.desc,
+    this.selected = false,
+    this.onTap,
+  });
 
   final String glyph;
   final String title;
@@ -216,7 +227,9 @@ class ModeTile extends StatelessWidget {
           color: selected ? Td.sunsetFond : Td.verreMoyen,
           borderRadius: BorderRadius.circular(Td.rXl),
           border: Border.all(color: selected ? Td.sunset : Td.verreBord),
-          boxShadow: const [BoxShadow(color: Color(0x73000000), blurRadius: 24, offset: Offset(0, 8), blurStyle: BlurStyle.outer)],
+          boxShadow: const [
+            BoxShadow(color: Color(0x73000000), blurRadius: 24, offset: Offset(0, 8), blurStyle: BlurStyle.outer),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,8 +238,10 @@ class ModeTile extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(glyph,
-                  style: TdText.rounded(48, 900, selected ? Td.sunset : Td.ink, height: 52).copyWith(letterSpacing: -1)),
+              child: Text(
+                glyph,
+                style: TdText.rounded(48, 900, selected ? Td.sunset : Td.ink, height: 52).copyWith(letterSpacing: -1),
+              ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

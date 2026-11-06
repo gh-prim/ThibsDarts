@@ -1,6 +1,15 @@
 import SwiftUI
 
-// Écrans Apple TV (planches Connexion, Salon, Jeu501, TourSuivant, Victoire, Fete180).
+// Écrans Apple TV (planches Connexion, Main, Jeu501, Cricket, TourSuivant, Victoire, Fete180).
+
+/// "64,0" : une décimale, virgule française.
+func tvDecimal(_ v: Double) -> String {
+    String(format: "%.1f", v).replacingOccurrences(of: ".", with: ",")
+}
+
+/// Grille plein écran des planches : 1920 x 1080, marges 90 et 60.
+private let tvPadH: CGFloat = 90
+private let tvPadV: CGFloat = 60
 
 // MARK: Connexion
 
@@ -67,8 +76,8 @@ struct TVLiveView: View {
     var body: some View {
         ZStack {
             content
-            if let up = model.nextUp, model.info?.game?.winner == nil {
-                TVNextUpView(up: up).transition(.opacity)
+            if let up = model.nextUp, let g = model.info?.game, g.winner == nil {
+                TVStage { TVNextUpView(up: up, game: g) }.transition(.opacity)
             }
             if model.fete180, let g = model.info?.game {
                 TVFete180View(name: g.current).transition(.opacity)
@@ -82,6 +91,8 @@ struct TVLiveView: View {
             if let g = info.game, info.isPlaying {
                 if g.winner != nil {
                     TVVictoryView(game: g)
+                } else if g.kind == "cricket" {
+                    TVCricketView(game: g)
                 } else {
                     TVGameView(game: g)
                 }
@@ -109,7 +120,7 @@ struct TVIdleView: View {
     }
 }
 
-// MARK: Salon
+// MARK: Salon (planche Main)
 
 struct TVSalonView: View {
     @EnvironmentObject var model: TVModel
@@ -122,109 +133,126 @@ struct TVSalonView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Td.s8) {
-            HStack {
-                TVLogo(height: 64)
-                Spacer()
-                Text(info.label).font(.td(30, .semibold)).foregroundStyle(Td.ink2)
-            }
-            HStack(alignment: .top, spacing: 96) {
-                VStack(alignment: .leading, spacing: Td.s6) {
-                    Text("Salon de \(info.hostName)").font(.td(64, .bold))
-                    Text("Scanne avec l'appli ThibsDarts pour rejoindre.")
-                        .font(.td(30)).foregroundStyle(Td.ink2)
-                    TVQRCode(text: joinText, size: 340)
-                    if let code = info.code {
-                        HStack(alignment: .firstTextBaseline, spacing: Td.s4) {
-                            Text("Code").font(.td(30, .semibold)).foregroundStyle(Td.ink2)
+        HStack(spacing: 80) {
+            VStack(alignment: .leading, spacing: Td.s8) {
+                TVLogo(height: 72)
+                VStack(alignment: .leading, spacing: Td.s2) {
+                    Text("Salon de \(info.hostName)").font(.td(76, .heavy)).tracking(-1.5)
+                    Text(info.label).font(.td(34)).foregroundStyle(Td.ink2)
+                }
+                HStack(spacing: 40) {
+                    TVQRCode(text: joinText, size: 300)
+                    VStack(alignment: .leading, spacing: Td.s3) {
+                        Text("Scanne avec l'app\nou tape le code").font(.td(28)).foregroundStyle(Td.ink2)
+                        if let code = info.code {
                             Text(code).font(.tdRounded(96, .black)).tracking(12)
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: Td.s4) {
-                    Text("Ils sont là, \(info.players.count) sur 8").font(.td(36, .bold))
-                    ScrollView {
-                        VStack(spacing: Td.s3) {
-                            ForEach(info.players) { p in
-                                TVPlayerRow(
-                                    name: p.name,
-                                    url: model.base.flatMap { LobbyAPI.photoURL(base: $0, player: p) },
-                                    sub: p.host ? "Hôte" : (p.connected ? "Prêt" : "Sur la cible"),
-                                    ready: p.connected && !p.host
-                                )
-                            }
-                        }
-                    }
-                    Spacer(minLength: 0)
-                    Text("\(info.hostName) lance la partie depuis l'écran de la cible.")
-                        .font(.td(28)).foregroundStyle(Td.ink2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(width: 760, alignment: .leading)
+            VStack(alignment: .leading, spacing: Td.s6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Ils sont là").font(.td(34, .bold))
+                    Spacer()
+                    Text("\(info.players.count) sur 8").font(.td(28)).foregroundStyle(Td.ink2)
+                }
+                VStack(spacing: Td.s3) {
+                    ForEach(info.players) { p in
+                        TVPlayerRow(
+                            name: p.name,
+                            url: model.base.flatMap { LobbyAPI.photoURL(base: $0, player: p) },
+                            sub: p.host ? "Hôte" : (p.connected ? "Prêt" : "Sur la cible"),
+                            ready: p.connected && !p.host
+                        )
+                    }
+                }
+                Text("\(info.hostName) lance la partie depuis l'écran de la cible.")
+                    .font(.td(28)).foregroundStyle(Td.ink3)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 96).padding(.vertical, 64)
+        .padding(.horizontal, tvPadH).padding(.vertical, tvPadV)
     }
 }
 
-// MARK: Partie
+// MARK: Partie (planche Jeu501, et les autres modes)
+
+/// En-tête logo + "501 · Manche 2".
+struct TVHeader: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: Td.s4) {
+            TVLogo(height: 56)
+            Text(text).font(.td(28)).foregroundStyle(Td.ink2).lineLimit(1)
+        }
+    }
+}
+
+func tvHeader(_ g: LiveGame) -> String {
+    if let t = g.title { return t }
+    return "\(g.mode) · Manche \(g.leg)"
+}
+
+func tvPlayerSub(_ g: LiveGame, _ p: LivePlayer) -> String? {
+    if let d = p.detail { return d }
+    var parts: [String] = []
+    if let a = p.average { parts.append("Moy. \(tvDecimal(a))") }
+    if g.legsToWin > 1 { parts.append("\(p.legs) manche\(p.legs > 1 ? "s" : "")") }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+}
 
 struct TVGameView: View {
     @EnvironmentObject var model: TVModel
     let game: LiveGame
 
-    private var title: String {
-        let name = game.title ?? game.mode
-        return game.legsToWin > 1 ? "\(name) · Manche \(game.leg)" : name
-    }
-
     private var me: LivePlayer? { game.players.first { $0.name == game.current } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Td.s6) {
-            HStack {
-                TVLogo(height: 56)
-                Spacer()
-                Text(title).font(.td(30, .semibold)).foregroundStyle(Td.ink2)
+        HStack(spacing: 48) {
+            VStack(alignment: .leading, spacing: Td.s6) {
+                TVHeader(text: tvHeader(game))
+                VStack(spacing: Td.s3) {
+                    ForEach(game.players, id: \.name) { p in
+                        TVPlayerRow(
+                            name: p.name,
+                            url: model.photoURL(p.name),
+                            sub: tvPlayerSub(game, p),
+                            score: p.remaining,
+                            active: p.name == game.current
+                        )
+                    }
+                }
             }
-            HStack(alignment: .top, spacing: Td.s8) {
-                players.frame(width: 460)
-                center.frame(maxWidth: .infinity)
-                right.frame(width: 500)
-            }
-        }
-        .padding(.horizontal, 64).padding(.vertical, 48)
-    }
-
-    private var players: some View {
-        VStack(spacing: Td.s3) {
-            ForEach(game.players, id: \.name) { p in
-                TVPlayerRow(
-                    name: p.name,
-                    url: model.photoURL(p.name),
-                    sub: sub(p),
-                    score: p.remaining,
-                    active: p.name == game.current
-                )
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func sub(_ p: LivePlayer) -> String? {
-        if let d = p.detail { return d }
-        var parts: [String] = []
-        if let a = p.average { parts.append(String(format: "Moy. %.1f", a).replacingOccurrences(of: ".", with: ",")) }
-        if game.legsToWin > 1 { parts.append("\(p.legs) manche\(p.legs > 1 ? "s" : "")") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    @ViewBuilder private var center: some View {
-        if game.kind == "cricket" {
-            TVCricketTable(game: game)
-        } else {
+            .frame(width: 460)
             TVDartboard(darts: game.darts, aimed: game.checkout?.first, heat: heat)
-                .frame(maxHeight: 820)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: Td.s8) {
+                if game.isX01 {
+                    TVScore(
+                        value: me?.remaining ?? 0,
+                        label: "\(game.current), il reste",
+                        sub: game.bust ? "Bust. Score remis à \(me?.remaining ?? 0)." : "Tour en cours : \(game.turnScore)",
+                        out: game.checkout != nil,
+                        bust: game.bust
+                    )
+                } else {
+                    TVScore(
+                        value: game.scoreValue ?? me?.remaining ?? 0,
+                        label: game.scoreLabel ?? "Score de \(game.current)",
+                        sub: me?.detail ?? "Tour en cours : \(game.turnScore)",
+                        size: 220
+                    )
+                }
+                TVDartSlots(darts: game.darts, closed: game.bust)
+                if let route = game.checkout, !route.isEmpty, !game.bust {
+                    TVCheckout(route: route)
+                }
+            }
+            .frame(width: 500, alignment: .leading)
         }
+        .padding(.horizontal, tvPadH).padding(.vertical, tvPadV)
     }
 
     /// Numéro visé en Clock et Shanghai (le Pi le publie en scoreValue).
@@ -232,89 +260,126 @@ struct TVGameView: View {
         guard game.kind == "clock" || game.kind == "shanghai", let v = game.scoreValue, (1...25).contains(v) else { return [] }
         return [v]
     }
-
-    private var right: some View {
-        VStack(alignment: .leading, spacing: Td.s6) {
-            Text(game.current).font(.td(44, .bold)).lineLimit(1)
-            if game.isX01 {
-                TVScore(
-                    value: me?.remaining ?? 0,
-                    label: "Il reste",
-                    sub: game.bust ? "Bust. Score remis à \(me?.remaining ?? 0)." : "Ce tour : \(game.turnScore)",
-                    out: game.checkout != nil,
-                    bust: game.bust
-                )
-            } else {
-                TVScore(
-                    value: game.scoreValue ?? me?.remaining ?? 0,
-                    label: game.scoreLabel ?? "Score",
-                    sub: me?.detail ?? "Ce tour : \(game.turnScore)",
-                    size: 200
-                )
-            }
-            TVDartSlots(darts: game.darts, closed: game.bust)
-            if let route = game.checkout, !route.isEmpty, !game.bust {
-                TVCheckout(route: route)
-            }
-            Spacer(minLength: 0)
-            Text("Ensuite : \(game.next)").font(.td(28)).foregroundStyle(Td.ink2)
-        }
-    }
 }
 
-/// Tableau Cricket : une colonne par joueur, une ligne par numéro.
-struct TVCricketTable: View {
+// MARK: Cricket (planche Cricket)
+
+struct TVCricketView: View {
     let game: LiveGame
-    private let numbers = ["20", "19", "18", "17", "16", "15", "Bull"]
+    static let numbers = [20, 19, 18, 17, 16, 15, 25]
+
+    private func marks(_ p: LivePlayer, _ row: Int) -> Int {
+        guard let m = p.marks, row < m.count else { return 0 }
+        return m[row]
+    }
+
+    /// Numéros que tout le monde n'a pas encore fermés.
+    private var open: Set<Int> {
+        Set(Self.numbers.enumerated().filter { row, _ in game.players.contains { marks($0, row) < 3 } }.map(\.element))
+    }
 
     var body: some View {
+        HStack(spacing: 64) {
+            VStack(alignment: .leading, spacing: Td.s6) {
+                TVHeader(text: "\(game.title ?? "Cricket") · \(game.current) au tir")
+                board
+                    .padding(Td.s5)
+                    .background(RoundedRectangle(cornerRadius: 36).fill(Td.verreLeger))
+                    .overlay(RoundedRectangle(cornerRadius: 36).strokeBorder(Td.verreBord))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: Td.s8) {
+                TVDartboard(darts: game.darts, heat: open)
+                TVDartSlots(darts: game.darts)
+            }
+            .frame(width: 640)
+        }
+        .padding(.horizontal, tvPadH).padding(.vertical, tvPadV)
+    }
+
+    private var board: some View {
         VStack(spacing: Td.s2) {
             HStack(spacing: Td.s2) {
-                Color.clear.frame(width: 120, height: 1)
+                Color.clear.frame(width: 140, height: 1)
                 ForEach(game.players, id: \.name) { p in
-                    Text(p.name).font(.td(26, .semibold)).lineLimit(1)
-                        .foregroundStyle(p.name == game.current ? Td.fluo : Td.ink2)
-                        .frame(maxWidth: .infinity)
+                    let active = p.name == game.current
+                    VStack(spacing: 0) {
+                        Text(p.name).font(.td(28, .semibold)).lineLimit(1)
+                            .foregroundStyle(active ? Td.fluo : Td.ink2)
+                        Text("\(p.remaining)").font(.tdRounded(48, .heavy)).monospacedDigit()
+                            .foregroundStyle(active ? Td.ink : Td.ink2)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
-            ForEach(Array(numbers.enumerated()), id: \.offset) { row, n in
+            ForEach(Array(Self.numbers.enumerated()), id: \.offset) { row, n in
+                let closed = !open.contains(n)
                 HStack(spacing: Td.s2) {
-                    Text(n).font(.tdRounded(44, .heavy)).frame(width: 120)
+                    Text(n == 25 ? "Bull" : "\(n)").font(.tdRounded(44, .heavy)).frame(width: 140)
                     ForEach(game.players, id: \.name) { p in
-                        TVCricketMark(n: p.marks.flatMap { row < $0.count ? $0[row] : nil } ?? 0)
-                            .frame(maxWidth: .infinity)
+                        TVCricketMark(n: marks(p, row)).frame(maxWidth: .infinity)
                     }
                 }
-                .frame(height: 88)
-                .background(RoundedRectangle(cornerRadius: Td.rLg).fill(row % 2 == 0 ? Td.verreLeger : .clear))
+                .frame(height: 84)
+                .background(
+                    RoundedRectangle(cornerRadius: Td.rLg)
+                        .fill(row % 2 == 0 ? Td.verreLeger : .clear)
+                )
+                .opacity(closed ? 0.35 : 1)
             }
         }
     }
 }
 
-// MARK: Moments forts
+// MARK: Joueur suivant (planche TourSuivant)
 
 struct TVNextUpView: View {
     @EnvironmentObject var model: TVModel
     let up: TVModel.NextUp
+    let game: LiveGame
+
+    private var me: LivePlayer? { game.players.first { $0.name == up.name } }
+
+    private var line: String? {
+        guard let prev = up.previous, let s = up.previousScore else { return nil }
+        if game.isX01, let r = up.previousRemaining { return "\(prev) a fait \(s). Il lui reste \(r)." }
+        return "\(prev) a fait \(s)."
+    }
 
     var body: some View {
-        ZStack {
-            Td.betonNuit.opacity(0.92).ignoresSafeArea()
-            VStack(spacing: Td.s6) {
-                TVAvatar(name: up.name, url: model.photoURL(up.name), size: 180)
-                    .overlay(Circle().strokeBorder(Td.fluo, lineWidth: 4))
-                    .shadow(color: Td.fluo.opacity(0.4), radius: 30)
-                Text("À \(up.name).").font(.td(120, .black))
-                if let prev = up.previous, let s = up.previousScore {
-                    let rest = up.previousRemaining.map { " Il reste \($0)." } ?? ""
-                    let line = model.info?.game?.isX01 == true ? "\(prev) a fait \(s).\(rest)" : "\(prev) a fait \(s)."
-                    Text(line).font(.td(36)).foregroundStyle(Td.ink2)
+        HStack(spacing: 80) {
+            VStack(alignment: .leading, spacing: Td.s8) {
+                if let line { Text(line).font(.td(28)).foregroundStyle(Td.ink2) }
+                HStack(spacing: 40) {
+                    TVAvatar(name: up.name, url: model.photoURL(up.name), size: 180)
+                    Text("À \(up.name).").font(.td(140, .heavy)).tracking(-3).lineLimit(1).minimumScaleFactor(0.5)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: Td.s8) {
+                if game.isX01 {
+                    TVScore(
+                        value: me?.remaining ?? 0,
+                        label: "Il te reste",
+                        sub: me?.average.map { "Moyenne du match : \(tvDecimal($0))" }
+                    )
+                    if let route = game.checkout, !route.isEmpty { TVCheckout(route: route) }
+                } else {
+                    TVScore(
+                        value: game.scoreValue ?? me?.remaining ?? 0,
+                        label: game.youLabel ?? "Ton score",
+                        sub: me?.detail,
+                        size: 220
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, tvPadH).padding(.vertical, tvPadV)
     }
 }
+
+// MARK: 180 (planche Fete180)
 
 struct TVFete180View: View {
     let name: String
@@ -322,15 +387,7 @@ struct TVFete180View: View {
     var body: some View {
         ZStack {
             Td.betonNuit.ignoresSafeArea()
-            EllipticalGradient(
-                stops: [
-                    .init(color: Td.sunset.opacity(0.30), location: 0),
-                    .init(color: Td.crepuscule.opacity(0.14), location: 0.45),
-                    .init(color: .clear, location: 0.75),
-                ],
-                center: UnitPoint(x: 0.5, y: 1.18)
-            )
-            .ignoresSafeArea()
+            TVHorizon()
             VStack(spacing: Td.s8) {
                 TVSprayTag(text: "180", size: 320, pink: true)
                 Text("Trois T20. \(name) a même pas transpiré.").font(.td(40, .semibold))
@@ -339,7 +396,24 @@ struct TVFete180View: View {
     }
 }
 
-// MARK: Victoire
+/// Lueur golden hour en bas de l'écran (td-fete).
+struct TVHorizon: View {
+    var body: some View {
+        GeometryReader { geo in
+            RadialGradient(
+                stops: [
+                    .init(color: Color(hex: 0xFF7A2F, alpha: 0.30), location: 0),
+                    .init(color: Color(hex: 0xFF4D8D, alpha: 0.14), location: 0.45),
+                    .init(color: .clear, location: 0.75),
+                ],
+                center: UnitPoint(x: 0.5, y: 1.18), startRadius: 0, endRadius: geo.size.width * 0.6
+            )
+        }
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: Victoire (planche Victoire)
 
 struct TVVictoryView: View {
     @EnvironmentObject var model: TVModel
@@ -355,45 +429,56 @@ struct TVVictoryView: View {
         return game.players.filter { winners.contains($0.name) } + sorted
     }
 
-    private var tag: String { isDraw ? "ÉGALITÉ" : (solo ? "FINI" : "GAGNÉ") }
+    private var tag: String { game.endTag ?? (isDraw ? "ÉGALITÉ" : (solo ? "FINI" : "GAGNÉ")) }
 
     private var copy: String {
+        if let c = game.endCopy { return c }
         if isDraw { return "\(game.winner ?? "") à égalité. Revanche ?" }
-        if solo { return "\(game.winner ?? "") termine avec \(game.players[0].remaining)." }
         return "\(game.winner ?? "") plie la partie. Sans forcer."
     }
 
     var body: some View {
-        HStack(spacing: 64) {
-            VStack(spacing: Td.s8) {
-                TVSprayTag(text: tag, size: isDraw ? 150 : 200)
-                Text(copy).font(.td(40, .semibold)).multilineTextAlignment(.center)
-                Text("\(model.info?.hostName ?? "L'hôte") relance depuis l'écran de la cible.")
-                    .font(.td(28)).foregroundStyle(Td.ink2)
+        HStack(spacing: 0) {
+            ZStack {
+                Color(hex: 0x0B0B0D)
+                TVHorizon()
+                VStack(spacing: Td.s8) {
+                    TVSprayTag(text: tag, size: tag == "GAGNÉ" ? 220 : 170)
+                    Text(copy).font(.td(36, .medium)).multilineTextAlignment(.center)
+                    if let stats = game.stats, !stats.isEmpty {
+                        HStack(spacing: 64) {
+                            ForEach(stats, id: \.label) { s in
+                                VStack(spacing: Td.s1) {
+                                    Text(s.value).font(.tdRounded(64, .heavy))
+                                    Text(s.label).font(.td(26)).foregroundStyle(Td.ink2)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(64)
             }
-            .frame(maxWidth: .infinity)
-            VStack(alignment: .leading, spacing: Td.s4) {
-                Text("Classement").font(.td(36, .bold))
-                ForEach(Array(ranking.enumerated()), id: \.offset) { i, p in
-                    HStack(spacing: Td.s4) {
-                        Text("\(i + 1)").font(.tdRounded(40, .heavy)).foregroundStyle(Td.ink2).frame(width: 48)
+            VStack(alignment: .leading, spacing: Td.s6) {
+                Text("Classement").font(.td(34, .bold))
+                VStack(spacing: Td.s3) {
+                    ForEach(ranking, id: \.name) { p in
                         TVPlayerRow(
                             name: p.name,
                             url: model.photoURL(p.name),
-                            sub: p.detail,
+                            sub: tvPlayerSub(game, p),
                             score: p.remaining,
                             winner: winners.contains(p.name)
                         )
                     }
                 }
-                Spacer(minLength: 0)
+                Text("Stats envoyées sur l'iPhone de chacun.").font(.td(22)).foregroundStyle(Td.ink3)
             }
-            .padding(Td.s8)
+            .padding(.leading, 48).padding(.trailing, tvPadH).padding(.vertical, tvPadV)
             .frame(width: 640)
             .frame(maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: Td.rXl).fill(Td.verreLeger))
-            .overlay(RoundedRectangle(cornerRadius: Td.rXl).strokeBorder(Td.verreBord))
+            .background(Color(hex: 0x121214))
+            .overlay(alignment: .leading) { Rectangle().fill(Color.white.opacity(0.10)).frame(width: 1) }
         }
-        .padding(64)
+        .ignoresSafeArea()
     }
 }

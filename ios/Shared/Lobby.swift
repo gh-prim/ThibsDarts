@@ -41,6 +41,11 @@ struct LivePlayer: Decodable, Equatable {
     var marks: [Int]?
 }
 
+struct LiveStat: Decodable, Equatable {
+    let label: String
+    let value: String
+}
+
 /// Partie en direct publiée par le Pi.
 struct LiveGame: Decodable, Equatable {
     let mode: String
@@ -61,6 +66,11 @@ struct LiveGame: Decodable, Equatable {
     var scoreLabel: String?
     var scoreValue: Int?
     var youLabel: String?
+
+    // Fin de partie : stats du gagnant, tag et phrase propres au mode.
+    var stats: [LiveStat]?
+    var endTag: String?
+    var endCopy: String?
 
     var isX01: Bool { kind == nil }
 }

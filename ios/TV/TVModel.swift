@@ -144,7 +144,9 @@ final class TVModel: ObservableObject {
 /// Cherche les cibles : d'abord cet appareil (simulateur), puis tout le réseau local en /24.
 enum Discovery {
     static func scan() async -> [FoundPi] {
-        var hosts = ["127.0.0.1"]
+        // Simulateur : le hub tourne sur le Mac, inutile de balayer le réseau.
+        if let me = await probe(URL(string: "http://127.0.0.1:8420")!) { return [me] }
+        var hosts: [String] = []
         if let ip = localIPv4() {
             let parts = ip.split(separator: ".")
             if parts.count == 4 {

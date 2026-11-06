@@ -180,6 +180,11 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     _ => _cfg.title,
   };
 
+  List<CelebrationStat> get _winStats => [
+    CelebrationStat(_g is KillerGame ? 'Vies restantes' : 'Score', '${_g.scoreOf(_g.winnerIndex!)}'),
+    CelebrationStat('Manches', '${_g.round}'),
+  ];
+
   static String _doubleLabel(int sector) => sector == 25 ? 'Bull' : 'D$sector';
 
   /// Sous-ligne de chaque joueur dans la liste.
@@ -251,6 +256,13 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
           },
       ],
       'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,
+      if (g.winner != null) ...{
+        'endTag': _endTag,
+        'endCopy': _endCopy,
+        'stats': [
+          for (final st in _winStats) {'label': st.label, 'value': st.value},
+        ],
+      },
     });
   }
 
@@ -308,10 +320,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                 winner: g.winner!,
                 tag: _endTag,
                 copy: _endCopy,
-                stats: [
-                  CelebrationStat(g is KillerGame ? 'Vies restantes' : 'Score', '${g.scoreOf(g.winnerIndex!)}'),
-                  CelebrationStat('Manches', '${g.round}'),
-                ],
+                stats: _winStats,
                 onAgain: _rematch,
                 onHome: () => Navigator.of(context).pop(),
               ),

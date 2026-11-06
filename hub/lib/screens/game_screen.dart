@@ -265,6 +265,10 @@ class _GameScreenState extends State<GameScreen> {
           },
       ],
       'winner': _matchOver ? g.winner!.name : null,
+      if (_matchOver)
+        'stats': [
+          for (final st in _winStats(g.winner!.name)) {'label': st.label, 'value': st.value},
+        ],
     });
   }
 

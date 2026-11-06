@@ -1,4 +1,3 @@
-import AVFoundation
 import Darwin
 import SwiftUI
 
@@ -32,7 +31,6 @@ final class TVModel: ObservableObject {
     }
 
     private let defaults = UserDefaults.standard
-    private let voice = AVSpeechSynthesizer()
     private var lastCurrent: String?
     private var lastTurnScore = 0
     private var last180Key: String?
@@ -98,7 +96,6 @@ final class TVModel: ObservableObject {
             if key != last180Key {
                 last180Key = key
                 withAnimation(Td.sortie) { fete180 = true }
-                say("Cent quatre-vingts !")
                 Task {
                     try? await Task.sleep(for: .seconds(5))
                     withAnimation(Td.sortie) { self.fete180 = false }
@@ -110,29 +107,13 @@ final class TVModel: ObservableObject {
             let p = g.players.first { $0.name == prev }
             let up = NextUp(name: g.current, previous: prev, previousScore: lastTurnScore, previousRemaining: p?.remaining)
             withAnimation(Td.sortie) { nextUp = up }
-            let me = g.players.first { $0.name == g.current }
-            if g.isX01, let r = me?.remaining {
-                say("\(g.current), il te reste \(r).")
-            } else {
-                say("À \(g.current).")
-            }
             Task {
                 try? await Task.sleep(for: .seconds(3.5))
                 if self.nextUp == up { withAnimation(Td.sortie) { self.nextUp = nil } }
             }
         }
-        if g.winner != nil, info?.game?.winner == nil {
-            say(g.winner!.contains(" et ") ? "Égalité !" : "\(g.winner!) gagne la partie !")
-        }
         lastCurrent = g.current
         lastTurnScore = g.turnScore
-    }
-
-    private func say(_ text: String) {
-        let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "fr-FR")
-        voice.stopSpeaking(at: .immediate)
-        voice.speak(u)
     }
 
     func photoURL(_ name: String) -> URL? {

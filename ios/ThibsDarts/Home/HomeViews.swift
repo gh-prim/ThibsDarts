@@ -3,6 +3,7 @@ import SwiftUI
 /// Accueil avec les onglets (planche "2. Jouer").
 struct HomeView: View {
     @EnvironmentObject var app: AppModel
+    @StateObject private var history = HistoryModel()
     @State private var tab = "jouer"
 
     private let tabs = [
@@ -17,36 +18,26 @@ struct HomeView: View {
             switch tab {
             case "jouer": PlayTab()
             case "profil": ProfileView(title: "Profil", onBack: nil, onDone: { tab = "jouer" })
-            default: SoonTab(title: tab == "stats" ? "Stats" : "Historique")
+            case "stats": StatsTab()
+            default: HistoryTab()
             }
             TabBar(items: tabs, value: $tab)
                 .padding(.horizontal, Td.s4)
                 .padding(.bottom, Td.s2)
                 .opacity(tab == "profil" ? 0 : 1)
         }
+        .environmentObject(history)
         .fullScreenCover(item: $app.lobby) { _ in SalonView().environmentObject(app) }
-    }
-}
-
-private struct SoonTab: View {
-    let title: String
-
-    var body: some View {
-        Stage {
-            VStack(alignment: .leading, spacing: Td.s4) {
-                Text(title).font(.td(34, .heavy)).tracking(-0.5)
-                EmptyState(icon: .history, text: "Aucune partie. Le minimum, c’est d’en lancer une.")
-                Spacer()
-            }
-            .padding(.horizontal, Td.s4)
-            .padding(.top, Td.s4)
-        }
+        // Recharge l'historique en changeant d'onglet et en sortant d'une partie.
+        .task(id: "\(tab)-\(app.lobby == nil)-\(app.piBase?.absoluteString ?? "")") { await history.load(app: app) }
     }
 }
 
 /// Onglet Jouer : le salon ouvert sur le Pi, Créer, Code, dernière partie.
 private struct PlayTab: View {
     @EnvironmentObject var app: AppModel
+    @EnvironmentObject var history: HistoryModel
+    @State private var lastDetail: HistoryMatch?
     @State private var info: LobbyInfo?
     @State private var joining = false
     @State private var error: String?
@@ -70,7 +61,11 @@ private struct PlayTab: View {
                     }
                     if let error { Banner(text: error, error: true) }
                     Text("Ta dernière partie").font(.td(13, .semibold)).foregroundStyle(Td.ink2).padding(.top, Td.s2)
-                    EmptyState(icon: .history, text: "Aucune partie. Le minimum, c’est d’en lancer une.")
+                    if let last = history.matches.first {
+                        MatchHistoryList(matches: [last], me: app.playerId) { lastDetail = $0 }
+                    } else {
+                        EmptyState(icon: .history, text: "Aucune partie. Le minimum, c’est d’en lancer une.")
+                    }
                 }
                 .padding(.horizontal, Td.s4)
                 .padding(.top, Td.s4)
@@ -78,6 +73,11 @@ private struct PlayTab: View {
             }
         }
         .task(id: app.piBase) { await poll() }
+        .sheet(item: $lastDetail) { m in
+            MatchDetailView(match: m).environmentObject(app)
+                .presentationDetents([.medium, .large])
+                .presentationBackground(Td.beton)
+        }
         .fullScreenCover(isPresented: $showJoin) { JoinView(onBack: { showJoin = false }).environmentObject(app) }
         .alert("Créer une partie", isPresented: $showCreate) {
             Button("OK", role: .cancel) {}

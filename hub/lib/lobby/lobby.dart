@@ -159,6 +159,7 @@ class Lobby extends ChangeNotifier {
     'hostName': AppState.owner,
     'label': label,
     'players': players.map((p) => p.toJson()).toList(),
+    'game': state == LobbyState.playing ? live : null,
   };
 
   // MARK: HTTP

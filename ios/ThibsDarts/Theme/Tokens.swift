@@ -7,6 +7,7 @@ enum Td {
     static let betonNuit = Color(hex: 0x0B0B0D)
     static let asphalte = Color(hex: 0x1E1F24)
     static let asphalteHaut = Color(hex: 0x2A2B31)
+    static let plateauNoir = Color(hex: 0x17181C)
     static let sunset = Color(hex: 0xFF7A2F)
     static let crepuscule = Color(hex: 0xFF4D8D)
     static let ciel = Color(hex: 0x4FA3FF)

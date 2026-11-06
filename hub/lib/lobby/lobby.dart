@@ -25,6 +25,9 @@ class LobbyPlayer {
   /// Un iPhone est relié à ce joueur (notifications, suivi).
   bool connected = false;
 
+  /// Joue la partie. Le propriétaire peut rester hôte sans jouer et laisser jouer ses potes.
+  bool playing = true;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
@@ -32,6 +35,7 @@ class LobbyPlayer {
     'guest': guest,
     'photo': photoPath != null,
     'connected': connected,
+    'playing': playing,
   };
 }
 
@@ -95,7 +99,10 @@ class Lobby extends ChangeNotifier {
     code = List.generate(4, (_) => _codeAlphabet[_rnd.nextInt(_codeAlphabet.length)]).join();
     players.clear();
     final owner = AppState.ownerProfile;
-    players.add(LobbyPlayer(id: 'owner', name: AppState.owner, host: true, photoPath: owner?.photoPath));
+    players.add(
+      LobbyPlayer(id: 'owner', name: AppState.owner, host: true, photoPath: owner?.photoPath)
+        ..playing = cfg.players.contains(AppState.owner),
+    );
     for (final g in cfg.players.where((p) => p != AppState.owner)) {
       players.add(LobbyPlayer(id: 'guest-${players.length}', name: g, guest: true));
     }
@@ -124,6 +131,20 @@ class Lobby extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Le propriétaire joue ou regarde.
+  void toggleHostPlaying() {
+    final h = players.where((p) => p.host).firstOrNull;
+    if (h == null) return;
+    h.playing = !h.playing;
+    notifyListeners();
+  }
+
+  /// Joueurs qui jouent vraiment, dans l'ordre de passage.
+  List<LobbyPlayer> get inGame => [
+    for (final p in players)
+      if (p.playing) p,
+  ];
+
   void reorder(int from, int to) {
     final p = players.removeAt(from);
     players.insert(to.clamp(0, players.length), p);
@@ -136,7 +157,7 @@ class Lobby extends ChangeNotifier {
     for (final p in players) {
       if (p.photoPath != null) AppState.photos[p.name] = p.photoPath!;
     }
-    final started = cfg.withPlayers([for (final p in players) p.name]);
+    final started = cfg.withPlayers([for (final p in inGame) p.name]);
     config = started;
     state = LobbyState.playing;
     notifyListeners();

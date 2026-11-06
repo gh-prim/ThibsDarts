@@ -84,7 +84,6 @@ class _NewGameScreenState extends State<NewGameScreen> {
   }
 
   void _launch() {
-    if (_order.isEmpty) return;
     // Le salon s'ouvre : les potes rejoignent avec leur iPhone, puis "Lancer".
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -215,7 +214,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
                     const Spacer(),
                     Text('Les potes rejoignent depuis leur iPhone.', style: TdText.inter(13, 18, 400, Td.ink3)),
                     const SizedBox(height: Td.s3),
-                    TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _order.isEmpty ? null : _launch),
+                    TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _launch),
                   ],
                 ),
               ),

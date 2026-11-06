@@ -304,7 +304,7 @@ struct SalonView: View {
                                     name: p.id == info.you ? "\(p.name) (toi)" : p.name,
                                     image: p.id == info.you ? app.photo : nil,
                                     url: app.lobby.flatMap { LobbyAPI.photoURL(base: $0.base, player: p) },
-                                    message: p.host ? "Hôte" : p.guest ? "Invité" : "Prêt",
+                                    message: p.host ? (p.playing == false ? "Hôte, ne joue pas" : "Hôte") : p.guest ? "Invité" : "Prêt",
                                     ready: !p.host && !p.guest
                                 )
                             }

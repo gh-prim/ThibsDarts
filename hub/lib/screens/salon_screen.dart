@@ -92,7 +92,7 @@ class _SalonScreenState extends State<SalonScreen> {
           children: [
             Expanded(
               child: Text(
-                'Joueurs, ${players.length} sur ${Lobby.maxPlayers}. Glisse pour changer l’ordre.',
+                'Joueurs, ${_lobby.inGame.length} sur ${Lobby.maxPlayers}. Glisse pour changer l’ordre, touche ta carte si tu ne joues pas.',
                 style: TdText.inter(13, 18, 600, Td.ink2),
               ),
             ),
@@ -146,7 +146,11 @@ class _SalonScreenState extends State<SalonScreen> {
             ),
             const SizedBox(width: Td.s2),
             Expanded(
-              child: TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _launch),
+              child: TdButton(
+                label: 'Lancer',
+                icon: LucideIcons.play,
+                onPressed: _lobby.inGame.isEmpty ? null : _launch,
+              ),
             ),
           ],
         ),
@@ -165,7 +169,7 @@ class _DraggableCard extends StatelessWidget {
 
   PlayerSummary get _summary => PlayerSummary(
     player.name,
-    message: player.host ? 'Hôte' : (player.guest ? 'Invité' : 'Prêt'),
+    message: player.host ? (player.playing ? 'Hôte' : 'Hôte, ne joue pas') : (player.guest ? 'Invité' : 'Prêt'),
     ready: !player.host && !player.guest,
   );
 
@@ -191,6 +195,16 @@ class _DraggableCard extends StatelessWidget {
                   // Un invité se retire d'un double appui.
                   onDoubleTap: () => lobby.remove(player),
                   child: card,
+                )
+              : player.host
+              ? GestureDetector(
+                  // Le propriétaire touche sa carte pour jouer ou regarder.
+                  onTap: lobby.toggleHostPlaying,
+                  child: Semantics(
+                    button: true,
+                    label: player.playing ? 'Ne pas jouer cette partie' : 'Jouer cette partie',
+                    child: Opacity(opacity: player.playing ? 1 : 0.5, child: card),
+                  ),
                 )
               : card,
         ),

@@ -78,6 +78,22 @@ void main() {
     expect(s, 409, reason: 'partie lancée');
   });
 
+  test('le propriétaire peut regarder sans jouer', () {
+    lobby.open(const GameConfig(players: ['Invité 1', 'Invité 2'], startScore: 501));
+    final host = lobby.players.firstWhere((p) => p.host);
+    expect(host.playing, isFalse, reason: 'pas coché sur Nouvelle partie');
+    expect(lobby.start().players, ['Invité 1', 'Invité 2']);
+    lobby.close();
+
+    lobby.open(const GameConfig(players: ['Thibs'], startScore: 501));
+    expect(lobby.players.single.playing, isTrue);
+    lobby.toggleHostPlaying();
+    expect(lobby.inGame, isEmpty);
+    lobby.toggleHostPlaying();
+    expect(lobby.start().players, ['Thibs']);
+    lobby.close();
+  });
+
   test("l'historique d'un joueur, sans le détail des tours", () async {
     final store = HistoryStore.instance;
     await store.add({

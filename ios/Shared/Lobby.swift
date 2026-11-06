@@ -23,6 +23,8 @@ struct LobbyPlayer: Decodable, Identifiable, Hashable {
     let guest: Bool
     let photo: Bool
     let connected: Bool
+    /// false : l'hôte regarde sans jouer.
+    var playing: Bool?
 }
 
 struct LiveDart: Decodable, Equatable {

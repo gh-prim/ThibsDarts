@@ -162,7 +162,7 @@ struct TVSalonView: View {
                         TVPlayerRow(
                             name: p.name,
                             url: model.base.flatMap { LobbyAPI.photoURL(base: $0, player: p) },
-                            sub: p.host ? "Hôte" : (p.connected ? "Prêt" : "Sur la cible"),
+                            sub: p.host ? (p.playing == false ? "Hôte, ne joue pas" : "Hôte") : (p.connected ? "Prêt" : "Sur la cible"),
                             ready: p.connected && !p.host
                         )
                     }

@@ -86,6 +86,14 @@ enum LucideIcon: UInt32 {
     case wifi = 57774
     case wifiOff = 57775
     case user = 57759
+    case target = 57728
+    case chartLine = 58021
+    case history = 57845
+    case plus = 57661
+    case search = 57681
+    case bell = 57433
+    case chevronRight = 57455
+    case cpu = 57513
 
     var glyph: String { String(UnicodeScalar(rawValue).map(Character.init) ?? " ") }
 }

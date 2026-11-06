@@ -25,6 +25,7 @@ final class SetupModel: ObservableObject {
     @Published var photo: UIImage?
 
     let client = PiClient()
+    var onExit: () -> Void = {}
     private var link: SetupLink?
 
     var progressIndex: Int {
@@ -172,7 +173,8 @@ final class SetupModel: ObservableObject {
             switch step {
             case .password: step = .wifi
             case .wifi: step = .scan
-            case .profile, .scan, .done: break
+            case .scan: onExit()
+            case .profile, .done: break
             }
         }
     }

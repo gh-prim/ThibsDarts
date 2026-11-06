@@ -474,3 +474,16 @@ struct ProfileRing: View {
         .shadow(color: Td.crepuscule.opacity(0.45), radius: 16)
     }
 }
+
+/// Logo ThibsDarts complet (SVG du design system dans le catalogue d'images).
+struct LogoView: View {
+    var height: CGFloat = 48
+
+    var body: some View {
+        Image("Logo")
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .accessibilityLabel("ThibsDarts")
+    }
+}

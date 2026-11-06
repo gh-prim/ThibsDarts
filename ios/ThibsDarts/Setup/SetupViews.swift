@@ -3,6 +3,9 @@ import SwiftUI
 
 /// Racine du parcours d'installation.
 struct SetupFlow: View {
+    var onExit: () -> Void = {}
+
+    @EnvironmentObject var app: AppModel
     @StateObject private var model = SetupModel()
 
     var body: some View {
@@ -18,6 +21,18 @@ struct SetupFlow: View {
         .transition(.opacity)
         .environmentObject(model)
         .onOpenURL { model.handle(url: $0) }
+        .onAppear {
+            // Le profil créé juste avant pré-remplit le setup.
+            model.onExit = onExit
+            if model.nickname.isEmpty { model.nickname = app.nickname }
+            if model.photo == nil { model.photo = app.photo }
+        }
+        .onChange(of: model.step) { _, step in
+            guard step == .done else { return }
+            app.saveProfile(nickname: model.nickname.isEmpty ? model.firstName : model.nickname,
+                            firstName: model.firstName, lastName: model.lastName, photo: model.photo)
+            app.setOwner(piBase: model.client.base)
+        }
     }
 }
 
@@ -58,7 +73,7 @@ private struct ScanStep: View {
     @State private var manual = false
 
     var body: some View {
-        SetupPage(back: false) {
+        SetupPage {
             ZStack {
                 if Camera.hasCamera && camera.available {
                     CameraPreview(session: camera.session)
@@ -324,7 +339,7 @@ private struct ProfileStep: View {
                 state: model.busy ? .loading : model.canFinish ? .normal : .disabled
             ) { model.finish() }
         }
-        .fullScreenCover(isPresented: $shooting) { PhotoCapture().environmentObject(model) }
+        .fullScreenCover(isPresented: $shooting) { PhotoCapture { model.photo = $0 } }
         .onChange(of: pick) { _, item in
             Task {
                 if let data = try? await item?.loadTransferable(type: Data.self), let img = UIImage(data: data) {
@@ -356,8 +371,8 @@ private struct ProfileStep: View {
 
 // MARK: PhotoQR
 
-private struct PhotoCapture: View {
-    @EnvironmentObject var model: SetupModel
+struct PhotoCapture: View {
+    let onPhoto: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
     @StateObject private var camera = Camera()
 
@@ -392,7 +407,7 @@ private struct PhotoCapture: View {
                     Spacer()
                     Button {
                         camera.capture { img in
-                            if let img { model.photo = img }
+                            if let img { onPhoto(img) }
                             dismiss()
                         }
                     } label: {
@@ -430,7 +445,7 @@ private extension View {
 
 private struct DoneStep: View {
     @EnvironmentObject var model: SetupModel
-    @State private var showHome = false
+    @EnvironmentObject var app: AppModel
 
     var body: some View {
         SetupPage(back: false, success: true) {
@@ -445,12 +460,7 @@ private struct DoneStep: View {
             // Le Pi 5 sera relié par MQTT dans une prochaine étape.
             PiConnection(pi4: .ok, pi5: .busy)
             Spacer(minLength: 0)
-            TdButton(title: "Aller jouer", icon: .play, block: true) { showHome = true }
-        }
-        .alert("Bientôt", isPresented: $showHome) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("L’accueil de l’app arrive à la prochaine étape.")
+            TdButton(title: "Aller jouer", icon: .play, block: true) { app.onboarded = true }
         }
     }
 }

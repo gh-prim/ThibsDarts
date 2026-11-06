@@ -2,12 +2,20 @@ import SwiftUI
 
 @main
 struct ThibsDartsApp: App {
+    @StateObject private var app = AppModel()
+
     var body: some Scene {
         WindowGroup {
-            // Pour l'instant l'app ouvre l'installation du premier allumage.
-            SetupFlow()
-                .preferredColorScheme(.dark)
-                .tint(Td.sunset)
+            Group {
+                if app.onboarded && app.hasProfile {
+                    HomeView()
+                } else {
+                    OnboardingFlow()
+                }
+            }
+            .environmentObject(app)
+            .preferredColorScheme(.dark)
+            .tint(Td.sunset)
         }
     }
 }

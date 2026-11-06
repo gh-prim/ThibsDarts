@@ -101,6 +101,10 @@ void main() {
 
     (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-8', 'name': 'Max', 'mode': '501'});
     expect(s, 409, reason: 'un salon est déjà ouvert');
+    (s, j) = await call('POST', '/api/lobby/leave', body: {'id': 'phone-9'});
+    expect(lobby.state, LobbyState.closed, reason: 'le créateur parti, le salon vide se ferme');
+    (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-9', 'name': 'Lou', 'mode': 'cricket'});
+    expect(s, 200);
     lobby.start();
     (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-8', 'name': 'Max', 'mode': '501'});
     expect(s, 409, reason: 'une partie est en cours');

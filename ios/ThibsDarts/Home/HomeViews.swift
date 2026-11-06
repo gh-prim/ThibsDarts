@@ -74,6 +74,8 @@ private struct PlayTab: View {
             }
         }
         .task(id: app.piBase) { await poll() }
+        // Un ancien message ne survit pas à un changement du salon.
+        .onChange(of: info?.state) { error = nil }
         .sheet(item: $lastDetail) { m in
             MatchDetailView(match: m).environmentObject(app)
                 .presentationDetents([.medium, .large])
@@ -146,7 +148,7 @@ private struct PlayTab: View {
                 Badge(text: app.piBase == nil ? "Aucun ThibsDarts" : "Pas de salon", icon: .target)
                 Text(app.piBase == nil
                      ? "Scanne le QR code d’un salon pour relier ton iPhone à la cible."
-                     : "Lance une partie sur l’écran du Pi, elle apparaît ici.")
+                     : "Crée une partie avec le bouton Créer, ou lance-la sur l’écran du Pi.")
                     .font(.td(15))
                     .foregroundStyle(Td.ink2)
             }
@@ -158,7 +160,7 @@ private struct PlayTab: View {
     }
 
     private func inside(_ info: LobbyInfo) -> String {
-        let names = info.players.map(\.name)
+        let names = info.players.filter { $0.playing != false }.map(\.name)
         switch names.count {
         case 0: return "Personne pour l’instant"
         case 1: return "\(names[0]) est déjà dedans"
@@ -352,11 +354,12 @@ struct SalonView: View {
     }
 
     private func before(_ info: LobbyInfo) -> String {
-        guard let i = info.players.firstIndex(where: { $0.id == info.you }) else {
+        let order = info.players.filter { $0.playing != false }
+        guard let i = order.firstIndex(where: { $0.id == info.you }) else {
             return "On te prévient quand c’est ton tour."
         }
         if i == 0 { return "On te prévient quand c’est ton tour. Tu ouvres le bal." }
-        return "On te prévient quand c’est ton tour. \(info.players[i - 1].name) joue juste avant toi."
+        return "On te prévient quand c’est ton tour. \(order[i - 1].name) joue juste avant toi."
     }
 
     private func leave() {

@@ -30,18 +30,37 @@ class SalonScreen extends StatefulWidget {
 class _SalonScreenState extends State<SalonScreen> {
   late final Lobby _lobby = widget.lobby ?? Lobby.instance;
 
+  bool _gone = false;
+
   @override
   void initState() {
     super.initState();
     if (!widget.opened) _lobby.open(widget.config);
+    _lobby.addListener(_onLobby);
+  }
+
+  @override
+  void dispose() {
+    _lobby.removeListener(_onLobby);
+    super.dispose();
+  }
+
+  /// Le salon créé depuis un iPhone s'est vidé : retour à l'accueil.
+  void _onLobby() {
+    if (_lobby.state == LobbyState.closed && !_gone && mounted && ModalRoute.of(context)?.isCurrent == true) {
+      _gone = true;
+      Navigator.of(context).pop();
+    }
   }
 
   void _back() {
+    _gone = true;
     _lobby.close();
     Navigator.of(context).pop();
   }
 
   void _launch() {
+    _gone = true;
     final cfg = _lobby.start();
     Navigator.of(context)
         .pushAndRemoveUntil(MaterialPageRoute<void>(builder: (_) => gameScreenFor(cfg)), (r) => r.isFirst);

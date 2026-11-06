@@ -72,6 +72,9 @@ class Lobby extends ChangeNotifier {
   /// Renvoie false si l'écran n'est pas libre (menu ou partie en cours).
   bool Function(GameConfig cfg)? remoteOpen;
 
+  /// Salon ouvert depuis un iPhone : il se ferme quand plus personne n'y joue.
+  bool openedRemotely = false;
+
   String get qrPayload => Uri(
     scheme: 'thibsdarts',
     host: 'join',
@@ -111,6 +114,7 @@ class Lobby extends ChangeNotifier {
       players.add(LobbyPlayer(id: 'guest-${players.length}', name: g, guest: true));
     }
     state = LobbyState.open;
+    openedRemotely = false;
     live = null;
     notifyListeners();
   }
@@ -227,6 +231,9 @@ class Lobby extends ChangeNotifier {
         } else if (p != null) {
           p.connected = false;
         }
+        if (state == LobbyState.open && openedRemotely && inGame.isEmpty && !players.any((p) => p.connected)) {
+          close();
+        }
         notifyListeners();
         return await _send(res, _json());
       }
@@ -284,6 +291,7 @@ class Lobby extends ChangeNotifier {
     );
     if (remoteOpen?.call(cfg) != true) return _send(res, {'error': 'occupe'}, status: 409);
     open(cfg);
+    openedRemotely = true;
     return _enter(b, id, name, res);
   }
 

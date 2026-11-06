@@ -122,14 +122,14 @@ struct ModeTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: Td.s3) {
                 Text(mode.glyph)
-                    .font(.tdRounded(40, .black)).tracking(-1)
+                    .font(.tdRounded(32, .black)).tracking(-1)
                     .foregroundStyle(!mode.playable ? Td.desactiveInk : (selected ? Td.sunset : Td.ink))
                     .lineLimit(1).minimumScaleFactor(0.5)
                 Spacer(minLength: 0)
                 Text(mode.title).font(.td(15, .semibold)).lineLimit(1).minimumScaleFactor(0.8)
                     .foregroundStyle(mode.playable ? Td.ink : Td.desactiveInk)
             }
-            .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
             .padding(Td.s3)
             .background(
                 RoundedRectangle(cornerRadius: Td.rXl)

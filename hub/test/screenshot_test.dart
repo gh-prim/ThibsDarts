@@ -23,11 +23,19 @@ void main() {
       await _font('Inter', 'assets/fonts/Inter.ttf');
       await _font('Nunito', 'assets/fonts/Nunito.ttf');
       await _font('MaterialIcons', 'fonts/MaterialIcons-Regular.otf');
+      await _font('PermanentMarker', 'assets/fonts/PermanentMarker.ttf');
+      await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
     });
     tester.view.physicalSize = const Size(1024, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const DartOsApp());
+
+    Future<void> advance(int ms) async {
+      for (var t = 0; t < ms; t += 50) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
 
     Future<void> shot(String name) async {
       await tester.runAsync(() async {
@@ -42,13 +50,35 @@ void main() {
       });
     }
 
-    await tester.pump(const Duration(milliseconds: 700));
+    await advance(700);
     await shot('1-boot');
-    await tester.pump(const Duration(milliseconds: 2000));
-    await tester.pump(const Duration(milliseconds: 300));
+    await advance(2000);
+    await advance(300);
     await shot('2-pret');
-    await tester.pump(const Duration(milliseconds: 1500));
-    await tester.pump(const Duration(milliseconds: 600));
+    await advance(1500);
+    await advance(600);
     await shot('3-accueil');
+
+    // Partie 501 simulée : on touche le plateau.
+    await tester.tap(find.text('Rejouer'));
+    await tester.pump();
+    await advance(600);
+    await shot('4-debut');
+    const c = Offset(480, 300);
+    const k = 440 / 410;
+    Offset at(double x, double y) => c + Offset(x, y) * k;
+    await tester.tapAt(at(0, -135)); // S20
+    await advance(2000);
+    await tester.tapAt(at(0, -103)); // T20
+    await advance(300);
+    await shot('5a');
+    await advance(600);
+    await shot('5-triple');
+    await advance(1200);
+    await tester.tap(find.text('Hors cible'));
+    await advance(600);
+    await shot('6-hors-cible');
+    await advance(1500);
+    await shot('7-fin-de-tour');
   });
 }

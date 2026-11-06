@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/logo.dart';
@@ -146,7 +147,7 @@ class _ReadyBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check, size: 14, color: Td.succes),
+          const Icon(LucideIcons.check, size: 14, color: Td.succes),
           const SizedBox(width: Td.s1),
           Text('Prêt. Tranquille.', style: TdText.label.copyWith(fontSize: 12, height: 16 / 12, color: Td.succes)),
         ],

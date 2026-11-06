@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/logo.dart';
@@ -6,6 +7,7 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
+import 'game_screen.dart';
 
 /// Accueil : le Pi attend une partie.
 class HomeScreen extends StatelessWidget {
@@ -71,13 +73,18 @@ class HomeScreen extends StatelessWidget {
                           const SizedBox(height: Td.s6),
                           TdButton(
                             label: 'Rejouer',
-                            icon: Icons.refresh,
-                            onPressed: () => _soon(context, 'La partie'),
+                            icon: LucideIcons.refreshCw,
+                            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                              builder: (_) => GameScreen(
+                                playerNames: [for (final p in _lastPlayers) p.name],
+                                averages: {for (final p in _lastPlayers) p.name: p.average},
+                              ),
+                            )),
                           ),
                           const SizedBox(height: Td.s4),
                           TdButton(
                             label: 'Nouvelle partie',
-                            icon: Icons.add,
+                            icon: LucideIcons.plus,
                             variant: TdButtonVariant.secondary,
                             onPressed: () => _soon(context, 'Le choix du mode'),
                           ),
@@ -102,7 +109,7 @@ class HomeScreen extends StatelessWidget {
               ),
               Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 16, color: Td.ink3),
+                  const Icon(LucideIcons.info, size: 16, color: Td.ink3),
                   const SizedBox(width: Td.s2),
                   Text("Tu peux aussi lancer la partie depuis l'iPhone.", style: TdText.caption),
                 ],

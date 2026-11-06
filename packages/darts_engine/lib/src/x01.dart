@@ -55,6 +55,15 @@ class X01Game {
   X01Player get currentPlayer => players[_current];
   List<DartThrow> get currentTurn => List.unmodifiable(_turn);
   int get dartsLeft => 3 - _turn.length;
+
+  /// Score du joueur actif au début du tour (pour le bust).
+  int get turnStartScore => _turnStart;
+
+  /// Index du joueur actif.
+  int get currentIndex => _current;
+
+  /// Joueur qui tirera après le joueur actif.
+  X01Player get nextPlayerInLine => players[(_current + 1) % players.length];
   bool get isFinished => winner != null;
 
   /// Le tour est fini (3 fléchettes, bust ou checkout) : il faut appeler [nextPlayer].

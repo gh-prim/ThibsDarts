@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
 
@@ -16,13 +17,13 @@ class StatusIndicator extends StatelessWidget {
   final bool compact;
 
   IconData get _icon => switch ((kind, status)) {
-        (_, Status.busy) => Icons.autorenew,
-        (StatusKind.camera, Status.ok) => Icons.photo_camera_outlined,
-        (StatusKind.camera, _) => Icons.no_photography_outlined,
-        (StatusKind.wifi, Status.ok) => Icons.wifi,
-        (StatusKind.wifi, _) => Icons.wifi_off,
-        (StatusKind.pi, _) => Icons.memory,
-        (StatusKind.bluetooth, _) => Icons.bluetooth,
+        (_, Status.busy) => LucideIcons.loaderCircle,
+        (StatusKind.camera, Status.ok) => LucideIcons.camera,
+        (StatusKind.camera, _) => LucideIcons.cameraOff,
+        (StatusKind.wifi, Status.ok) => LucideIcons.wifi,
+        (StatusKind.wifi, _) => LucideIcons.wifiOff,
+        (StatusKind.pi, _) => LucideIcons.cpu,
+        (StatusKind.bluetooth, _) => LucideIcons.bluetooth,
       };
 
   Color get _iconColor => switch (status) {

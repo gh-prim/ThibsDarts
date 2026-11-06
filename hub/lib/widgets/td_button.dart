@@ -43,12 +43,19 @@ class _TdButtonState extends State<TdButton> {
         curve: Td.courbeSortie,
         child: Container(
           height: widget.height,
-          padding: const EdgeInsets.symmetric(horizontal: Td.s6),
+          padding: const EdgeInsets.symmetric(horizontal: Td.s4),
           decoration: BoxDecoration(
-            gradient: primary ? Td.goldenHour : null,
-            color: primary ? null : Td.verreMoyen,
+            gradient: primary
+                ? Td.goldenHour
+                : const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x21FFFFFF), Color(0x17FFFFFF)],
+                    stops: [0, 0.08],
+                  ),
             borderRadius: BorderRadius.circular(Td.rXl),
             border: primary ? null : Border.all(color: Td.verreBord),
+            // Arête de verre (inset 0 1px 0 blanc 22%) simulée par un léger dégradé.
             boxShadow: primary
                 ? const [BoxShadow(color: Color(0x73FF7A2F), blurRadius: 32)]
                 : null,
@@ -57,8 +64,8 @@ class _TdButtonState extends State<TdButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(widget.icon, color: fg, size: 28),
-                const SizedBox(width: Td.s3),
+                Icon(widget.icon, color: fg, size: 26),
+                const SizedBox(width: Td.s2),
               ],
               Text(widget.label, style: TdText.button.copyWith(color: fg)),
             ],

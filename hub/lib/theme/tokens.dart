@@ -25,6 +25,11 @@ abstract final class Td {
   static const verreFort = Color(0xB826272E);
   static const verreBord = Color(0x29FFFFFF);
   static const voile = Color(0x9E08080A);
+  static const sunsetFond = Color(0x29FF7A2F);
+  static const succesFond = Color(0x243DDC97);
+  static const erreurFond = Color(0x24FF6464);
+  static const infoFond = Color(0x244FA3FF);
+  static const bordControle = Color(0xFF6F707A);
 
   // Plateau
   static const plateauNoir = Color(0xFF17181C);
@@ -79,5 +84,13 @@ abstract final class TdText {
   static TextStyle button = _v('Inter', 24, 30, 700, Td.ink);
   static TextStyle score = _v('Nunito', 120, 120, 900, Td.ink,
       ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+  /// Nunito en chiffres tabulaires (scores).
+  static TextStyle rounded(double size, int weight, Color color, {double? height}) =>
+      _v('Nunito', size, height ?? size * 1.1, weight, color)
+          .copyWith(fontFeatures: const [FontFeature.tabularFigures(), FontFeature.liningFigures()]);
+
+  static TextStyle inter(double size, double height, int weight, Color color) =>
+      _v('Inter', size, height, weight, color);
+
   static TextStyle tag = const TextStyle(fontFamily: 'PermanentMarker', fontSize: 64, color: Td.ink);
 }

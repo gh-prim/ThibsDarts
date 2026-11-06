@@ -1,0 +1,368 @@
+import 'dart:async';
+import 'dart:ui' show ImageFilter;
+
+import 'package:darts_engine/darts_engine.dart';
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../theme/tokens.dart';
+import '../widgets/avatar.dart';
+import '../widgets/dartboard.dart';
+import '../widgets/game_widgets.dart';
+import '../widgets/hit_tag.dart';
+import '../widgets/logo.dart';
+import '../widgets/player_card.dart';
+import '../widgets/stage.dart';
+import '../widgets/status_indicator.dart';
+import '../widgets/td_button.dart';
+
+/// Partie 501 (planches J501*). En attendant le Pi 5, c'est un simulateur :
+/// toucher le plateau lance une fléchette à cet endroit.
+class GameScreen extends StatefulWidget {
+  const GameScreen({super.key, required this.playerNames, this.startScore = 501, this.averages = const {}});
+
+  final List<String> playerNames;
+  final int startScore;
+  final Map<String, double> averages;
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  late final X01Game _game = _newGame();
+  final List<BoardHit> _hits = [];
+  ThrowOutcome? _last;
+  DartThrow? _tagDart;
+  int _tagKey = 0;
+  Timer? _tagTimer;
+
+  X01Game _newGame() => X01Game(playerNames: widget.playerNames, startScore: widget.startScore);
+
+  @override
+  void dispose() {
+    _tagTimer?.cancel();
+    super.dispose();
+  }
+
+  void _throw(DartThrow d, Offset pos) {
+    if (_game.awaitingNextPlayer || _game.isFinished) return;
+    setState(() {
+      _last = _game.throwDart(d);
+      _hits.add(BoardHit(d, pos, _hits.length + 1));
+      _tagDart = d;
+      _tagKey++;
+    });
+    _tagTimer?.cancel();
+    _tagTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted && _last != ThrowOutcome.bust) setState(() => _tagDart = null);
+    });
+  }
+
+  void _onBoardTap(Offset p) => _throw(dartAt(p), p);
+
+  void _outOfBoard() {
+    // Position hors du plateau, sous le secteur visé, pour l'impact rouge.
+    _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
+  }
+
+  void _correct() {
+    // Provisoire : annule la dernière fléchette (le pavé de correction viendra ensuite).
+    if (_hits.isEmpty) return;
+    setState(() {
+      _game.undoLastDart();
+      _hits.removeLast();
+      _last = null;
+      _tagDart = null;
+    });
+  }
+
+  void _endTurn() {
+    if (_game.isFinished) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _game.nextPlayer();
+      _hits.clear();
+      _last = null;
+      _tagDart = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final g = _game;
+    final p = g.currentPlayer;
+    final turn = g.currentTurn;
+    final bust = _last == ThrowOutcome.bust;
+    final over = g.awaitingNextPlayer && !bust && !g.isFinished;
+    final hint = g.checkoutHint;
+    final turnScore = turn.fold<int>(0, (n, d) => n + d.score);
+
+    final slots = [
+      for (var i = 0; i < 3; i++)
+        if (i < turn.length)
+          bust && i == turn.length - 1
+              ? SlotData(SlotState.error, label: turn[i].label, value: turn[i].score)
+              : turn[i].isMiss
+                  ? const SlotData(SlotState.miss)
+                  : SlotData(SlotState.hit,
+                      label: turn[i].label,
+                      value: turn[i].score,
+                      highlight: i == turn.length - 1 && turn[i].multiplier == 3 && _tagDart != null)
+        else if (i == turn.length && !g.awaitingNextPlayer)
+          const SlotData(SlotState.current)
+        else
+          const SlotData(SlotState.empty),
+    ];
+
+    final ScoreState scoreState = bust
+        ? ScoreState.bust
+        : hint != null
+            ? ScoreState.out
+            : ScoreState.normal;
+    final String sub = bust
+        ? 'Le tour ne compte pas'
+        : over
+            ? 'Tour: $turnScore'
+            : hint != null && turn.isEmpty
+                ? 'Sortie possible en ${hint.length}'
+                : 'Début de tour: ${g.turnStartScore}';
+
+    final Widget info;
+    if (g.isFinished) {
+      info = TdBanner(text: '${p.name} sort en ${p.turns.fold<int>(0, (n, t) => n + t.length)} fléchettes.', error: false);
+    } else if (bust) {
+      info = TdBanner(text: 'Bust. On reprend à ${g.turnStartScore}.');
+    } else if (over) {
+      info = Text('Le tour passe tout seul dès que la cible est vide.', style: TdText.inter(15, 20, 400, Td.ink2));
+    } else if (turn.isNotEmpty && turn.last.isMiss) {
+      info = TdToast(
+        title: 'Fléchette ${turn.length} hors cible',
+        body: "Compte zéro. Touche Corriger si c'était une erreur.",
+      );
+    } else if (hint != null) {
+      info = CheckoutHint(route: [for (final d in hint) d.label == 'BULL' ? 'Bull' : d.label.replaceFirst('S', '')]);
+    } else if (turn.isNotEmpty) {
+      info = Text('Tour en cours: $turnScore', style: TdText.inter(15, 20, 400, Td.ink2));
+    } else {
+      info = const SizedBox(height: 20);
+    }
+
+    final players = [
+      for (var i = 0; i < g.players.length; i++)
+        PlayerSummary(
+          g.players[i].name,
+          g.players[i].turns.isEmpty ? (widget.averages[g.players[i].name] ?? 0) : g.players[i].average,
+          score: g.players[i].remaining,
+          status: g.winner == g.players[i]
+              ? PlayerStatus.winner
+              : i == g.currentIndex
+                  ? PlayerStatus.active
+                  : PlayerStatus.waiting,
+        ),
+    ];
+
+    return Scaffold(
+      backgroundColor: Td.beton,
+      body: Stage(
+        child: Padding(
+          padding: const EdgeInsets.all(Td.s3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Colonne joueurs (236 px)
+              SizedBox(
+                width: 236,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onLongPress: () => Navigator.of(context).pop(),
+                          child: const Logo(variant: LogoVariant.icon, height: 44),
+                        ),
+                        const Spacer(),
+                        Text('${widget.startScore} · Manche 1', style: TdText.inter(15, 20, 400, Td.ink2)),
+                      ],
+                    ),
+                    const SizedBox(height: Td.s3),
+                    for (final pl in players) ...[
+                      PlayerCard(player: pl),
+                      const SizedBox(height: Td.s2),
+                    ],
+                    const Spacer(),
+                    const Wrap(
+                      spacing: Td.s2,
+                      runSpacing: Td.s2,
+                      children: [
+                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
+                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
+                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
+                        StatusIndicator(kind: StatusKind.wifi, compact: true),
+                        StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Td.s3),
+              // Plateau
+              Expanded(
+                child: Center(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Dartboard(
+                        hits: _hits,
+                        aimed: turn.isEmpty && hint != null ? hint.first : null,
+                        dim: bust || over || (_tagDart != null && !_tagDart!.isMiss),
+                        onTapBoard: _onBoardTap,
+                      ),
+                      if (_tagDart != null && !bust)
+                        Positioned(
+                          left: -40,
+                          right: -40,
+                          top: _tagDart!.isMiss ? null : 440 * 0.36 - 60,
+                          bottom: _tagDart!.isMiss ? 8 : null,
+                          child: IgnorePointer(
+                            child: Center(
+                              child: g.isFinished
+                                  ? HitTag(key: ValueKey(_tagKey), kind: TagKind.checkout, text: 'CHECKOUT $turnScore', fontSize: 64)
+                                  : HitTag.forDart(_tagDart!, key: ValueKey(_tagKey), fontSize: _tagDart!.isMiss ? 48 : 72),
+                            ),
+                          ),
+                        ),
+                      if (bust)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 440 * 0.40 - 20,
+                          child: IgnorePointer(
+                            child: Center(
+                              child: Transform.rotate(
+                                angle: -6 * 3.14159 / 180,
+                                child: Text('BUST',
+                                    style: const TextStyle(
+                                      fontFamily: 'PermanentMarker',
+                                      fontSize: 88,
+                                      height: 92 / 88,
+                                      color: Td.erreur,
+                                      shadows: [Shadow(color: Color(0x99000000), blurRadius: 24, offset: Offset(0, 4))],
+                                    )),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (over) Positioned(left: 24, right: 24, top: 0, bottom: 0, child: Center(child: _RemoveDarts(turnScore: turnScore, next: g.nextPlayerInLine))),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: Td.s3),
+              // Score et actions (300 px)
+              SizedBox(
+                width: 300,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    ScoreDisplay(
+                      value: p.remaining,
+                      label: g.isFinished ? '${p.name} a gagné' : '${p.name}, il reste',
+                      sub: g.isFinished ? 'Checkout' : sub,
+                      state: g.isFinished ? ScoreState.out : scoreState,
+                    ),
+                    DartSlots(slots: slots),
+                    info,
+                    Column(
+                      spacing: Td.s2,
+                      children: [
+                        TdButton(
+                          label: 'Corriger',
+                          icon: LucideIcons.pencil,
+                          variant: TdButtonVariant.secondary,
+                          height: Td.ciblePi,
+                          onPressed: _correct,
+                        ),
+                        TdButton(
+                          label: 'Hors cible',
+                          icon: LucideIcons.target,
+                          variant: TdButtonVariant.secondary,
+                          height: Td.ciblePi,
+                          onPressed: _outOfBoard,
+                        ),
+                        TdButton(
+                          label: g.isFinished ? 'Terminer' : 'Fin de tour',
+                          icon: LucideIcons.arrowRight,
+                          variant: g.awaitingNextPlayer ? TdButtonVariant.primary : TdButtonVariant.secondary,
+                          height: Td.ciblePi,
+                          onPressed: _endTurn,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Panneau "Retire tes fléchettes." (planche J501FinTour).
+class _RemoveDarts extends StatelessWidget {
+  const _RemoveDarts({required this.turnScore, required this.next});
+
+  final int turnScore;
+  final X01Player next;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(Td.rXl),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: _panel(),
+      ),
+    );
+  }
+
+  Widget _panel() {
+    return Container(
+      padding: const EdgeInsets.all(Td.s6),
+      decoration: BoxDecoration(
+        color: Td.verreFort,
+        borderRadius: BorderRadius.circular(Td.rXl),
+        border: Border.all(color: Td.verreBord),
+        boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 64, offset: Offset(0, 24))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.target, size: 36, color: Td.ciel),
+          const SizedBox(height: Td.s3),
+          Text('Retire tes fléchettes.', style: TdText.inter(28, 34, 700, Td.ink), textAlign: TextAlign.center),
+          const SizedBox(height: Td.s3),
+          Text('Tour à $turnScore. Les caméras attendent une cible vide.',
+              style: TdText.inter(17, 22, 400, Td.ink2), textAlign: TextAlign.center),
+          const SizedBox(height: Td.s4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Ensuite', style: TdText.inter(15, 20, 400, Td.ink2)),
+              const SizedBox(width: Td.s2),
+              Avatar(name: next.name, size: 28),
+              const SizedBox(width: Td.s2),
+              Text('${next.name}, ${next.remaining}', style: TdText.inter(15, 20, 700, Td.ink)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

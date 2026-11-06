@@ -9,6 +9,7 @@ import '../game_config.dart';
 import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
+import '../widgets/celebration.dart';
 import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/hit_tag.dart';
@@ -40,6 +41,12 @@ class _GameScreenState extends State<GameScreen> {
   DartThrow? _tagDart;
   int _tagKey = 0;
   Timer? _tagTimer;
+  Timer? _winTimer;
+
+  /// Tours des manches déjà jouées, par joueur (pour les stats de victoire).
+  final Map<String, List<List<List<DartThrow>>>> _pastLegs = {};
+  bool _show180 = false;
+  bool _showWin = false;
 
   GameConfig get _cfg => widget.config;
 
@@ -68,6 +75,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _tagTimer?.cancel();
+    _winTimer?.cancel();
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }
@@ -80,6 +88,10 @@ class _GameScreenState extends State<GameScreen> {
         _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
         _recordResult();
       }
+      final t = _game.currentTurn;
+      if (_last != ThrowOutcome.bust && t.length == 3 && t.every((x) => x.sector == 20 && x.multiplier == 3)) {
+        _show180 = true;
+      }
       _hits.add(BoardHit(d, pos, _hits.length + 1));
       _tagDart = d;
       _tagKey++;
@@ -88,6 +100,76 @@ class _GameScreenState extends State<GameScreen> {
     _tagTimer = Timer(const Duration(milliseconds: 1800), () {
       if (mounted && _last != ThrowOutcome.bust) setState(() => _tagDart = null);
     });
+    _scheduleWin();
+  }
+
+  /// La victoire s'affiche après le tag CHECKOUT.
+  void _scheduleWin() {
+    _winTimer?.cancel();
+    if (!_matchOver) {
+      _showWin = false;
+      return;
+    }
+    _winTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted && _matchOver) setState(() => _showWin = true);
+    });
+  }
+
+  /// Revanche : mêmes joueurs, on repart de zéro, le joueur suivant commence.
+  void _rematch() {
+    _winTimer?.cancel();
+    setState(() {
+      _leg = 1;
+      _starter++;
+      _legsWon.clear();
+      _pastLegs.clear();
+      _game = _newGame();
+      _hits.clear();
+      _last = null;
+      _tagDart = null;
+      _showWin = false;
+      _show180 = false;
+    });
+  }
+
+  List<CelebrationStat> _winStats(String name) {
+    final legs = [...?_pastLegs[name], _game.players.firstWhere((p) => p.name == name).turns];
+    var darts = 0, scored = 0, best = 0, tries = 0, hits = 0;
+    for (final turns in legs) {
+      var rem = _cfg.startScore;
+      for (final turn in turns) {
+        final start = rem;
+        var sum = 0;
+        var bust = false;
+        for (final d in turn) {
+          darts++;
+          if (_cfg.doubleOut && ((rem <= 40 && rem.isEven && rem > 0) || rem == 50)) tries++;
+          rem -= d.score;
+          if (rem < 0 || (_cfg.doubleOut && rem == 1) || (_cfg.doubleOut && rem == 0 && !d.isDouble)) {
+            bust = true;
+            break;
+          }
+          sum += d.score;
+          if (rem == 0) {
+            if (_cfg.doubleOut) hits++;
+            break;
+          }
+        }
+        if (bust) {
+          rem = start;
+        } else {
+          scored += sum;
+          if (sum > best) best = sum;
+        }
+      }
+    }
+    String fr(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+    return [
+      CelebrationStat('Moyenne 3 fléchettes', darts == 0 ? '0' : fr(scored / darts * 3)),
+      CelebrationStat('Meilleur tour', '$best'),
+      if (_cfg.doubleOut) CelebrationStat('Checkout', tries == 0 ? '0 %' : '${(hits * 100 / tries).round()} %'),
+      CelebrationStat('Fléchettes', '$darts'),
+    ];
   }
 
   void _onBoardTap(Offset p) => _throw(dartAt(p), p);
@@ -125,6 +207,7 @@ class _GameScreenState extends State<GameScreen> {
         ..addAll(kept);
       _tagDart = null;
     });
+    _scheduleWin();
   }
 
   void _endTurn() {
@@ -135,6 +218,9 @@ class _GameScreenState extends State<GameScreen> {
     if (_game.isFinished) {
       // Manche suivante.
       setState(() {
+        for (final p in _game.players) {
+          _pastLegs.putIfAbsent(p.name, () => []).add(List.of(p.turns));
+        }
         _leg++;
         _starter++;
         _game = _newGame();
@@ -265,172 +351,195 @@ class _GameScreenState extends State<GameScreen> {
         ),
     ];
 
-    return Scaffold(
-      backgroundColor: Td.beton,
-      body: Stage(
-        child: Padding(
-          padding: const EdgeInsets.all(Td.s3),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Colonne joueurs (236 px)
-              SizedBox(
-                width: 236,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onLongPress: () => Navigator.of(context).pop(),
-                          child: const Logo(variant: LogoVariant.icon, height: 44),
-                        ),
-                        const Spacer(),
-                        Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
-                      ],
-                    ),
-                    const SizedBox(height: Td.s3),
-                    for (final pl in players) ...[PlayerCard(player: pl), const SizedBox(height: Td.s2)],
-                    const Spacer(),
-                    const Wrap(
-                      spacing: Td.s2,
-                      runSpacing: Td.s2,
-                      children: [
-                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
-                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
-                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
-                        StatusIndicator(kind: StatusKind.wifi, compact: true),
-                        StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Td.s3),
-              // Plateau
-              Expanded(
-                child: Center(
-                  child: Stack(
-                    clipBehavior: Clip.none,
+    final board = Stage(
+      child: Padding(
+        padding: const EdgeInsets.all(Td.s3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Colonne joueurs (236 px)
+            SizedBox(
+              width: 236,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
                     children: [
-                      Dartboard(
-                        hits: _hits,
-                        aimed: turn.isEmpty && hint != null ? hint.first : null,
-                        dim: bust || over || (_tagDart != null && !_tagDart!.isMiss),
-                        onTapBoard: _onBoardTap,
+                      GestureDetector(
+                        onLongPress: () => Navigator.of(context).pop(),
+                        child: const Logo(variant: LogoVariant.icon, height: 44),
                       ),
-                      if (_tagDart != null && !bust)
-                        Positioned(
-                          left: -40,
-                          right: -40,
-                          top: _tagDart!.isMiss ? null : 440 * 0.36 - 60,
-                          bottom: _tagDart!.isMiss ? 8 : null,
-                          child: IgnorePointer(
-                            child: Center(
-                              child: g.isFinished
-                                  ? HitTag(
-                                      key: ValueKey(_tagKey),
-                                      kind: TagKind.checkout,
-                                      text: 'CHECKOUT $turnScore',
-                                      fontSize: 64,
-                                    )
-                                  : HitTag.forDart(
-                                      _tagDart!,
-                                      key: ValueKey(_tagKey),
-                                      fontSize: _tagDart!.isMiss ? 48 : 72,
-                                    ),
-                            ),
+                      const Spacer(),
+                      Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
+                    ],
+                  ),
+                  const SizedBox(height: Td.s3),
+                  for (final pl in players) ...[PlayerCard(player: pl), const SizedBox(height: Td.s2)],
+                  const Spacer(),
+                  const Wrap(
+                    spacing: Td.s2,
+                    runSpacing: Td.s2,
+                    children: [
+                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
+                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
+                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
+                      StatusIndicator(kind: StatusKind.wifi, compact: true),
+                      StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: Td.s3),
+            // Plateau
+            Expanded(
+              child: Center(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Dartboard(
+                      hits: _hits,
+                      aimed: turn.isEmpty && hint != null ? hint.first : null,
+                      dim: bust || over || (_tagDart != null && !_tagDart!.isMiss),
+                      onTapBoard: _onBoardTap,
+                    ),
+                    if (_tagDart != null && !bust)
+                      Positioned(
+                        left: -40,
+                        right: -40,
+                        top: _tagDart!.isMiss ? null : 440 * 0.36 - 60,
+                        bottom: _tagDart!.isMiss ? 8 : null,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: g.isFinished
+                                ? HitTag(
+                                    key: ValueKey(_tagKey),
+                                    kind: TagKind.checkout,
+                                    text: 'CHECKOUT $turnScore',
+                                    fontSize: 64,
+                                  )
+                                : HitTag.forDart(
+                                    _tagDart!,
+                                    key: ValueKey(_tagKey),
+                                    fontSize: _tagDart!.isMiss ? 48 : 72,
+                                  ),
                           ),
                         ),
-                      if (bust)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: 440 * 0.40 - 20,
-                          child: IgnorePointer(
-                            child: Center(
-                              child: Transform.rotate(
-                                angle: -6 * 3.14159 / 180,
-                                child: Text(
-                                  'BUST',
-                                  style: const TextStyle(
-                                    fontFamily: 'PermanentMarker',
-                                    fontSize: 88,
-                                    height: 92 / 88,
-                                    color: Td.erreur,
-                                    shadows: [Shadow(color: Color(0x99000000), blurRadius: 24, offset: Offset(0, 4))],
-                                  ),
+                      ),
+                    if (bust)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 440 * 0.40 - 20,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: Transform.rotate(
+                              angle: -6 * 3.14159 / 180,
+                              child: Text(
+                                'BUST',
+                                style: const TextStyle(
+                                  fontFamily: 'PermanentMarker',
+                                  fontSize: 88,
+                                  height: 92 / 88,
+                                  color: Td.erreur,
+                                  shadows: [Shadow(color: Color(0x99000000), blurRadius: 24, offset: Offset(0, 4))],
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      if (over)
-                        Positioned(
-                          left: 24,
-                          right: 24,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: _RemoveDarts(turnScore: turnScore, next: g.nextPlayerInLine),
-                          ),
+                      ),
+                    if (over)
+                      Positioned(
+                        left: 24,
+                        right: 24,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _RemoveDarts(turnScore: turnScore, next: g.nextPlayerInLine),
                         ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: Td.s3),
-              // Score et actions (300 px)
-              SizedBox(
-                width: 300,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    ScoreDisplay(
-                      value: p.remaining,
-                      label: g.isFinished ? '${p.name} a gagné' : '${p.name}, il reste',
-                      sub: g.isFinished ? 'Checkout' : sub,
-                      state: g.isFinished ? ScoreState.out : scoreState,
-                    ),
-                    DartSlots(slots: slots),
-                    info,
-                    Column(
-                      spacing: Td.s2,
-                      children: [
-                        TdButton(
-                          label: 'Corriger',
-                          icon: LucideIcons.pencil,
-                          variant: TdButtonVariant.secondary,
-                          height: Td.ciblePi,
-                          onPressed: _correct,
-                        ),
-                        TdButton(
-                          label: 'Hors cible',
-                          icon: LucideIcons.target,
-                          variant: TdButtonVariant.secondary,
-                          height: Td.ciblePi,
-                          onPressed: _outOfBoard,
-                        ),
-                        TdButton(
-                          label: _matchOver
-                              ? 'Terminer'
-                              : g.isFinished
-                              ? 'Manche suivante'
-                              : 'Fin de tour',
-                          icon: LucideIcons.arrowRight,
-                          variant: g.awaitingNextPlayer ? TdButtonVariant.primary : TdButtonVariant.secondary,
-                          height: Td.ciblePi,
-                          onPressed: _endTurn,
-                        ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: Td.s3),
+            // Score et actions (300 px)
+            SizedBox(
+              width: 300,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ScoreDisplay(
+                    value: p.remaining,
+                    label: g.isFinished ? '${p.name} a gagné' : '${p.name}, il reste',
+                    sub: g.isFinished ? 'Checkout' : sub,
+                    state: g.isFinished ? ScoreState.out : scoreState,
+                  ),
+                  DartSlots(slots: slots),
+                  info,
+                  Column(
+                    spacing: Td.s2,
+                    children: [
+                      TdButton(
+                        label: 'Corriger',
+                        icon: LucideIcons.pencil,
+                        variant: TdButtonVariant.secondary,
+                        height: Td.ciblePi,
+                        onPressed: _correct,
+                      ),
+                      TdButton(
+                        label: 'Hors cible',
+                        icon: LucideIcons.target,
+                        variant: TdButtonVariant.secondary,
+                        height: Td.ciblePi,
+                        onPressed: _outOfBoard,
+                      ),
+                      TdButton(
+                        label: _matchOver
+                            ? 'Terminer'
+                            : g.isFinished
+                            ? 'Manche suivante'
+                            : 'Fin de tour',
+                        icon: LucideIcons.arrowRight,
+                        variant: g.awaitingNextPlayer ? TdButtonVariant.primary : TdButtonVariant.secondary,
+                        height: Td.ciblePi,
+                        onPressed: _endTurn,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+      ),
+    );
+    return Scaffold(
+      backgroundColor: Td.beton,
+      body: Stack(
+        children: [
+          board,
+          if (_showWin && _matchOver)
+            Positioned.fill(
+              child: Celebration(
+                kind: CelebrationKind.win,
+                winner: g.winner!.name,
+                stats: _winStats(g.winner!.name),
+                onAgain: _rematch,
+                onHome: () => Navigator.of(context).pop(),
+              ),
+            )
+          else if (_show180)
+            Positioned.fill(
+              child: Celebration(
+                kind: CelebrationKind.oneEighty,
+                winner: p.name,
+                onTap: () => setState(() => _show180 = false),
+              ),
+            ),
+        ],
       ),
     );
   }

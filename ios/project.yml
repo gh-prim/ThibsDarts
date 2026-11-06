@@ -35,6 +35,7 @@ targets:
           - UIInterfaceOrientationPortrait
         UIAppFonts:
           - lucide.ttf
+          - PermanentMarker.ttf
         NSCameraUsageDescription: "Pour scanner le QR code du Pi et prendre ta photo de profil."
         NSLocalNetworkUsageDescription: "Pour parler à ton ThibsDarts sur le Wi-Fi de la maison."
         NSBonjourServices:

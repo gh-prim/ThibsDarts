@@ -150,6 +150,7 @@ struct LiveGameView: View {
 
     @EnvironmentObject var app: AppModel
     @State private var dismissedTurn: String?
+    @State private var seen180: String?
 
     private var me: String? { info.players.first { $0.id == info.you }?.name }
     private var title: String {
@@ -174,6 +175,21 @@ struct LiveGameView: View {
             .padding(.bottom, Td.s2)
         }
         .animation(Td.sortie, value: game)
+        .overlay {
+            if game.winner == nil, is180, seen180 != turnKey {
+                Stage {
+                    CelebrationView(kind: .oneEighty, winner: game.current, isMe: game.current == me) {
+                        seen180 = turnKey
+                    }
+                    .padding(Td.s4)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private var is180: Bool {
+        game.darts.count == 3 && game.darts.allSatisfy { $0.label == "T20" }
     }
 
     private func player(_ name: String) -> LivePlayer? { game.players.first { $0.name == name } }
@@ -251,20 +267,114 @@ struct LiveGameView: View {
     // MARK: Fin
 
     private func winner(_ name: String) -> some View {
-        let ph = photo(for: name)
-        return VStack(spacing: Td.s4) {
+        let w = player(name)
+        var stats: [CelebrationStat] = []
+        if let avg = w?.average { stats.append(CelebrationStat(label: "Moyenne 3 fléchettes", value: String(format: "%.1f", avg).replacingOccurrences(of: ".", with: ","))) }
+        if game.legsToWin > 1, let w { stats.append(CelebrationStat(label: "Manches", value: "\(w.legs)")) }
+        return CelebrationView(kind: .win, winner: name, isMe: name == me, stats: stats, onClose: onLeave)
+    }
+}
+
+/// Tag bombé (HitTag) : Permanent Marker, dégradé golden hour, penché de 5 degrés,
+/// révélé de gauche à droite.
+struct SprayTag: View {
+    let text: String
+    var size: CGFloat = 72
+    var pink = false
+
+    @State private var shown = false
+
+    var body: some View {
+        Text(text)
+            .font(.custom("PermanentMarker-Regular", size: size))
+            .foregroundStyle(Td.goldenHour)
+            .background(
+                RadialGradient(
+                    colors: [(pink ? Td.crepuscule : Td.sunset).opacity(0.45), .clear],
+                    center: .center, startRadius: 0, endRadius: size * 1.6
+                )
+                .scaleEffect(shown ? 1 : 0.6)
+                .opacity(shown ? 0.5 : 0.9)
+            )
+            .mask(alignment: .leading) {
+                Rectangle().scaleEffect(x: shown ? 1 : 0, anchor: .leading)
+            }
+            .scaleEffect(shown ? 1 : 1.14)
+            .rotationEffect(.degrees(-5))
+            .shadow(color: .black.opacity(0.5), radius: 12, y: 4)
+            .onAppear {
+                withAnimation(.timingCurve(0.1, 0.9, 0.2, 1, duration: 0.9)) { shown = true }
+            }
+            .accessibilityLabel(text)
+    }
+}
+
+/// Célébration (composant Celebration) : victoire ou 180.
+struct CelebrationView: View {
+    enum Kind { case win, oneEighty }
+
+    let kind: Kind
+    let winner: String
+    var isMe = false
+    var stats: [CelebrationStat] = []
+    var onClose: (() -> Void)?
+
+    @State private var up = false
+
+    var body: some View {
+        VStack(spacing: Td.s4) {
             Spacer(minLength: 0)
-            ProfileRing(image: ph.0, size: 120)
-                .overlay {
-                    if ph.0 == nil, let url = ph.1 {
-                        Avatar(name: name, url: url, size: 120)
+            SprayTag(text: kind == .win ? "GAGNÉ" : "180", size: kind == .win ? 72 : 120, pink: kind == .oneEighty)
+                .padding(.bottom, Td.s4)
+            Text(copy)
+                .font(.td(17, .medium))
+                .multilineTextAlignment(.center)
+                .modifier(Rise(on: up, delay: 0.7))
+            if !stats.isEmpty {
+                HStack(spacing: Td.s6) {
+                    ForEach(stats) { s in
+                        VStack(spacing: 0) {
+                            Text(s.value).font(.tdRounded(28, .heavy)).monospacedDigit()
+                            Text(s.label).font(.td(13)).foregroundStyle(Td.ink2)
+                        }
                     }
                 }
-            Text(name == me ? "T’as gagné." : "\(name) a gagné.").font(.td(34, .heavy)).tracking(-0.5)
-            Text("Regarde l’écran du Pi pour la suite.").font(.td(15)).foregroundStyle(Td.ink2)
+                .modifier(Rise(on: up, delay: 0.85))
+            }
             Spacer(minLength: 0)
-            TdButton(title: "Retour", variant: .secondary, block: true, action: onLeave)
+            if let onClose {
+                TdButton(title: kind == .win ? "Retour" : "Continuer", variant: .secondary, block: true, action: onClose)
+                    .modifier(Rise(on: up, delay: 1))
+            }
         }
-        .multilineTextAlignment(.center)
+        .onAppear { up = true }
     }
+
+    private var copy: String {
+        switch (kind, isMe) {
+        case (.win, false): "\(winner) plie la partie. Sans forcer."
+        case (.win, true): "Tu plies la partie. Sans forcer."
+        case (.oneEighty, false): "Trois T20. \(winner) a même pas transpiré."
+        case (.oneEighty, true): "Trois T20. T’as même pas transpiré."
+        }
+    }
+
+    /// td-up : monte de 12 points en apparaissant.
+    private struct Rise: ViewModifier {
+        let on: Bool
+        let delay: Double
+
+        func body(content: Content) -> some View {
+            content
+                .opacity(on ? 1 : 0)
+                .offset(y: on ? 0 : 12)
+                .animation(Td.sortie.delay(delay), value: on)
+        }
+    }
+}
+
+struct CelebrationStat: Identifiable {
+    let label: String
+    let value: String
+    var id: String { label }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Premier lancement d'un joueur : Bienvenue, Ton profil, Rejoindre ou installer.
 struct OnboardingFlow: View {
-    enum Step { case welcome, profile, choice, install, join }
+    enum Step { case welcome, profile, choice, install, join, owner }
 
     @EnvironmentObject var app: AppModel
     @State private var step: Step = .welcome
@@ -11,14 +11,22 @@ struct OnboardingFlow: View {
     var body: some View {
         Group {
             switch step {
-            case .welcome: WelcomeView { go(.profile) }
-            case .profile: ProfileView(onBack: { go(.welcome) }, onDone: { go(.choice) })
+            case .welcome: WelcomeView(onStart: { go(.profile) }, onOwner: { go(.owner) })
+            case .profile:
+                ProfileView(onBack: { go(.welcome) }, onDone: {
+                    // Propriétaire reconnecté sans photo : la photo suffit, pas besoin du choix.
+                    if app.isOwner && app.piBase != nil { app.onboarded = true } else { go(.choice) }
+                })
             case .choice: ChoiceView(onBack: { go(.profile) }, onJoin: { go(.join) }, onInstall: { go(.install) })
             case .install: SetupFlow(onExit: { go(.choice) })
             case .join: JoinView(onBack: { go(.choice) })
+            case .owner: OwnerLoginView(onBack: { go(.welcome) })
             }
         }
         .transition(.opacity)
+        .onChange(of: app.isOwner) { _, owner in
+            if owner && step == .owner && !app.hasProfile { go(.profile) }
+        }
     }
 
     private func go(_ s: Step) {
@@ -30,6 +38,7 @@ struct OnboardingFlow: View {
 
 private struct WelcomeView: View {
     let onStart: () -> Void
+    let onOwner: () -> Void
 
     var body: some View {
         Stage {
@@ -45,7 +54,10 @@ private struct WelcomeView: View {
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxHeight: .infinity)
-                TdButton(title: "Créer mon profil", icon: .arrowRight, block: true, action: onStart)
+                VStack(spacing: Td.s2) {
+                    TdButton(title: "Créer mon profil", icon: .arrowRight, block: true, action: onStart)
+                    TdButton(title: "C’est ma cible, j’ai mon code", variant: .tertiary, block: true, action: onOwner)
+                }
             }
             .padding(.horizontal, Td.s6)
             .padding(.top, Td.s4)
@@ -66,6 +78,7 @@ struct ProfileView: View {
     @State private var photo: UIImage?
     @State private var shooting = false
     @State private var pick: PhotosPickerItem?
+    @State private var confirmLogout = false
 
     var body: some View {
         Stage {
@@ -98,6 +111,12 @@ struct ProfileView: View {
                         .padding(Td.s4)
                         .background(RoundedRectangle(cornerRadius: Td.rLg).fill(Td.verreLeger))
                         .overlay(RoundedRectangle(cornerRadius: Td.rLg).strokeBorder(Td.verreBord))
+                        if onBack == nil {
+                            TdButton(title: "Se déconnecter", variant: .tertiary, icon: .logOut, block: true) {
+                                confirmLogout = true
+                            }
+                            .padding(.top, Td.s2)
+                        }
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -120,6 +139,13 @@ struct ProfileView: View {
             photo = app.photo
         }
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { photo = $0 } }
+        .confirmationDialog("Se déconnecter ?", isPresented: $confirmLogout, titleVisibility: .visible) {
+            Button("Se déconnecter", role: .destructive) { app.logout() }
+        } message: {
+            Text(app.isOwner
+                 ? "Tes parties restent sur la cible. Pour revenir en propriétaire, il te faudra ton code."
+                 : "Tes parties restent sur la cible.")
+        }
         .onChange(of: pick) { _, item in
             Task {
                 if let data = try? await item?.loadTransferable(type: Data.self), let img = UIImage(data: data) {

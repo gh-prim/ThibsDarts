@@ -77,6 +77,7 @@ enum LucideIcon: UInt32 {
     case loaderCircle = 57610
     case camera = 57444
     case lock = 57611
+    case logOut = 57614
     case eye = 57530
     case eyeOff = 57531
     case arrowRight = 57417

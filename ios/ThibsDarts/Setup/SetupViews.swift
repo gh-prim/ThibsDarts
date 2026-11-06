@@ -15,6 +15,7 @@ struct SetupFlow: View {
             case .wifi: WifiStep()
             case .password: PasswordStep()
             case .profile: ProfileStep()
+            case .pin: PinStep()
             case .done: DoneStep()
             }
         }
@@ -293,6 +294,23 @@ private struct PasswordStep: View {
     }
 }
 
+// MARK: Code du propriétaire
+
+private struct PinStep: View {
+    @EnvironmentObject var model: SetupModel
+
+    var body: some View {
+        SetupPage {
+            PinChooser(
+                title: "Choisis ton code",
+                detail: "4 chiffres. Il te reconnaît comme propriétaire de la cible, même sur un autre iPhone.",
+                busy: model.busy,
+                serverError: model.error
+            ) { model.finish(pin: $0) }
+        }
+    }
+}
+
 // MARK: ProfilQR
 
 private struct ProfileStep: View {
@@ -337,7 +355,7 @@ private struct ProfileStep: View {
                 title: model.photo == nil ? "Ajoute ta photo pour continuer" : "Continuer",
                 icon: .arrowRight, block: true,
                 state: model.busy ? .loading : model.canFinish ? .normal : .disabled
-            ) { model.finish() }
+            ) { model.toPin() }
         }
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { model.photo = $0 } }
         .onChange(of: pick) { _, item in

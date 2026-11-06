@@ -155,6 +155,8 @@ enum LobbyAPI {
 struct PiHello: Decodable {
     let device: String
     let owner: String?
+    /// Le propriétaire a choisi son code (absent sur les vieilles cibles).
+    var pin: Bool?
 }
 
 extension LobbyAPI {

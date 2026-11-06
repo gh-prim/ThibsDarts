@@ -5,6 +5,7 @@ struct HomeView: View {
     @EnvironmentObject var app: AppModel
     @StateObject private var history = HistoryModel()
     @State private var tab = "jouer"
+    @State private var pinBase: URL?
 
     private let tabs = [
         TabBar.Item(id: "jouer", icon: .target, label: "Jouer"),
@@ -30,6 +31,16 @@ struct HomeView: View {
         .fullScreenCover(item: $app.lobby) { _ in SalonView().environmentObject(app) }
         // Recharge l'historique en changeant d'onglet et en sortant d'une partie.
         .task(id: "\(tab)-\(app.lobby == nil)-\(app.piBase?.absoluteString ?? "")") { await history.load(app: app) }
+        // Cible installée avant le code : le propriétaire le choisit maintenant.
+        .task(id: app.piBase) {
+            guard app.isOwner, let base = app.piBase, await LobbyAPI.hello(at: base)?.pin == false else { return }
+            pinBase = base
+        }
+        .fullScreenCover(isPresented: Binding(get: { pinBase != nil }, set: { if !$0 { pinBase = nil } })) {
+            if let pinBase {
+                OwnerPinSetupView(base: pinBase) { self.pinBase = nil }.environmentObject(app)
+            }
+        }
     }
 }
 

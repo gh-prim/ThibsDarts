@@ -136,10 +136,10 @@ final class PiClient {
         guard status == 200 else { throw PiError.http(status, "photo") }
     }
 
-    func sendProfile(firstName: String, lastName: String, nickname: String) async throws {
+    func sendProfile(firstName: String, lastName: String, nickname: String, pin: String) async throws {
         let (status, _) = try await send(
             "POST", "api/setup/profile",
-            json: ["firstName": firstName, "lastName": lastName, "nickname": nickname]
+            json: ["firstName": firstName, "lastName": lastName, "nickname": nickname, "pin": pin]
         )
         guard status == 200 else { throw PiError.http(status, "profil") }
     }

@@ -4,7 +4,7 @@ import UIKit
 /// Parcours d'installation du premier allumage (planches "5. Premier allumage par QR code").
 @MainActor
 final class SetupModel: ObservableObject {
-    enum Step: Equatable { case scan, wifi, password, profile, done }
+    enum Step: Equatable { case scan, wifi, password, profile, pin, done }
 
     static let steps = ["Scanner", "Wi-Fi", "Profil"]
 
@@ -32,7 +32,7 @@ final class SetupModel: ObservableObject {
         switch step {
         case .scan: 0
         case .wifi, .password: 1
-        case .profile, .done: 2
+        case .profile, .pin, .done: 2
         }
     }
 
@@ -147,7 +147,14 @@ final class SetupModel: ObservableObject {
         photo != nil && !firstName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    func finish() {
+    /// Profil rempli : on passe au code du propriétaire.
+    func toPin() {
+        guard canFinish else { return }
+        error = nil
+        withAnimation(Td.sortie) { step = .pin }
+    }
+
+    func finish(pin: String) {
         guard let photo, let jpeg = Self.squareJpeg(photo) else { return }
         busy = true
         error = nil
@@ -158,7 +165,8 @@ final class SetupModel: ObservableObject {
                 try await client.sendProfile(
                     firstName: firstName.trimmingCharacters(in: .whitespaces),
                     lastName: lastName.trimmingCharacters(in: .whitespaces),
-                    nickname: nickname.trimmingCharacters(in: .whitespaces)
+                    nickname: nickname.trimmingCharacters(in: .whitespaces),
+                    pin: pin
                 )
                 UserDefaults.standard.set(true, forKey: "setupDone")
                 withAnimation(Td.sortie) { step = .done }
@@ -174,6 +182,7 @@ final class SetupModel: ObservableObject {
             case .password: step = .wifi
             case .wifi: step = .scan
             case .scan: onExit()
+            case .pin: step = .profile
             case .profile, .done: break
             }
         }

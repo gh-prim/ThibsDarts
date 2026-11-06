@@ -83,6 +83,22 @@ final class AppModel: ObservableObject {
 
     var photoJpeg: Data? { photo.flatMap(SetupModel.squareJpeg) }
 
+    /// Se déconnecter : on oublie le profil et la cible. L'identifiant du téléphone reste.
+    func logout() {
+        lobby = nil
+        for key in ["nickname", "firstName", "lastName", "isOwner", "piBase", "onboarded"] {
+            defaults.removeObject(forKey: key)
+        }
+        try? FileManager.default.removeItem(at: Self.photoURL)
+        nickname = ""
+        firstName = ""
+        lastName = ""
+        photo = nil
+        isOwner = false
+        piBase = nil
+        onboarded = false
+    }
+
     func enter(lobby info: LobbyInfo, base: URL) {
         remember(piBase: base)
         lobby = ActiveLobby(base: base, info: info)

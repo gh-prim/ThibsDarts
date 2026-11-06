@@ -11,6 +11,7 @@ import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
 import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
+import 'salon_screen.dart';
 
 /// Accueil : le Pi attend une partie.
 class HomeScreen extends StatefulWidget {
@@ -21,6 +22,23 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Un iPhone crée une partie : on affiche son salon, seulement si l'accueil est à l'écran.
+    Lobby.instance.remoteOpen = (cfg) {
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return false;
+      _open(SalonScreen(config: cfg, opened: true));
+      return true;
+    };
+  }
+
+  @override
+  void dispose() {
+    Lobby.instance.remoteOpen = null;
+    super.dispose();
+  }
+
   Future<void> _open(Widget screen) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
     // Une partie lancée remplace le salon : elle ferme le salon à sa sortie.

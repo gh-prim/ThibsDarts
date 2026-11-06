@@ -43,6 +43,7 @@ private struct PlayTab: View {
     @State private var error: String?
     @State private var showJoin = false
     @State private var showCreate = false
+    @State private var created: (LobbyInfo, URL)?
 
     var body: some View {
         Stage {
@@ -56,7 +57,7 @@ private struct PlayTab: View {
                         .padding(.bottom, Td.s2)
                     salonCard
                     HStack(spacing: Td.s2) {
-                        TdButton(title: "Créer", variant: .secondary, icon: .plus, block: true) { showCreate = true }
+                        TdButton(title: "Créer", variant: .secondary, icon: .plus, block: true) { create() }
                         TdButton(title: "Code", variant: .secondary, icon: .search, block: true) { showJoin = true }
                     }
                     if let error { Banner(text: error, error: true) }
@@ -79,10 +80,30 @@ private struct PlayTab: View {
                 .presentationBackground(Td.beton)
         }
         .fullScreenCover(isPresented: $showJoin) { JoinView(onBack: { showJoin = false }).environmentObject(app) }
-        .alert("Créer une partie", isPresented: $showCreate) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Pour l’instant, la partie se lance sur l’écran du Pi : Nouvelle partie, puis le salon s’ouvre ici.")
+        .fullScreenCover(isPresented: $showCreate, onDismiss: {
+            // Le salon créé s'affiche une fois Nouvelle partie fermé.
+            if let c = created {
+                created = nil
+                app.enter(lobby: c.0, base: c.1)
+            }
+        }) {
+            NewGameView(onBack: { showCreate = false }) { info, base in
+                created = (info, base)
+                showCreate = false
+            }
+            .environmentObject(app)
+        }
+    }
+
+    /// Pas de nouvelle partie si une partie tourne ou si un salon est déjà ouvert.
+    private func create() {
+        if info?.isPlaying == true {
+            error = "Une partie est déjà en cours sur la cible."
+        } else if info?.isOpen == true {
+            error = "Un salon est déjà ouvert. Rejoins-le juste au-dessus."
+        } else {
+            error = nil
+            showCreate = true
         }
     }
 

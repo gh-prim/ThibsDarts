@@ -116,13 +116,7 @@ extension LobbyAPI {
         case let s: throw JoinError.other(s)
         }
         let info = try JSONDecoder().decode(LobbyInfo.self, from: data)
-        if let you = info.you, let jpeg = app.photoJpeg, !app.isOwner {
-            var up = URLRequest(url: base.appendingPathComponent("api/players/\(you)/photo"))
-            up.httpMethod = "PUT"
-            up.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
-            up.httpBody = jpeg
-            _ = try? await session.data(for: up)
-        }
+        await uploadPhoto(at: base, info: info, app: app)
         return info
     }
 

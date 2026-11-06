@@ -68,6 +68,10 @@ class Lobby extends ChangeNotifier {
 
   void publishGame(Map<String, Object?> game) => live = game;
 
+  /// Branché par l'accueil du Pi : affiche le salon créé depuis un iPhone.
+  /// Renvoie false si l'écran n'est pas libre (menu ou partie en cours).
+  bool Function(GameConfig cfg)? remoteOpen;
+
   String get qrPayload => Uri(
     scheme: 'thibsdarts',
     host: 'join',
@@ -214,6 +218,7 @@ class Lobby extends ChangeNotifier {
         return await _send(res, m);
       }
       if (req.method == 'POST' && path == '/api/lobby/join') return await _join(req, res);
+      if (req.method == 'POST' && path == '/api/lobby/create') return await _create(req, res);
       if (req.method == 'POST' && path == '/api/lobby/leave') {
         final b = await _body(req);
         final p = players.where((p) => p.id == b['id']).firstOrNull;
@@ -257,6 +262,31 @@ class Lobby extends ChangeNotifier {
     }
   }
 
+  /// Un iPhone sur le même Wi-Fi crée la partie : le salon s'ouvre sur le Pi et il est dedans.
+  Future<void> _create(HttpRequest req, HttpResponse res) async {
+    final b = await _body(req);
+    final id = (b['id'] as String? ?? '').trim();
+    final name = (b['name'] as String? ?? '').trim();
+    if (id.isEmpty || name.isEmpty) return _send(res, {'error': 'profil'}, status: 400);
+    if (state == LobbyState.playing) return _send(res, {'error': 'en_cours'}, status: 409);
+    if (state != LobbyState.closed) return _send(res, {'error': 'ouvert'}, status: 409);
+    final m = b['mode'] as String? ?? '501';
+    final x01 = int.tryParse(m);
+    final mode = x01 == null ? GameMode.values.where((g) => g.name == m).firstOrNull : null;
+    if (x01 == null && mode == null) return _send(res, {'error': 'mode'}, status: 400);
+    final owner = b['owner'] == true;
+    final cfg = GameConfig(
+      players: owner ? [AppState.owner] : const [],
+      startScore: x01 ?? 501,
+      doubleOut: b['doubleOut'] as bool? ?? true,
+      legsToWin: x01 == null ? 1 : ((b['legsToWin'] as num?)?.toInt() ?? 1).clamp(1, 5),
+      mode: mode,
+    );
+    if (remoteOpen?.call(cfg) != true) return _send(res, {'error': 'occupe'}, status: 409);
+    open(cfg);
+    return _enter(b, id, name, res);
+  }
+
   Future<void> _join(HttpRequest req, HttpResponse res) async {
     final b = await _body(req);
     if (state != LobbyState.open) return _send(res, {'error': 'ferme'}, status: 409);
@@ -264,7 +294,11 @@ class Lobby extends ChangeNotifier {
     final id = (b['id'] as String? ?? '').trim();
     final name = (b['name'] as String? ?? '').trim();
     if (id.isEmpty || name.isEmpty) return _send(res, {'error': 'profil'}, status: 400);
+    return _enter(b, id, name, res);
+  }
 
+  /// Place le joueur de cet iPhone dans le salon ouvert.
+  Future<void> _enter(Map<String, Object?> b, String id, String name, HttpResponse res) async {
     LobbyPlayer? p;
     if (b['owner'] == true) {
       // L'iPhone du propriétaire rejoint sa propre place d'hôte.

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:darts_engine/darts_engine.dart';
 import 'package:dartos_hub/game_config.dart';
 import 'package:dartos_hub/history/history_store.dart';
 import 'package:dartos_hub/lobby/lobby.dart';
@@ -76,6 +77,36 @@ void main() {
     expect(AppState.photos['Max'], isNotNull);
     (s, j) = await call('POST', '/api/lobby/join', body: {'code': lobby.code, 'id': 'c', 'name': 'Lou'});
     expect(s, 409, reason: 'partie lancée');
+  });
+
+  test("un pote crée la partie depuis son iPhone", () async {
+    lobby.close();
+    lobby.remoteOpen = null;
+    var (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-9', 'name': 'Lou', 'mode': 'cricket'});
+    expect(s, 409, reason: "l'accueil du Pi n'est pas à l'écran");
+    expect(j['error'], 'occupe');
+
+    GameConfig? shown;
+    lobby.remoteOpen = (cfg) {
+      shown = cfg;
+      return true;
+    };
+    (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-9', 'name': 'Lou', 'mode': 'cricket'});
+    expect(s, 200);
+    expect(shown?.mode, GameMode.cricket);
+    expect(j['you'], 'phone-9');
+    expect(j['state'], 'open');
+    expect(lobby.players.firstWhere((p) => p.host).playing, isFalse, reason: 'Thibs ne joue pas par défaut');
+    expect(lobby.inGame.map((p) => p.name), ['Lou']);
+
+    (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-8', 'name': 'Max', 'mode': '501'});
+    expect(s, 409, reason: 'un salon est déjà ouvert');
+    lobby.start();
+    (s, j) = await call('POST', '/api/lobby/create', body: {'id': 'phone-8', 'name': 'Max', 'mode': '501'});
+    expect(s, 409, reason: 'une partie est en cours');
+    expect(j['error'], 'en_cours');
+    lobby.close();
+    lobby.remoteOpen = null;
   });
 
   test('le propriétaire peut regarder sans jouer', () {

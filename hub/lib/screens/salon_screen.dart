@@ -13,9 +13,12 @@ import 'setup_screen.dart' show SetupQrCode;
 
 /// Salon (planche Salon) : QR code pour rejoindre depuis l'iPhone, joueurs, Invité, Lancer.
 class SalonScreen extends StatefulWidget {
-  const SalonScreen({super.key, required this.config, this.lobby});
+  const SalonScreen({super.key, required this.config, this.lobby, this.opened = false});
 
   final GameConfig config;
+
+  /// Salon déjà ouvert par un iPhone : on l'affiche tel quel.
+  final bool opened;
 
   /// Injecté par les tests ; sinon le salon de l'appareil.
   final Lobby? lobby;
@@ -30,7 +33,7 @@ class _SalonScreenState extends State<SalonScreen> {
   @override
   void initState() {
     super.initState();
-    _lobby.open(widget.config);
+    if (!widget.opened) _lobby.open(widget.config);
   }
 
   void _back() {

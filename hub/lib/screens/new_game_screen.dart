@@ -36,7 +36,7 @@ const _modes = [
 
 class _NewGameScreenState extends State<NewGameScreen> {
   _Mode _mode = _modes[1];
-  final List<String> _order = ['Thibs', 'Max', 'Inès'];
+  late final List<String> _order = [AppState.owner];
   final List<String> _guests = [];
   String _out = 'Double';
   int _legs = 2;
@@ -83,7 +83,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final everyone = [...knownPlayers, ..._guests];
+    final everyone = [AppState.owner, ..._guests];
     return Scaffold(
       backgroundColor: Td.beton,
       body: Stage(
@@ -185,6 +185,8 @@ class _NewGameScreenState extends State<NewGameScreen> {
                       child: TdStepper(value: _legs, min: 1, max: 5, onChanged: (v) => setState(() => _legs = v)),
                     ),
                     const Spacer(),
+                    Text('Les potes rejoignent depuis leur iPhone.', style: TdText.inter(13, 18, 400, Td.ink3)),
+                    const SizedBox(height: Td.s3),
                     TdButton(
                       label: 'Lancer',
                       icon: LucideIcons.play,

@@ -1,29 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../game_config.dart';
 import '../theme/tokens.dart';
 import '../widgets/logo.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
-import '../game_config.dart';
 import 'game_screen.dart';
 import 'new_game_screen.dart';
 
 /// Accueil : le Pi attend une partie.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  // Données de démo, en attendant SQLite.
-  static const _lastPlayers = [
-    PlayerSummary('Thibs', 62.4),
-    PlayerSummary('Max', 48.1),
-    PlayerSummary('Inès', 41.7),
-  ];
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  Future<void> _open(Widget screen) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+    if (mounted) setState(() {}); // la dernière partie a pu changer
+  }
 
   @override
   Widget build(BuildContext context) {
+    final last = AppState.lastGame;
+    final players = last?.players ?? [AppState.owner];
     return Scaffold(
       backgroundColor: Td.beton,
       body: Stage(
@@ -59,30 +64,29 @@ class HomeScreen extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text("Le 501 t'attend.", style: TdText.title),
+                          Text(last == null ? 'Prêt à jouer.' : "Le ${last.startScore} t'attend.", style: TdText.title),
                           const SizedBox(height: Td.s4),
                           Text(
-                            'Dernière partie : 501 double out, avec Max et Inès. Thibs a gagné en 18 fléchettes.',
+                            last == null
+                                ? 'Lance une partie ici. Les potes rejoignent depuis leur iPhone.'
+                                : 'Dernière partie : ${last.label}, avec ${players.join(', ')}.'
+                                    '${AppState.lastResult == null ? '' : ' ${AppState.lastResult}'}',
                             style: TdText.body,
                           ),
                           const SizedBox(height: Td.s6),
-                          TdButton(
-                            label: 'Rejouer',
-                            icon: LucideIcons.refreshCw,
-                            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                              builder: (_) => GameScreen(
-                                config: GameConfig(players: [for (final p in _lastPlayers) p.name]),
-                              ),
-                            )),
-                          ),
-                          const SizedBox(height: Td.s4),
+                          if (last != null) ...[
+                            TdButton(
+                              label: 'Rejouer',
+                              icon: LucideIcons.refreshCw,
+                              onPressed: () => _open(GameScreen(config: last)),
+                            ),
+                            const SizedBox(height: Td.s4),
+                          ],
                           TdButton(
                             label: 'Nouvelle partie',
                             icon: LucideIcons.plus,
-                            variant: TdButtonVariant.secondary,
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(builder: (_) => const NewGameScreen()),
-                            ),
+                            variant: last == null ? TdButtonVariant.primary : TdButtonVariant.secondary,
+                            onPressed: () => _open(const NewGameScreen()),
                           ),
                         ],
                       ),
@@ -95,8 +99,8 @@ class HomeScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         spacing: Td.s3,
                         children: [
-                          Text('Joueurs de la dernière partie', style: TdText.label),
-                          for (final p in _lastPlayers) PlayerCard(player: p),
+                          Text(last == null ? 'Sur ce ThibsDarts' : 'Joueurs de la dernière partie', style: TdText.label),
+                          for (final p in players) PlayerCard(player: PlayerSummary(p)),
                         ],
                       ),
                     ),

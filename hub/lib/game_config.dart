@@ -15,8 +15,16 @@ class GameConfig {
   String get label => '$startScore ${doubleOut ? 'double out' : 'single out'}';
 }
 
-/// Joueurs connus en attendant les profils (SQLite + iPhone).
-const knownPlayers = ['Thibs', 'Max', 'Inès', 'Léo'];
+/// État de l'appareil, en mémoire en attendant SQLite.
+class AppState {
+  AppState._();
 
-/// Moyennes de démo.
-const demoAverages = {'Thibs': 62.4, 'Max': 48.1, 'Inès': 41.7, 'Léo': 39.2};
+  /// Compte propriétaire, créé au setup depuis l'iPhone. Seul joueur connu au départ.
+  static String owner = 'Thibs';
+
+  /// Dernière partie lancée, pour "Rejouer".
+  static GameConfig? lastGame;
+
+  /// Résumé de la dernière partie terminée ("Thibs a gagné en 18 fléchettes.").
+  static String? lastResult;
+}

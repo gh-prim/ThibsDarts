@@ -49,6 +49,19 @@ class _GameScreenState extends State<GameScreen> {
     return X01Game(playerNames: order, startScore: _cfg.startScore, doubleOut: _cfg.doubleOut);
   }
 
+  @override
+  void initState() {
+    super.initState();
+    AppState.lastGame = widget.config;
+  }
+
+  void _recordResult() {
+    if (!_matchOver) return;
+    final w = _game.winner!;
+    final darts = w.turns.fold<int>(0, (n, t) => n + t.length);
+    AppState.lastResult = '${w.name} a gagné, dernière manche en $darts fléchettes.';
+  }
+
   bool get _matchOver => _game.winner != null && (_legsWon[_game.winner!.name] ?? 0) >= _cfg.legsToWin;
 
   @override
@@ -61,7 +74,10 @@ class _GameScreenState extends State<GameScreen> {
     if (_game.awaitingNextPlayer || _game.isFinished) return;
     setState(() {
       _last = _game.throwDart(d);
-      if (_last == ThrowOutcome.checkout) _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
+      if (_last == ThrowOutcome.checkout) {
+        _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
+        _recordResult();
+      }
       _hits.add(BoardHit(d, pos, _hits.length + 1));
       _tagDart = d;
       _tagKey++;
@@ -89,7 +105,10 @@ class _GameScreenState extends State<GameScreen> {
     setState(() {
       if (hadWinner != null) _legsWon.update(hadWinner.name, (n) => n - 1);
       _last = _game.correctDart(c.index, c.dart);
-      if (_game.winner != null) _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
+      if (_game.winner != null) {
+        _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
+        _recordResult();
+      }
       // On garde la position touchée pour les fléchettes inchangées.
       final kept = <BoardHit>[];
       for (var i = 0; i < _game.currentTurn.length; i++) {
@@ -199,7 +218,7 @@ class _GameScreenState extends State<GameScreen> {
       for (var i = 0; i < g.players.length; i++)
         PlayerSummary(
           g.players[i].name,
-          g.players[i].turns.isEmpty ? (demoAverages[g.players[i].name] ?? 0) : g.players[i].average,
+          average: g.players[i].turns.isEmpty ? null : g.players[i].average,
           score: g.players[i].remaining,
           status: g.winner == g.players[i]
               ? PlayerStatus.winner

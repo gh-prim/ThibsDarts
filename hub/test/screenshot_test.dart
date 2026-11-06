@@ -59,8 +59,13 @@ void main() {
     await advance(600);
     await shot('3-accueil');
 
-    // Partie 501 simulée : on touche le plateau.
-    await tester.tap(find.text('Rejouer'));
+    // Partie 501 simulée : Nouvelle partie, invité, Lancer, puis on touche le plateau.
+    await tester.tap(find.text('Nouvelle partie'));
+    await advance(600);
+    await tester.tap(find.text('Invité'));
+    await advance(200);
+    await shot('3b-nouvelle-partie');
+    await tester.tap(find.text('Lancer'));
     await tester.pump();
     await advance(600);
     await shot('4-debut');
@@ -96,8 +101,6 @@ void main() {
     // Retour accueil puis Nouvelle partie
     await tester.longPress(find.bySemanticsLabel('ThibsDarts').first);
     await advance(600);
-    await tester.tap(find.text('Nouvelle partie'));
-    await advance(600);
-    await shot('10-nouvelle-partie');
+    await shot('10-accueil-apres');
   });
 }

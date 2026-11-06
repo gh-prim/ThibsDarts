@@ -18,7 +18,7 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('Rejouer'), findsOneWidget);
+    expect(find.text('Rejouer'), findsNothing);
     expect(find.text('Nouvelle partie'), findsOneWidget);
   });
 }

@@ -6,9 +6,11 @@ import 'avatar.dart';
 enum PlayerStatus { waiting, active, winner }
 
 class PlayerSummary {
-  const PlayerSummary(this.name, this.average, {this.score, this.status = PlayerStatus.waiting});
+  const PlayerSummary(this.name, {this.average, this.score, this.status = PlayerStatus.waiting});
   final String name;
-  final double average;
+
+  /// Moyenne 3 fléchettes, null tant qu'il n'a pas tiré.
+  final double? average;
   final int? score;
   final PlayerStatus status;
 }
@@ -24,7 +26,10 @@ class PlayerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = player.status == PlayerStatus.active;
-    final sub = active ? 'Au tir · ${formatAverage(player.average)}' : 'moy. ${formatAverage(player.average)}';
+    final avg = player.average;
+    final sub = active
+        ? (avg == null ? 'Au tir' : 'Au tir · ${formatAverage(avg)}')
+        : (avg == null ? 'En attente' : 'moy. ${formatAverage(avg)}');
     return AnimatedContainer(
       duration: Td.rapide,
       padding: const EdgeInsets.all(Td.s3),

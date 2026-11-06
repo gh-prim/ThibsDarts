@@ -9,7 +9,7 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
-import 'game_screen.dart';
+import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
 
 /// Accueil : le Pi attend une partie.
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(last == null ? 'Prêt à jouer.' : "Le ${last.startScore} t'attend.", style: TdText.title),
+                          Text(last == null ? 'Prêt à jouer.' : "Le ${last.title} t'attend.", style: TdText.title),
                           const SizedBox(height: Td.s4),
                           Text(
                             last == null
@@ -81,7 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             TdButton(
                               label: 'Rejouer',
                               icon: LucideIcons.refreshCw,
-                              onPressed: () => _open(GameScreen(config: last)),
+                              onPressed: () => _open(gameScreenFor(last)),
                             ),
                             const SizedBox(height: Td.s4),
                           ],

@@ -6,6 +6,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
+import 'package:darts_engine/darts_engine.dart';
+
 import '../game_config.dart';
 import '../setup/owner_store.dart';
 
@@ -133,12 +135,7 @@ class Lobby extends ChangeNotifier {
     for (final p in players) {
       if (p.photoPath != null) AppState.photos[p.name] = p.photoPath!;
     }
-    final started = GameConfig(
-      players: [for (final p in players) p.name],
-      startScore: cfg.startScore,
-      doubleOut: cfg.doubleOut,
-      legsToWin: cfg.legsToWin,
-    );
+    final started = cfg.withPlayers([for (final p in players) p.name]);
     config = started;
     state = LobbyState.playing;
     notifyListeners();
@@ -148,6 +145,16 @@ class Lobby extends ChangeNotifier {
   String get label {
     final c = config;
     if (c == null) return '';
+    if (c.mode != null) {
+      return switch (c.mode!) {
+        GameMode.cricket => 'Cricket · 20 à 15 et bull',
+        GameMode.clock => 'Around the clock · De 1 à 20',
+        GameMode.shanghai => 'Shanghai · 7 manches',
+        GameMode.killer => 'Killer · 3 vies',
+        GameMode.halveIt => 'Halve-it · 9 manches',
+        GameMode.bobs27 => "Bob's 27 · D1 à D20 puis bull",
+      };
+    }
     final out = c.doubleOut ? 'Double sortie' : 'Sortie simple';
     final legs = c.legsToWin == 1 ? '1 manche' : '${c.legsToWin} manches gagnantes';
     return '${c.startScore} · $out · $legs';

@@ -58,10 +58,24 @@ Offset boardPositionFor(DartThrow d) {
 /// Plateau virtuel (composant Dartboard) : segments touchés en couleur,
 /// impacts numérotés, segment visé en bleu. Touchable pour le simulateur.
 class Dartboard extends StatelessWidget {
-  const Dartboard({super.key, this.hits = const [], this.aimed, this.dim = false, this.onTapBoard});
+  const Dartboard({
+    super.key,
+    this.hits = const [],
+    this.aimed,
+    this.aimSector,
+    this.heat = const {},
+    this.dim = false,
+    this.onTapBoard,
+  });
 
   final List<BoardHit> hits;
   final DartThrow? aimed;
+
+  /// Secteur visé en entier (simple, double et triple), 25 pour le bull.
+  final int? aimSector;
+
+  /// Secteurs encore ouverts (Cricket), teintés orange. 25 pour le bull.
+  final Set<int> heat;
   final bool dim;
   final ValueChanged<Offset>? onTapBoard;
 
@@ -81,7 +95,7 @@ class Dartboard extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: CustomPaint(
-                    painter: _BoardPainter(hits: hits, aimed: aimed, dim: dim),
+                    painter: _BoardPainter(hits: hits, aimed: aimed, aimSector: aimSector, heat: heat, dim: dim),
                   ),
                 ),
                 for (final h in hits)
@@ -102,10 +116,12 @@ class Dartboard extends StatelessWidget {
 }
 
 class _BoardPainter extends CustomPainter {
-  _BoardPainter({required this.hits, required this.aimed, required this.dim});
+  _BoardPainter({required this.hits, required this.aimed, required this.dim, this.aimSector, this.heat = const {}});
 
   final List<BoardHit> hits;
   final DartThrow? aimed;
+  final int? aimSector;
+  final Set<int> heat;
   final bool dim;
 
   static double _rad(double deg) => (deg - 90) * math.pi / 180;
@@ -177,11 +193,12 @@ class _BoardPainter extends CustomPainter {
             : null;
         final hit = key != null && hitKeys.containsKey(key);
         final isAim =
+            aimSector == sec ||
             aimed != null &&
-            aimed!.sector == sec &&
-            ((aimed!.multiplier == 3 && r == 'T') ||
-                (aimed!.multiplier == 2 && r == 'D') ||
-                (aimed!.multiplier == 1 && (r == 'S' || r == 's')));
+                aimed!.sector == sec &&
+                ((aimed!.multiplier == 3 && r == 'T') ||
+                    (aimed!.multiplier == 2 && r == 'D') ||
+                    (aimed!.multiplier == 1 && (r == 'S' || r == 's')));
         final paint = Paint();
         if (hit && r == 'T') {
           paint.shader = tripleShader.createShader(path.getBounds());
@@ -193,7 +210,11 @@ class _BoardPainter extends CustomPainter {
               : (r == 'S' || r == 's')
               ? (even ? Td.plateauNoir : Td.plateauCreme)
               : (even ? Td.plateauRouge : Td.plateauVert);
-          if (dim && !hit && !isAim) paint.color = paint.color.withValues(alpha: 0.55);
+          if (heat.contains(sec) && !hit && !isAim) {
+            paint.color = Color.lerp(paint.color, Td.sunset, r == 'S' || r == 's' ? 0.7 : 0.8)!;
+          } else if (dim && !hit && !isAim) {
+            paint.color = paint.color.withValues(alpha: 0.55);
+          }
         }
         canvas.drawPath(path, paint);
         canvas.drawPath(
@@ -209,8 +230,13 @@ class _BoardPainter extends CustomPainter {
     }
 
     // Bull
-    Color bullC(String k, Color base) =>
-        hitKeys.containsKey(k) ? Td.crepuscule : (dim ? base.withValues(alpha: 0.55) : base);
+    Color bullC(String k, Color base) => hitKeys.containsKey(k)
+        ? Td.crepuscule
+        : aimSector == 25
+        ? Td.ciel
+        : heat.contains(25)
+        ? Color.lerp(base, Td.sunset, 0.75)!
+        : (dim ? base.withValues(alpha: 0.55) : base);
     canvas.drawCircle(Offset.zero, _rOb, Paint()..color = bullC('OB', Td.plateauVert));
     canvas.drawCircle(Offset.zero, _rOb, wire);
     canvas.drawCircle(Offset.zero, _rB, Paint()..color = bullC('B', Td.plateauRouge));
@@ -220,7 +246,7 @@ class _BoardPainter extends CustomPainter {
     for (var i = 0; i < 20; i++) {
       final sec = sectors[i];
       final on = hitSectors.contains(sec);
-      final aim = aimed?.sector == sec;
+      final aim = aimed?.sector == sec || aimSector == sec;
       final tp = TextPainter(
         text: TextSpan(
           text: '$sec',
@@ -241,7 +267,8 @@ class _BoardPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BoardPainter old) => old.hits != hits || old.aimed != aimed || old.dim != dim;
+  bool shouldRepaint(_BoardPainter old) =>
+      old.hits != hits || old.aimed != aimed || old.dim != dim || old.aimSector != aimSector || old.heat != heat;
 }
 
 /// Impact numéroté (td-impact) : apparaît en zoomant, avec une onde.

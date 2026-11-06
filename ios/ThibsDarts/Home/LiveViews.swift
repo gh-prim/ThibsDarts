@@ -113,6 +113,7 @@ struct LiveRow: View {
     var url: URL?
     let remaining: Int
     let average: Double?
+    var detail: String?
     let active: Bool
 
     var body: some View {
@@ -136,6 +137,7 @@ struct LiveRow: View {
     }
 
     private var sub: String {
+        if let detail { return active ? "Au tir · \(detail)" : detail }
         let avg = average.map { String(format: "%.1f", $0).replacingOccurrences(of: ".", with: ",") }
         if active { return avg.map { "Au tir · \($0)" } ?? "Au tir" }
         return avg.map { "moy. \($0)" } ?? "En attente"
@@ -154,7 +156,7 @@ struct LiveGameView: View {
 
     private var me: String? { info.players.first { $0.id == info.you }?.name }
     private var title: String {
-        "\(game.mode) · Manche \(game.leg)"
+        game.title ?? "\(game.mode) · Manche \(game.leg)"
     }
     private var turnKey: String { "\(game.leg)-\(game.current)-\(game.players.map(\.remaining))" }
 
@@ -208,9 +210,11 @@ struct LiveGameView: View {
         return VStack(alignment: .leading, spacing: 14) {
             VStack(spacing: Td.s3) {
                 ScoreDisplayView(
-                    value: cur?.remaining ?? 0,
-                    label: game.current == me ? "Tu es au tir, il te reste" : "\(game.current) au tir, il lui reste",
-                    sub: game.bust ? "Bust, le score revient." : "Tour en cours: \(game.turnScore)",
+                    value: game.scoreValue ?? cur?.remaining ?? 0,
+                    label: game.isX01
+                        ? (game.current == me ? "Tu es au tir, il te reste" : "\(game.current) au tir, il lui reste")
+                        : (game.current == me ? (game.youLabel ?? "") : (game.scoreLabel ?? "")),
+                    sub: game.bust ? "Bust, le score revient." : (game.isX01 ? "Tour en cours: \(game.turnScore)" : "Ensuite: \(game.next)"),
                     bust: game.bust
                 )
                 DartSlotsView(darts: game.darts, closed: closed)
@@ -227,7 +231,7 @@ struct LiveGameView: View {
                         LiveRow(
                             name: p.name == me ? "\(p.name) (toi)" : p.name,
                             image: ph.0, url: ph.1,
-                            remaining: p.remaining, average: p.average,
+                            remaining: p.remaining, average: p.average, detail: p.detail,
                             active: p.name == game.current
                         )
                     }
@@ -250,11 +254,14 @@ struct LiveGameView: View {
             Spacer(minLength: 0)
             Avatar(name: game.current, image: ph.0, url: ph.1, size: 88)
             Text("À toi, \(game.current).").font(.td(34, .heavy)).tracking(-0.5)
-            ScoreDisplayView(value: mine?.remaining ?? 0, label: "Il te reste", large: true, center: true)
+            ScoreDisplayView(
+                value: game.scoreValue ?? mine?.remaining ?? 0,
+                label: game.youLabel ?? "Il te reste", large: true, center: true
+            )
             if let route = game.checkout, !route.isEmpty {
                 CheckoutHintView(route: route)
             }
-            if let leader, let mine, leader.remaining < mine.remaining {
+            if game.isX01, let leader, let mine, leader.remaining < mine.remaining {
                 Text("\(leader.name) mène avec \(leader.remaining). Faut y aller.")
                     .font(.td(15)).foregroundStyle(Td.ink2)
             }
@@ -270,6 +277,7 @@ struct LiveGameView: View {
         let w = player(name)
         var stats: [CelebrationStat] = []
         if let avg = w?.average { stats.append(CelebrationStat(label: "Moyenne 3 fléchettes", value: String(format: "%.1f", avg).replacingOccurrences(of: ".", with: ","))) }
+        if !game.isX01, let w { stats.append(CelebrationStat(label: "Score", value: "\(w.remaining)")) }
         if game.legsToWin > 1, let w { stats.append(CelebrationStat(label: "Manches", value: "\(w.legs)")) }
         return CelebrationView(kind: .win, winner: name, isMe: name == me, stats: stats, onClose: onLeave)
     }

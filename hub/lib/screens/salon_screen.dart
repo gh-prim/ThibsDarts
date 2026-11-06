@@ -8,7 +8,7 @@ import '../widgets/controls.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
-import 'game_screen.dart';
+import 'mode_game_screen.dart';
 import 'setup_screen.dart' show SetupQrCode;
 
 /// Salon (planche Salon) : QR code pour rejoindre depuis l'iPhone, joueurs, Invité, Lancer.
@@ -41,7 +41,7 @@ class _SalonScreenState extends State<SalonScreen> {
   void _launch() {
     final cfg = _lobby.start();
     Navigator.of(context)
-        .pushAndRemoveUntil(MaterialPageRoute<void>(builder: (_) => GameScreen(config: cfg)), (r) => r.isFirst);
+        .pushAndRemoveUntil(MaterialPageRoute<void>(builder: (_) => gameScreenFor(cfg)), (r) => r.isFirst);
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -17,22 +18,36 @@ class NewGameScreen extends StatefulWidget {
 }
 
 class _Mode {
-  const _Mode(this.glyph, this.title, this.desc, {this.start});
+  const _Mode(this.glyph, this.title, this.desc, {this.start, this.mode});
   final String glyph, title, desc;
   final int? start;
+  final GameMode? mode;
+
+  bool get playable => start != null || mode != null;
 }
 
 const _modes = [
   _Mode('301', 'Le sprint', 'Double à la sortie.', start: 301),
   _Mode('501', 'Le classique', 'Double à la sortie.', start: 501),
-  _Mode('15+', 'Cricket', 'Ferme, marque, chambre.'),
-  _Mode('1>20', 'Around the clock', 'De 1 à 20, dans l’ordre.'),
-  _Mode('S·D·T', 'Shanghai', 'S, D, T au même tour.'),
-  _Mode('K', 'Killer', 'Trois vies. Pas d’amis.'),
-  _Mode('½', 'Halve-it', 'Rate, ton score fond.'),
-  _Mode('27', 'Bob’s 27', 'Doubles, pour souffrir.'),
+  _Mode('15+', 'Cricket', 'Ferme, marque, chambre.', mode: GameMode.cricket),
+  _Mode('1>20', 'Around the clock', 'De 1 à 20, dans l’ordre.', mode: GameMode.clock),
+  _Mode('S·D·T', 'Shanghai', 'S, D, T au même tour.', mode: GameMode.shanghai),
+  _Mode('K', 'Killer', 'Trois vies. Pas d’amis.', mode: GameMode.killer),
+  _Mode('½', 'Halve-it', 'Rate, ton score fond.', mode: GameMode.halveIt),
+  _Mode('27', 'Bob’s 27', 'Doubles, pour souffrir.', mode: GameMode.bobs27),
   _Mode('T20', 'Entraînements', 'Solo, séries et routines.'),
 ];
+
+/// Règle en une phrase, à la place des options du X01.
+const _rules = {
+  GameMode.cricket: 'Ferme 20 à 15 et le bull en 3 marques. Ce que tu fermes avant les autres te rapporte des points.',
+  GameMode.clock: 'Touche 1, 2, 3, jusqu’à 20, dans l’ordre. Simple, double ou triple, tout compte.',
+  GameMode.shanghai: '7 manches. Manche 1 on vise le 1, puis le 2... Simple, double et triple au même tour : gagné.',
+  GameMode.killer:
+      'Chacun reçoit un numéro et 3 vies. Ton double te rend killer, puis tu chasses les doubles des autres.',
+  GameMode.halveIt: '9 cibles imposées, départ à 40. Rien touché au tour : ton score est divisé par deux.',
+  GameMode.bobs27: 'Départ à 27, de D1 à D20 puis bull. Un double rapporte sa valeur, un tour à vide la coûte.',
+};
 
 class _NewGameScreenState extends State<NewGameScreen> {
   _Mode _mode = _modes[1];
@@ -53,17 +68,14 @@ class _NewGameScreenState extends State<NewGameScreen> {
   }
 
   void _pickMode(_Mode m) {
-    if (m.start == null) {
+    if (!m.playable) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             backgroundColor: Td.asphalteHaut,
             duration: const Duration(seconds: 2),
-            content: Text(
-              '${m.title} arrive bientôt. Pour l’instant : 301 ou 501.',
-              style: TdText.inter(15, 20, 400, Td.ink),
-            ),
+            content: Text('${m.title} arrive bientôt.', style: TdText.inter(15, 20, 400, Td.ink)),
           ),
         );
       return;
@@ -79,7 +91,8 @@ class _NewGameScreenState extends State<NewGameScreen> {
         builder: (_) => SalonScreen(
           config: GameConfig(
             players: List.of(_order),
-            startScore: _mode.start!,
+            startScore: _mode.start ?? 501,
+            mode: _mode.mode,
             doubleOut: _out == 'Double',
             legsToWin: _legs,
           ),
@@ -178,22 +191,27 @@ class _NewGameScreenState extends State<NewGameScreen> {
                         TdChip(label: 'Invité', icon: LucideIcons.plus, onTap: _addGuest),
                       ],
                     ),
-                    const SizedBox(height: Td.s5),
-                    Text('Sortie', style: TdText.inter(13, 18, 600, Td.ink2)),
-                    const SizedBox(height: Td.s3),
-                    TdSegmented(
-                      options: const ['Double', 'Simple'],
-                      value: _out,
-                      touch: true,
-                      onChanged: (v) => setState(() => _out = v),
-                    ),
-                    const SizedBox(height: Td.s5),
-                    Text('Manches gagnantes', style: TdText.inter(13, 18, 600, Td.ink2)),
-                    const SizedBox(height: Td.s3),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TdStepper(value: _legs, min: 1, max: 5, onChanged: (v) => setState(() => _legs = v)),
-                    ),
+                    if (_mode.start != null) ...[
+                      const SizedBox(height: Td.s5),
+                      Text('Sortie', style: TdText.inter(13, 18, 600, Td.ink2)),
+                      const SizedBox(height: Td.s3),
+                      TdSegmented(
+                        options: const ['Double', 'Simple'],
+                        value: _out,
+                        touch: true,
+                        onChanged: (v) => setState(() => _out = v),
+                      ),
+                      const SizedBox(height: Td.s5),
+                      Text('Manches gagnantes', style: TdText.inter(13, 18, 600, Td.ink2)),
+                      const SizedBox(height: Td.s3),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TdStepper(value: _legs, min: 1, max: 5, onChanged: (v) => setState(() => _legs = v)),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: Td.s5),
+                      Text(_rules[_mode.mode]!, style: TdText.inter(15, 20, 400, Td.ink2)),
+                    ],
                     const Spacer(),
                     Text('Les potes rejoignent depuis leur iPhone.', style: TdText.inter(13, 18, 400, Td.ink3)),
                     const SizedBox(height: Td.s3),

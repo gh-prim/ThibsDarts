@@ -117,6 +117,8 @@ struct LivePlayer: Decodable, Equatable {
     let remaining: Int
     let average: Double?
     let legs: Int
+    /// Ligne propre au mode ("au 7", "2 demis", vies).
+    var detail: String?
 }
 
 /// Partie en direct publiée par le Pi.
@@ -132,6 +134,15 @@ struct LiveGame: Decodable, Equatable {
     let checkout: [String]?
     let players: [LivePlayer]
     let winner: String?
+
+    // Autres modes que le X01 (absents en 301 et 501).
+    var title: String?
+    var kind: String?
+    var scoreLabel: String?
+    var scoreValue: Int?
+    var youLabel: String?
+
+    var isX01: Bool { kind == nil }
 }
 
 struct LobbyInfo: Decodable, Equatable {

@@ -15,7 +15,11 @@ class PlayerSummary {
     this.status = PlayerStatus.waiting,
     this.message,
     this.ready = false,
+    this.detail,
   });
+
+  /// Ligne du dessous propre au mode ("au 7", "2 demis"), à la place de la moyenne.
+  final String? detail;
   final String name;
 
   /// Remplace la ligne du dessous ("Hôte", "Prêt"). Avec [ready], coche verte et bord vert.
@@ -41,7 +45,10 @@ class PlayerCard extends StatelessWidget {
     final active = player.status == PlayerStatus.active;
     final avg = player.average;
     final msg = player.message;
-    final sub = active
+    final det = player.detail;
+    final sub = det != null
+        ? (active ? 'Au tir · $det' : det)
+        : active
         ? (avg == null ? 'Au tir' : 'Au tir · ${formatAverage(avg)}')
         : (avg == null ? 'En attente' : 'moy. ${formatAverage(avg)}');
     return AnimatedContainer(

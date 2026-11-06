@@ -7,8 +7,17 @@ import '../theme/tokens.dart';
 enum ScoreState { normal, out, bust }
 
 class ScoreDisplay extends StatelessWidget {
-  const ScoreDisplay({super.key, required this.value, required this.label, this.sub, this.state = ScoreState.normal});
+  const ScoreDisplay({
+    super.key,
+    required this.value,
+    required this.label,
+    this.sub,
+    this.state = ScoreState.normal,
+    this.size = 140,
+  });
 
+  /// 140 (l), 88 (m) ou 48 (s).
+  final double size;
   final int value;
   final String label;
   final String? sub;
@@ -19,11 +28,11 @@ class ScoreDisplay extends StatelessWidget {
     Widget v = Text(
       '$value',
       style: TdText.rounded(
-        140,
-        900,
+        size,
+        size >= 140 ? 900 : 800,
         state == ScoreState.bust ? Td.erreur : Td.ink,
-        height: 132,
-      ).copyWith(letterSpacing: -4),
+        height: size >= 140 ? 132 : (size >= 88 ? 88 : 52),
+      ).copyWith(letterSpacing: size >= 140 ? -4 : (size >= 88 ? -2 : 0)),
     );
     if (state == ScoreState.out) {
       v = ShaderMask(blendMode: BlendMode.srcIn, shaderCallback: (r) => Td.goldenHour.createShader(r), child: v);
@@ -216,10 +225,13 @@ class CheckoutHint extends StatelessWidget {
 
 /// Bannière (composant Banner).
 class TdBanner extends StatelessWidget {
-  const TdBanner({super.key, required this.text, this.error = true});
+  const TdBanner({super.key, required this.text, this.error = true, this.alert = false});
 
   final String text;
   final bool error;
+
+  /// Ton "alerte" : fond jaune fluo, triangle.
+  final bool alert;
 
   @override
   Widget build(BuildContext context) {
@@ -227,12 +239,16 @@ class TdBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: Td.s4, vertical: Td.s3),
       decoration: BoxDecoration(
-        color: error ? Td.erreurFond : Td.infoFond,
+        color: alert ? const Color(0x24FFE14D) : (error ? Td.erreurFond : Td.infoFond),
         borderRadius: BorderRadius.circular(Td.rMd),
       ),
       child: Row(
         children: [
-          Icon(error ? LucideIcons.circleAlert : LucideIcons.info, size: 20, color: error ? Td.erreur : Td.ciel),
+          Icon(
+            alert ? LucideIcons.triangleAlert : (error ? LucideIcons.circleAlert : LucideIcons.info),
+            size: 20,
+            color: alert ? Td.fluo : (error ? Td.erreur : Td.ciel),
+          ),
           const SizedBox(width: Td.s3),
           Expanded(child: Text(text, style: TdText.inter(15, 20, 400, Td.ink))),
         ],

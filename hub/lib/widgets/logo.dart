@@ -1,38 +1,22 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-import '../theme/tokens.dart';
+enum LogoVariant { full, icon }
 
-/// Logo ThibsDarts : cible stylisée + nom.
+/// Logo ThibsDarts du design system (soleil couchant + fléchette + mot).
+/// SVG repris tel quel du composant Logo de Claude Design.
 class Logo extends StatelessWidget {
-  const Logo({super.key, this.height = 40});
+  const Logo({super.key, this.height = 48, this.variant = LogoVariant.full});
 
   final double height;
+  final LogoVariant variant;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: height,
-          height: height,
-          decoration: const BoxDecoration(shape: BoxShape.circle, gradient: Td.goldenHour),
-          alignment: Alignment.center,
-          child: Container(
-            width: height * 0.42,
-            height: height * 0.42,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Td.beton),
-            alignment: Alignment.center,
-            child: Container(
-              width: height * 0.14,
-              height: height * 0.14,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: Td.fluo),
-            ),
-          ),
-        ),
-        SizedBox(width: height * 0.3),
-        Text('ThibsDarts', style: TdText.title.copyWith(fontSize: height * 0.7, height: 1)),
-      ],
+    return SvgPicture.asset(
+      variant == LogoVariant.full ? 'assets/brand/logo-full.svg' : 'assets/brand/logo-icon.svg',
+      height: height,
+      semanticsLabel: 'ThibsDarts',
     );
   }
 }

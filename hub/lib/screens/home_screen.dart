@@ -37,7 +37,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               const Row(
                 children: [
-                  Logo(),
+                  Logo(height: 40),
                   Spacer(),
                   Row(
                     spacing: Td.s2,

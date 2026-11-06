@@ -80,5 +80,24 @@ void main() {
     await shot('6-hors-cible');
     await advance(1500);
     await shot('7-fin-de-tour');
+
+    await tester.tap(find.text('Corriger'));
+    await advance(600);
+    await tester.tap(find.text('Fléchette 3'));
+    await advance(200);
+    await tester.tap(find.text('19').last);
+    await tester.tap(find.text('Triple').last);
+    await advance(300);
+    await shot('8-correction');
+    await tester.tap(find.text('Valider'));
+    await advance(600);
+    await shot('9-corrige');
+
+    // Retour accueil puis Nouvelle partie
+    await tester.longPress(find.bySemanticsLabel('ThibsDarts').first);
+    await advance(600);
+    await tester.tap(find.text('Nouvelle partie'));
+    await advance(600);
+    await shot('10-nouvelle-partie');
   });
 }

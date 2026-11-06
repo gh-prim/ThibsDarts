@@ -5,6 +5,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../game_config.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/dartboard.dart';
@@ -15,29 +16,40 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
+import 'correction_screen.dart';
 
 /// Partie 501 (planches J501*). En attendant le Pi 5, c'est un simulateur :
 /// toucher le plateau lance une fléchette à cet endroit.
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.playerNames, this.startScore = 501, this.averages = const {}});
+  const GameScreen({super.key, required this.config});
 
-  final List<String> playerNames;
-  final int startScore;
-  final Map<String, double> averages;
+  final GameConfig config;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen> {
-  late final X01Game _game = _newGame();
+  late X01Game _game = _newGame();
+  int _leg = 1;
+  int _starter = 0;
+  final Map<String, int> _legsWon = {};
   final List<BoardHit> _hits = [];
   ThrowOutcome? _last;
   DartThrow? _tagDart;
   int _tagKey = 0;
   Timer? _tagTimer;
 
-  X01Game _newGame() => X01Game(playerNames: widget.playerNames, startScore: widget.startScore);
+  GameConfig get _cfg => widget.config;
+
+  /// Chaque manche, le joueur suivant commence.
+  X01Game _newGame() {
+    final names = _cfg.players;
+    final order = [...names.sublist(_starter % names.length), ...names.sublist(0, _starter % names.length)];
+    return X01Game(playerNames: order, startScore: _cfg.startScore, doubleOut: _cfg.doubleOut);
+  }
+
+  bool get _matchOver => _game.winner != null && (_legsWon[_game.winner!.name] ?? 0) >= _cfg.legsToWin;
 
   @override
   void dispose() {
@@ -49,6 +61,7 @@ class _GameScreenState extends State<GameScreen> {
     if (_game.awaitingNextPlayer || _game.isFinished) return;
     setState(() {
       _last = _game.throwDart(d);
+      if (_last == ThrowOutcome.checkout) _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
       _hits.add(BoardHit(d, pos, _hits.length + 1));
       _tagDart = d;
       _tagKey++;
@@ -66,20 +79,46 @@ class _GameScreenState extends State<GameScreen> {
     _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
   }
 
-  void _correct() {
-    // Provisoire : annule la dernière fléchette (le pavé de correction viendra ensuite).
-    if (_hits.isEmpty) return;
+  Future<void> _correct() async {
+    if (_matchOver) return;
+    final c = await Navigator.of(context).push<Correction>(MaterialPageRoute(
+      builder: (_) => CorrectionScreen(turn: _game.currentTurn, hits: List.of(_hits)),
+    ));
+    if (c == null || !mounted) return;
+    final hadWinner = _game.winner;
     setState(() {
-      _game.undoLastDart();
-      _hits.removeLast();
-      _last = null;
+      if (hadWinner != null) _legsWon.update(hadWinner.name, (n) => n - 1);
+      _last = _game.correctDart(c.index, c.dart);
+      if (_game.winner != null) _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
+      // On garde la position touchée pour les fléchettes inchangées.
+      final kept = <BoardHit>[];
+      for (var i = 0; i < _game.currentTurn.length; i++) {
+        final d = _game.currentTurn[i];
+        final old = i < _hits.length ? _hits[i] : null;
+        kept.add(old != null && old.dart == d ? old : BoardHit(d, boardPositionFor(d), i + 1));
+      }
+      _hits
+        ..clear()
+        ..addAll(kept);
       _tagDart = null;
     });
   }
 
   void _endTurn() {
-    if (_game.isFinished) {
+    if (_matchOver) {
       Navigator.of(context).pop();
+      return;
+    }
+    if (_game.isFinished) {
+      // Manche suivante.
+      setState(() {
+        _leg++;
+        _starter++;
+        _game = _newGame();
+        _hits.clear();
+        _last = null;
+        _tagDart = null;
+      });
       return;
     }
     setState(() {
@@ -132,7 +171,13 @@ class _GameScreenState extends State<GameScreen> {
 
     final Widget info;
     if (g.isFinished) {
-      info = TdBanner(text: '${p.name} sort en ${p.turns.fold<int>(0, (n, t) => n + t.length)} fléchettes.', error: false);
+      final won = _legsWon[p.name] ?? 0;
+      info = TdBanner(
+        text: _matchOver
+            ? '${p.name} gagne la partie, $won manche${won > 1 ? 's' : ''} à ${_cfg.legsToWin == won ? _bestOther() : 0}.'
+            : '${p.name} prend la manche $_leg. $won sur ${_cfg.legsToWin}.',
+        error: false,
+      );
     } else if (bust) {
       info = TdBanner(text: 'Bust. On reprend à ${g.turnStartScore}.');
     } else if (over) {
@@ -154,7 +199,7 @@ class _GameScreenState extends State<GameScreen> {
       for (var i = 0; i < g.players.length; i++)
         PlayerSummary(
           g.players[i].name,
-          g.players[i].turns.isEmpty ? (widget.averages[g.players[i].name] ?? 0) : g.players[i].average,
+          g.players[i].turns.isEmpty ? (demoAverages[g.players[i].name] ?? 0) : g.players[i].average,
           score: g.players[i].remaining,
           status: g.winner == g.players[i]
               ? PlayerStatus.winner
@@ -185,7 +230,7 @@ class _GameScreenState extends State<GameScreen> {
                           child: const Logo(variant: LogoVariant.icon, height: 44),
                         ),
                         const Spacer(),
-                        Text('${widget.startScore} · Manche 1', style: TdText.inter(15, 20, 400, Td.ink2)),
+                        Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
                       ],
                     ),
                     const SizedBox(height: Td.s3),
@@ -295,7 +340,7 @@ class _GameScreenState extends State<GameScreen> {
                           onPressed: _outOfBoard,
                         ),
                         TdButton(
-                          label: g.isFinished ? 'Terminer' : 'Fin de tour',
+                          label: _matchOver ? 'Terminer' : g.isFinished ? 'Manche suivante' : 'Fin de tour',
                           icon: LucideIcons.arrowRight,
                           variant: g.awaitingNextPlayer ? TdButtonVariant.primary : TdButtonVariant.secondary,
                           height: Td.ciblePi,
@@ -311,6 +356,13 @@ class _GameScreenState extends State<GameScreen> {
         ),
       ),
     );
+  }
+}
+
+extension on _GameScreenState {
+  int _bestOther() {
+    final w = _game.winner?.name;
+    return _legsWon.entries.where((e) => e.key != w).fold<int>(0, (m, e) => e.value > m ? e.value : m);
   }
 }
 

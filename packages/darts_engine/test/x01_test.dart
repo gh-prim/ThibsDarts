@@ -61,6 +61,26 @@ void main() {
       expect(g.throwDart(const DartThrow.double(6)), ThrowOutcome.checkout);
     });
 
+    test('corriger une fléchette recalcule le tour', () {
+      final g = X01Game(playerNames: ['Thibs'], startScore: 100);
+      g.throwDart(const DartThrow.single(20));
+      g.throwDart(const DartThrow.single(3));
+      expect(g.currentPlayer.remaining, 77);
+      g.correctDart(1, const DartThrow.triple(19));
+      expect(g.currentPlayer.remaining, 23);
+      expect(g.currentTurn.length, 2);
+    });
+
+    test('une correction peut faire finir', () {
+      final g = X01Game(playerNames: ['Thibs'], startScore: 40);
+      g.throwDart(const DartThrow.single(20));
+      g.throwDart(const DartThrow.single(10));
+      g.throwDart(const DartThrow.single(5));
+      expect(g.correctDart(0, const DartThrow.double(20)), ThrowOutcome.checkout);
+      expect(g.currentTurn.length, 1);
+      expect(g.winner?.name, 'Thibs');
+    });
+
     test('moyenne 3 fléchettes', () {
       final g = X01Game(playerNames: ['Thibs']);
       for (var i = 0; i < 3; i++) {

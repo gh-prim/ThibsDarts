@@ -115,17 +115,36 @@ class X01Game {
   /// Annule la dernière fléchette du tour en cours.
   void undoLastDart() {
     if (_turn.isEmpty) return;
+    _replay(List.of(_turn)..removeLast());
+  }
+
+  /// Corrige la fléchette [index] (0 à 2) du tour en cours et recalcule le tour.
+  /// Si la correction fait finir ou buster plus tôt, les fléchettes suivantes sont ignorées.
+  ThrowOutcome? correctDart(int index, DartThrow dart) {
+    if (index < 0 || index > _turn.length || index > 2) throw RangeError.index(index, _turn);
+    final darts = List.of(_turn);
+    if (index == darts.length) {
+      darts.add(dart);
+    } else {
+      darts[index] = dart;
+    }
+    return _replay(darts);
+  }
+
+  ThrowOutcome? _replay(List<DartThrow> darts) {
     if (_turnClosed) {
       currentPlayer.turns.removeLast();
       _turnClosed = false;
       winner = null;
     }
-    final replay = List.of(_turn)..removeLast();
     _turn.clear();
     currentPlayer.remaining = _turnStart;
-    for (final d in replay) {
-      throwDart(d);
+    ThrowOutcome? last;
+    for (final d in darts) {
+      last = throwDart(d);
+      if (_turnClosed) break;
     }
+    return last;
   }
 
   void _closeTurn() {

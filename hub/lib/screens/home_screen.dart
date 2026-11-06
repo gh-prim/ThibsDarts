@@ -7,7 +7,9 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
+import '../game_config.dart';
 import 'game_screen.dart';
+import 'new_game_screen.dart';
 
 /// Accueil : le Pi attend une partie.
 class HomeScreen extends StatelessWidget {
@@ -19,13 +21,6 @@ class HomeScreen extends StatelessWidget {
     PlayerSummary('Max', 48.1),
     PlayerSummary('Inès', 41.7),
   ];
-
-  void _soon(BuildContext context, String what) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: Td.asphalteHaut,
-      content: Text('$what arrive à la prochaine étape.', style: TdText.body.copyWith(color: Td.ink)),
-    ));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,8 +71,7 @@ class HomeScreen extends StatelessWidget {
                             icon: LucideIcons.refreshCw,
                             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                               builder: (_) => GameScreen(
-                                playerNames: [for (final p in _lastPlayers) p.name],
-                                averages: {for (final p in _lastPlayers) p.name: p.average},
+                                config: GameConfig(players: [for (final p in _lastPlayers) p.name]),
                               ),
                             )),
                           ),
@@ -86,7 +80,9 @@ class HomeScreen extends StatelessWidget {
                             label: 'Nouvelle partie',
                             icon: LucideIcons.plus,
                             variant: TdButtonVariant.secondary,
-                            onPressed: () => _soon(context, 'Le choix du mode'),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(builder: (_) => const NewGameScreen()),
+                            ),
                           ),
                         ],
                       ),

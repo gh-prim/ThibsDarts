@@ -36,6 +36,21 @@ DartThrow dartAt(Offset p) {
   return DartThrow.single(sector);
 }
 
+/// Position "type" d'une fléchette sur le plateau (comme dartXY du design system),
+/// pour une fléchette saisie à la main.
+Offset boardPositionFor(DartThrow d) {
+  Offset polar(double r, double deg) {
+    final a = (deg - 90) * math.pi / 180;
+    return Offset(r * math.cos(a), r * math.sin(a));
+  }
+
+  if (d.isMiss) return polar(186, 9 * 18 + 6);
+  if (d.sector == 25) return d.multiplier == 2 ? const Offset(1.5, -2) : const Offset(8, -8);
+  final i = sectors.indexOf(d.sector);
+  final r = switch (d.multiplier) { 3 => 103.0, 2 => 166.0, _ => 135.0 };
+  return polar(r, i * 18.0 + 2);
+}
+
 /// Plateau virtuel (composant Dartboard) : segments touchés en couleur,
 /// impacts numérotés, segment visé en bleu. Touchable pour le simulateur.
 class Dartboard extends StatelessWidget {

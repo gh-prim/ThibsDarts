@@ -210,6 +210,16 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       final ClockGame c => ('$me vise le', c.target[g.currentIndex], 'Tu vises le'),
       final ShanghaiGame s => ('Numéro de la manche', s.target, 'Numéro de la manche'),
       final KillerGame k => ('Vies de $me', k.life[g.currentIndex], 'Tes vies'),
+      final HalveItGame h => (
+        'Score de $me, cible ${h.target.label}',
+        h.points[g.currentIndex],
+        'Ton score, cible ${h.target.label}',
+      ),
+      final Bobs27Game b => (
+        'Score de $me, cible ${_doubleLabel(b.target)}',
+        b.points[g.currentIndex],
+        'Ton score, cible ${_doubleLabel(b.target)}',
+      ),
       _ => ('Score de $me', g.scoreOf(g.currentIndex), 'Ton score'),
     };
     lobby.publishGame({

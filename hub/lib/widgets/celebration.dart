@@ -107,11 +107,7 @@ class _CelebrationState extends State<Celebration> with SingleTickerProviderStat
               mainAxisSize: MainAxisSize.min,
               children: [
                 win
-                    ? HitTag(
-                        kind: TagKind.triple,
-                        text: widget.tag ?? 'GAGNÉ',
-                        fontSize: widget.tag == null ? 112 : 96,
-                      )
+                    ? HitTag(kind: TagKind.triple, text: widget.tag ?? 'GAGNÉ', fontSize: widget.tag == null ? 112 : 96)
                     : const HitTag(kind: TagKind.oneEighty, text: '180', fontSize: 172),
                 const SizedBox(height: Td.s4 + Td.s4),
                 _up(700, Text(copy, style: TdText.inter(17, 22, 500, Td.ink), textAlign: TextAlign.center)),

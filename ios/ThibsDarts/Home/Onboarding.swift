@@ -141,6 +141,7 @@ struct ProfileView: View {
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { photo = $0 } }
         .confirmationDialog("Se déconnecter ?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Se déconnecter", role: .destructive) { app.logout() }
+            Button("Annuler", role: .cancel) {}
         } message: {
             Text(app.isOwner
                  ? "Tes parties restent sur la cible. Pour revenir en propriétaire, il te faudra ton code."

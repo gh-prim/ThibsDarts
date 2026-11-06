@@ -19,9 +19,9 @@ struct PinPad: View {
         VStack(spacing: Td.s6) {
             VStack(spacing: Td.s2) {
                 Text(title).font(.td(28, .bold)).tracking(-0.3).multilineTextAlignment(.center)
-                if let detail {
-                    Text(detail).font(.td(15)).foregroundStyle(Td.ink2).multilineTextAlignment(.center)
-                }
+                // Hauteur fixe : le pavé ne bouge pas quand le texte change.
+                Text(detail ?? " ").font(.td(15)).foregroundStyle(Td.ink2).multilineTextAlignment(.center)
+                    .lineLimit(3, reservesSpace: true)
             }
             HStack(spacing: Td.s4) {
                 ForEach(0..<4, id: \.self) { i in

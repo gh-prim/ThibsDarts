@@ -312,6 +312,7 @@ class Lobby extends ChangeNotifier {
           if (_pinFails >= 5) {
             _pinFails = 0;
             _pinLockedUntil = now.add(const Duration(minutes: 1));
+            return _send(res, {'error': 'bloque', 'wait': 60}, status: 429);
           }
           return _send(res, {'error': 'pin', 'left': 5 - _pinFails}, status: 403);
         }

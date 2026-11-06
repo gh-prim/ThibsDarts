@@ -1,0 +1,11 @@
+name: darts_engine
+description: Règles des jeux ThibsDarts (501, Cricket...), en Dart pur.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.7
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6

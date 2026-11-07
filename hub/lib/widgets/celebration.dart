@@ -24,6 +24,7 @@ class Celebration extends StatefulWidget {
     this.copy,
     this.stats = const [],
     this.onAgain,
+    this.homeLabel = 'Accueil',
     this.onHome,
     this.onTap,
   });
@@ -38,6 +39,9 @@ class Celebration extends StatefulWidget {
   final String? copy;
   final List<CelebrationStat> stats;
   final VoidCallback? onAgain;
+
+  /// Texte du bouton de sortie ("Suite du tournoi").
+  final String homeLabel;
   final VoidCallback? onHome;
 
   /// 180 : toucher l'écran pour continuer.
@@ -138,19 +142,20 @@ class _CelebrationState extends State<Celebration> with SingleTickerProviderStat
                       mainAxisSize: MainAxisSize.min,
                       spacing: Td.s3,
                       children: [
-                        SizedBox(
-                          width: 240,
-                          child: TdButton(
-                            label: 'Rejouer',
-                            icon: LucideIcons.refreshCw,
-                            height: Td.ciblePi,
-                            onPressed: widget.onAgain,
+                        if (widget.onAgain != null)
+                          SizedBox(
+                            width: 240,
+                            child: TdButton(
+                              label: 'Rejouer',
+                              icon: LucideIcons.refreshCw,
+                              height: Td.ciblePi,
+                              onPressed: widget.onAgain,
+                            ),
                           ),
-                        ),
                         SizedBox(
                           width: 240,
                           child: TdButton(
-                            label: 'Accueil',
+                            label: widget.homeLabel,
                             icon: LucideIcons.house,
                             variant: TdButtonVariant.secondary,
                             height: Td.ciblePi,

@@ -186,5 +186,30 @@ void main() {
       (s, j) = await call('POST', '/api/tournament/cancel', body: {'player': ids['Max']}, token: keys['Max']);
       expect(j['tournament'], isNull);
     });
+
+    test('match joué sur la cible', () async {
+      final store = TournamentStore.instance;
+      final t = _with(0);
+      for (final n in ['Paul', 'Tom', 'Lou']) {
+        t.guests[n] = n;
+        t.entrants.add(n);
+      }
+      t.draw(Random(4));
+      t.state = 'en_cours';
+      await store.set(t);
+      final m = t.next!;
+      final cfg = store.startMatch(m.id)!;
+      expect(cfg.players, [store.nameOf(m.a!), store.nameOf(m.b!)]);
+      expect(cfg.legsToWin, 3);
+      expect(cfg.tournamentMatch, m.id);
+      expect(m.live, true);
+      // Partie arrêtée : le match reste à jouer.
+      store.endMatch(m.id);
+      expect(t.next?.id, m.id);
+      store.endMatch(m.id, legsA: 1, legsB: 3);
+      expect(m.winner, m.b);
+      expect(store.lastWin(m.b!), 'A battu ${store.nameOf(m.a!)} 3 à 1');
+      expect(store.public()!['next'], t.next!.id);
+    });
   });
 }

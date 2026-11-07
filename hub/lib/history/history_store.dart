@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../game_config.dart';
 import '../lobby/lobby.dart';
+import '../players/player_store.dart';
 import '../setup/owner_store.dart';
 
 /// Parties terminées, une ligne JSON par partie dans history.jsonl (partition /data sur le Pi).
@@ -25,6 +26,9 @@ class HistoryStore {
       if (p != null && !p.guest) return p.host ? 'owner' : p.id;
     }
     if (name == AppState.owner) return 'owner';
+    // Partie hors salon (tournoi) : un profil de la cible garde son identifiant.
+    final prof = PlayerStore.instance.byName(name);
+    if (prof != null) return prof.id;
     return 'guest:$name';
   }
 

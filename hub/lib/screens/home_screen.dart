@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../game_config.dart';
 import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
+import '../tournament/tournament.dart';
 import '../widgets/logo.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
@@ -12,6 +13,7 @@ import '../widgets/td_button.dart';
 import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
 import 'salon_screen.dart';
+import 'tournament_screen.dart';
 
 /// Accueil : le Pi attend une partie.
 class HomeScreen extends StatefulWidget {
@@ -46,8 +48,40 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {}); // la dernière partie a pu changer
   }
 
+  /// Tournoi dont on a déjà fêté le vainqueur : l'accueil normal revient.
+  String? _championSeen;
+
   @override
   Widget build(BuildContext context) {
+    // Un tournoi lancé depuis l'iPhone prend l'accueil : annonce du match suivant, puis le vainqueur.
+    return ListenableBuilder(
+      listenable: TournamentStore.instance,
+      builder: (context, _) {
+        final t = TournamentStore.instance.current;
+        final next = t?.state == 'en_cours' ? t!.next : null;
+        if (next != null) {
+          return TournamentMatchView(
+            tournament: t!,
+            match: next,
+            onLaunch: () {
+              final cfg = TournamentStore.instance.startMatch(next.id);
+              if (cfg != null) _open(gameScreenFor(cfg));
+            },
+          );
+        }
+        final champion = t?.finished == true ? t!.champion : null;
+        if (champion != null && _championSeen != t!.id) {
+          return TournamentChampionView(
+            champion: TournamentStore.instance.nameOf(champion),
+            onDone: () => setState(() => _championSeen = t.id),
+          );
+        }
+        return _home(context);
+      },
+    );
+  }
+
+  Widget _home(BuildContext context) {
     final last = AppState.lastGame;
     final players = last?.players ?? [AppState.owner];
     return Scaffold(

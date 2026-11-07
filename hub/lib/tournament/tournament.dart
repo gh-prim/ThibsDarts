@@ -4,6 +4,9 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:darts_engine/darts_engine.dart';
+
+import '../game_config.dart';
 import '../players/player_store.dart';
 import '../setup/owner_store.dart';
 
@@ -264,6 +267,58 @@ class TournamentStore extends ChangeNotifier {
       await _file.writeAsString(jsonEncode(t.toJson()), flush: true);
     }
     notifyListeners();
+  }
+
+  /// Nom affiché d'un joueur du tournoi (profil ou invité).
+  String nameOf(String id) => current?.guests[id] ?? PlayerStore.instance.byId(id)?.nickname ?? '?';
+
+  /// Lance un match sur la cible : la partie démarre avec le joueur du haut du tableau.
+  GameConfig? startMatch(String matchId) {
+    final t = current;
+    final m = t?.match(matchId);
+    if (t == null || m == null || !m.ready) return null;
+    for (final id in [m.a!, m.b!]) {
+      final photo = PlayerStore.instance.photoPath(id);
+      if (photo != null && !t.guests.containsKey(id)) AppState.photos[nameOf(id)] = photo;
+    }
+    m.live = true;
+    save();
+    final x01 = int.tryParse(t.mode);
+    return GameConfig(
+      players: [nameOf(m.a!), nameOf(m.b!)],
+      startScore: x01 ?? 501,
+      legsToWin: x01 == null ? 1 : t.legsToWin,
+      mode: x01 == null ? GameMode.cricket : null,
+      tournamentMatch: matchId,
+    );
+  }
+
+  /// Fin de la partie d'un match : [legsA] et [legsB] dans l'ordre du tableau. Sans vainqueur
+  /// (partie arrêtée, égalité), le match redevient à jouer.
+  void endMatch(String matchId, {int? legsA, int? legsB}) {
+    final t = current;
+    final m = t?.match(matchId);
+    if (t == null || m == null) return;
+    m.live = false;
+    if (legsA != null && legsB != null) t.record(matchId, legsA, legsB);
+    save();
+  }
+
+  /// Le joueur a gagné son match du tour précédent : "A battu Hugo 3 à 1".
+  String? lastWin(String id) {
+    final t = current;
+    if (t == null) return null;
+    TournamentMatch? last;
+    for (final r in t.rounds) {
+      for (final m in r) {
+        if (m.winner == id) last = m;
+      }
+    }
+    if (last == null) return null;
+    if (last.bye) return "Qualifié d'office";
+    final other = last.a == id ? last.b! : last.a!;
+    final (w, l) = last.a == id ? (last.scoreA, last.scoreB) : (last.scoreB, last.scoreA);
+    return 'A battu ${nameOf(other)} $w à $l';
   }
 
   /// Tournoi pour les iPhone et l'Apple TV : noms et photos des joueurs, tours nommés.

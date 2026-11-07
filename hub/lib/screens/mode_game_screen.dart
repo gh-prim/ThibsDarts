@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../lobby/lobby.dart';
+import '../tournament/tournament.dart';
 import '../theme/tokens.dart';
 import '../widgets/celebration.dart';
 import '../widgets/dartboard.dart';
@@ -75,6 +76,16 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     _tagTimer?.cancel();
     _winTimer?.cancel();
     _save();
+    final match = _cfg.tournamentMatch;
+    if (match != null) {
+      // Match de tournoi en une manche : 1 à 0 pour le gagnant, rien en cas d'égalité ou d'arrêt.
+      final w = _g.isFinished && !_g.isDraw ? _g.winner : null;
+      TournamentStore.instance.endMatch(
+        match,
+        legsA: w == null ? null : (w == _cfg.players[0] ? 1 : 0),
+        legsB: w == null ? null : (w == _cfg.players[1] ? 1 : 0),
+      );
+    }
     if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
@@ -376,7 +387,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                 tag: _endTag,
                 copy: _endCopy,
                 stats: _winStats,
-                onAgain: _rematch,
+                onAgain: _cfg.tournamentMatch == null ? _rematch : null,
+                homeLabel: _cfg.tournamentMatch == null ? 'Accueil' : 'Suite du tournoi',
                 onHome: () => Navigator.of(context).pop(),
               ),
             ),

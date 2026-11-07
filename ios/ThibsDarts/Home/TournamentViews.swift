@@ -75,10 +75,15 @@ struct TournamentCreateView: View {
                         label("Mode")
                         SegmentedControl(options: ["501", "301", "Cricket"], value: $mode)
                             .disabled(!boss)
-                        HStack {
-                            Text("Manches gagnantes").font(.td(15, .semibold))
-                            Spacer()
-                            TdStepper(value: $legs, range: 1...5).disabled(!boss)
+                        if mode == "Cricket" {
+                            Text("Au Cricket, chaque match se joue en une manche.")
+                                .font(.td(15)).foregroundStyle(Td.ink2)
+                        } else {
+                            HStack {
+                                Text("Manches gagnantes").font(.td(15, .semibold))
+                                Spacer()
+                                TdStepper(value: $legs, range: 1...5).disabled(!boss)
+                            }
                         }
                         HStack(alignment: .firstTextBaseline) {
                             label("Inscrits")

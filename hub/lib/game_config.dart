@@ -10,6 +10,7 @@ class GameConfig {
     this.doubleOut = true,
     this.legsToWin = 1,
     this.mode,
+    this.tournamentMatch,
   });
 
   final List<String> players;
@@ -17,6 +18,9 @@ class GameConfig {
   final int startScore;
   final bool doubleOut;
   final int legsToWin;
+
+  /// Match de tournoi joué par cette partie : le résultat remonte au tableau.
+  final String? tournamentMatch;
 
   String get label => mode == null ? '$startScore ${doubleOut ? 'double out' : 'single out'}' : title;
 
@@ -31,8 +35,14 @@ class GameConfig {
     GameMode.bobs27 => "Bob's 27",
   };
 
-  GameConfig withPlayers(List<String> names) =>
-      GameConfig(players: names, startScore: startScore, doubleOut: doubleOut, legsToWin: legsToWin, mode: mode);
+  GameConfig withPlayers(List<String> names) => GameConfig(
+    players: names,
+    startScore: startScore,
+    doubleOut: doubleOut,
+    legsToWin: legsToWin,
+    mode: mode,
+    tournamentMatch: tournamentMatch,
+  );
 }
 
 /// État de l'appareil, en mémoire en attendant SQLite.

@@ -318,7 +318,8 @@ class Lobby extends ChangeNotifier {
         id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
         organizer: me!.id,
         mode: mode,
-        legsToWin: ((b['legsToWin'] as num?)?.toInt() ?? 3).clamp(1, 5),
+        // Le Cricket se joue en une manche.
+        legsToWin: mode == 'cricket' ? 1 : ((b['legsToWin'] as num?)?.toInt() ?? 3).clamp(1, 5),
         createdAt: DateTime.now(),
       )..entrants.add(me.id);
       await tournaments.set(t);
@@ -334,7 +335,7 @@ class Lobby extends ChangeNotifier {
         if (!Tournament.modes.contains(mode)) return _send(res, {'error': 'mode'}, status: 400);
         t
           ..mode = mode
-          ..legsToWin = ((b['legsToWin'] as num?)?.toInt() ?? t.legsToWin).clamp(1, 5);
+          ..legsToWin = mode == 'cricket' ? 1 : ((b['legsToWin'] as num?)?.toInt() ?? t.legsToWin).clamp(1, 5);
       case 'join' || 'add':
         final who = action == 'join' ? me : store.byId(b['id'] as String?);
         if (who == null) return _send(res, {'error': 'joueur'}, status: 404);

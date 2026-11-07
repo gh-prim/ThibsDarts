@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../lobby/lobby.dart';
+import '../tournament/tournament.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/celebration.dart';
@@ -84,6 +85,7 @@ class _GameScreenState extends State<GameScreen> {
     _tagTimer?.cancel();
     _winTimer?.cancel();
     _save();
+    _reportTournament();
     if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
@@ -199,6 +201,18 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   bool _saved = false;
+
+  /// Match de tournoi : les manches gagnées remontent au tableau (rien si la partie est arrêtée).
+  void _reportTournament() {
+    final id = _cfg.tournamentMatch;
+    if (id == null) return;
+    final over = _matchOver;
+    TournamentStore.instance.endMatch(
+      id,
+      legsA: over ? _legsWon[_cfg.players[0]] ?? 0 : null,
+      legsB: over ? _legsWon[_cfg.players[1]] ?? 0 : null,
+    );
+  }
 
   /// Enregistre la partie finie dans l'historique (une fois, en quittant ou avant la revanche).
   void _save() {
@@ -597,7 +611,9 @@ class _GameScreenState extends State<GameScreen> {
                 kind: CelebrationKind.win,
                 winner: g.winner!.name,
                 stats: _winStats(g.winner!.name),
-                onAgain: _rematch,
+                // Pas de revanche en tournoi : on revient au tableau.
+                onAgain: _cfg.tournamentMatch == null ? _rematch : null,
+                homeLabel: _cfg.tournamentMatch == null ? 'Accueil' : 'Suite du tournoi',
                 onHome: () => Navigator.of(context).pop(),
               ),
             )

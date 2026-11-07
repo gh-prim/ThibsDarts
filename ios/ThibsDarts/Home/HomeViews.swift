@@ -25,6 +25,7 @@ struct HomeView: View {
                 .padding(.horizontal, Td.s4)
                 .padding(.bottom, Td.s2)
                 .opacity(tab == "profil" ? 0 : 1)
+                .allowsHitTesting(tab != "profil")
         }
         .environmentObject(history)
         .fullScreenCover(item: $app.lobby) { _ in SalonView().environmentObject(app) }

@@ -401,7 +401,7 @@ struct WhoView: View {
                             ObHeader(title: "C’est qui ?", detail: "Choisis ton profil sur la cible.")
                             ForEach(players) { p in
                                 Button { chosen = p } label: {
-                                    Row(title: p.nickname, detail: p.owner ? "Propriétaire" : (p.pin ? nil : "Sans code")) {
+                                    Row(title: p.nickname, detail: p.owner ? (p.pin ? "Propriétaire" : "Propriétaire, sans code") : (p.pin ? nil : "Sans code")) {
                                         Avatar(name: p.nickname, url: p.photo ? base.appendingPathComponent("api/players/\(p.id)/photo") : nil, size: 40)
                                     }
                                 }

@@ -149,7 +149,7 @@ struct ProfileView: View {
         }
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { photo = $0 } }
         .sheet(isPresented: $addFriend) { AddFriendView().environmentObject(app) }
-        .confirmationDialog("Se déconnecter ?", isPresented: $confirmLogout, titleVisibility: .visible) {
+        .alert("Se déconnecter ?", isPresented: $confirmLogout) {
             Button("Se déconnecter", role: .destructive) { app.logout() }
             Button("Annuler", role: .cancel) {}
         } message: {

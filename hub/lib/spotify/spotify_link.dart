@@ -39,6 +39,8 @@ class SpotifyLink {
   Future<void> _save() async {
     await _file.parent.create(recursive: true);
     await _file.writeAsString(jsonEncode({'clientId': _clientId, 'refreshToken': _refresh}), flush: true);
+    // Le jeton donne accès au compte Spotify : lisible par le hub seulement.
+    if (!Platform.isWindows) await Process.run('chmod', ['600', _file.path]);
   }
 
   Future<void> link(String clientId, String refreshToken) async {

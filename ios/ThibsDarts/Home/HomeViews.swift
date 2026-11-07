@@ -45,6 +45,9 @@ private struct PlayTab: View {
     @State private var showJoin = false
     @State private var showCreate = false
     @State private var created: (LobbyInfo, URL)?
+    @State private var tournament: TournamentInfo?
+    @State private var showTournament = false
+    @State private var startingTournament = false
 
     var body: some View {
         Stage {
@@ -60,7 +63,10 @@ private struct PlayTab: View {
                     HStack(spacing: Td.s2) {
                         TdButton(title: "Créer", variant: .secondary, icon: .plus, block: true) { create() }
                         TdButton(title: "Code", variant: .secondary, icon: .search, block: true) { showJoin = true }
+                        TdButton(title: "Tournoi", variant: .secondary, icon: .trophy, block: true,
+                                 state: startingTournament ? .loading : .normal) { openTournament() }
                     }
+                    tournamentCard
                     if let error { Banner(text: error, error: true) }
                     Text("Ta dernière partie").font(.td(13, .semibold)).foregroundStyle(Td.ink2).padding(.top, Td.s2)
                     if let last = history.matches.first {
@@ -83,6 +89,11 @@ private struct PlayTab: View {
                 .presentationBackground(Td.beton)
         }
         .fullScreenCover(isPresented: $showJoin) { JoinView(onBack: { showJoin = false }).environmentObject(app) }
+        .fullScreenCover(isPresented: $showTournament) {
+            if let base = app.piBase {
+                TournamentFlow(base: base, onClose: { showTournament = false }).environmentObject(app)
+            }
+        }
         .fullScreenCover(isPresented: $showCreate, onDismiss: {
             // Le salon créé s'affiche une fois Nouvelle partie fermé.
             if let c = created {
@@ -95,6 +106,56 @@ private struct PlayTab: View {
                 showCreate = false
             }
             .environmentObject(app)
+        }
+    }
+
+    /// Ouvre le tournoi de la cible, ou en crée un (l'iPhone en devient l'organisateur).
+    private func openTournament() {
+        guard let base = app.piBase else {
+            error = "Scanne d’abord le QR code d’un salon pour relier ton iPhone à la cible."
+            return
+        }
+        error = nil
+        if let t = tournament, t.state != "fini" {
+            showTournament = true
+            return
+        }
+        startingTournament = true
+        Task {
+            defer { startingTournament = false }
+            do {
+                tournament = try await LobbyAPI.tournamentAction(nil, at: base, app: app, ["mode": "501", "legsToWin": 3])
+                showTournament = true
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    /// Tournoi en cours sur la cible : inscriptions ouvertes, tirage fait ou matchs en cours.
+    @ViewBuilder private var tournamentCard: some View {
+        if let t = tournament, t.state != "fini" {
+            let inside = t.entrants.contains { $0.id == app.playerId }
+            Button { showTournament = true } label: {
+                HStack(spacing: Td.s3) {
+                    Icon(name: .trophy, size: 24).foregroundStyle(Td.sunset)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(t.name).font(.td(15, .bold)).foregroundStyle(Td.ink)
+                        Text(t.state == "inscriptions"
+                             ? (inside ? "Tu es inscrit · \(t.summary)" : "Inscriptions ouvertes · \(t.summary)")
+                             : (t.state == "tirage" ? "Tirage au sort fait · \(t.summary)" : "En cours · \(t.summary)"))
+                            .font(.td(13)).foregroundStyle(Td.ink2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer(minLength: 0)
+                    Icon(name: .chevronRight, size: 20).foregroundStyle(Td.ink3)
+                }
+                .padding(.horizontal, Td.s4)
+                .padding(.vertical, 14)
+                .background(RoundedRectangle(cornerRadius: Td.rLg).fill(Td.sunset.opacity(0.16)))
+                .overlay(RoundedRectangle(cornerRadius: Td.rLg).strokeBorder(Td.sunset.opacity(0.4)))
+            }
+            .buttonStyle(PressScale())
         }
     }
 
@@ -189,6 +250,7 @@ private struct PlayTab: View {
         while !Task.isCancelled {
             if let base = app.piBase {
                 info = try? await LobbyAPI.lobby(at: base)
+                if let t = try? await LobbyAPI.tournament(at: base) { tournament = t } else if info != nil { tournament = nil }
             }
             try? await Task.sleep(for: .seconds(2))
         }

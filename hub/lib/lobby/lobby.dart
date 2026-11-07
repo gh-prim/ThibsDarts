@@ -13,6 +13,7 @@ import '../history/history_store.dart';
 import '../players/player_store.dart';
 import '../setup/owner_store.dart';
 import '../spotify/spotify_link.dart';
+import '../tournament/tournament.dart';
 
 /// Un joueur du salon : le propriétaire (hôte), un pote venu avec son iPhone, ou un invité.
 class LobbyPlayer {
@@ -240,6 +241,7 @@ class Lobby extends ChangeNotifier {
       if (req.method == 'POST' && path == '/api/lobby/join') return await _join(req, res);
       if (req.method == 'POST' && path == '/api/lobby/create') return await _create(req, res);
       if (path == '/api/spotify' || path.startsWith('/api/spotify/')) return await _spotifyRoute(req, res, seg);
+      if (path == '/api/tournament' || path.startsWith('/api/tournament/')) return await _tournamentRoute(req, res, seg);
       if (req.method == 'POST' && path == '/api/lobby/stop') {
         // Un joueur du salon arrête la partie depuis son iPhone (confirmé dans l'app).
         final b = await _body(req);
@@ -294,6 +296,84 @@ class Lobby extends ChangeNotifier {
       return _send(res, {'ok': true});
     }
     return _send(res, {'error': 'introuvable'}, status: 404);
+  }
+
+  /// Tournoi : création et inscriptions depuis les iPhone, tirage et lancement par l'organisateur.
+  Future<void> _tournamentRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
+    final tournaments = TournamentStore.instance;
+    final action = seg.length > 2 ? seg[2] : null;
+    Future<void> reply() => _send(res, {'tournament': tournaments.public()});
+    if (req.method == 'GET' && action == null) return reply();
+    if (req.method != 'POST') return _send(res, {'error': 'introuvable'}, status: 404);
+    final b = await _body(req);
+    final store = PlayerStore.instance;
+    final me = store.byId(b['player'] as String?);
+    if (!_authorized(req, me)) return _send(res, {'error': 'cle'}, status: 401);
+    var t = tournaments.current;
+    if (action == null) {
+      if (t != null && !t.finished) return _send(res, {'error': 'en_cours'}, status: 409);
+      final mode = b['mode'] as String? ?? '501';
+      if (!Tournament.modes.contains(mode)) return _send(res, {'error': 'mode'}, status: 400);
+      t = Tournament(
+        id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+        organizer: me!.id,
+        mode: mode,
+        legsToWin: ((b['legsToWin'] as num?)?.toInt() ?? 3).clamp(1, 5),
+        createdAt: DateTime.now(),
+      )..entrants.add(me.id);
+      await tournaments.set(t);
+      return reply();
+    }
+    if (t == null) return _send(res, {'error': 'aucun'}, status: 404);
+    final boss = me!.id == t.organizer || me.owner;
+    switch (action) {
+      case 'settings':
+        if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'inscriptions') return _send(res, {'error': 'tire'}, status: 409);
+        final mode = b['mode'] as String? ?? t.mode;
+        if (!Tournament.modes.contains(mode)) return _send(res, {'error': 'mode'}, status: 400);
+        t
+          ..mode = mode
+          ..legsToWin = ((b['legsToWin'] as num?)?.toInt() ?? t.legsToWin).clamp(1, 5);
+      case 'join' || 'add':
+        final who = action == 'join' ? me : store.byId(b['id'] as String?);
+        if (who == null) return _send(res, {'error': 'joueur'}, status: 404);
+        if (action == 'add' && !boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'inscriptions') return _send(res, {'error': 'tire'}, status: 409);
+        if (!t.entrants.contains(who.id)) {
+          if (t.entrants.length >= Tournament.maxPlayers) return _send(res, {'error': 'complet'}, status: 410);
+          t.entrants.add(who.id);
+        }
+      case 'remove':
+        final id = b['id'] as String? ?? me.id;
+        if (id != me.id && !boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'inscriptions') return _send(res, {'error': 'tire'}, status: 409);
+        t.entrants.remove(id);
+      case 'draw':
+        if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'inscriptions' && t.state != 'tirage') return _send(res, {'error': 'lance'}, status: 409);
+        if (t.entrants.length < 3) return _send(res, {'error': 'pas_assez'}, status: 409);
+        t.draw();
+      case 'redo':
+        // Retour aux inscriptions après un tirage (quelqu'un arrive en retard).
+        if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'tirage') return _send(res, {'error': 'lance'}, status: 409);
+        t
+          ..rounds = []
+          ..state = 'inscriptions';
+      case 'start':
+        if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'tirage') return _send(res, {'error': 'pas_tire'}, status: 409);
+        t.state = 'en_cours';
+      case 'cancel':
+        if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        await tournaments.set(null);
+        return reply();
+      default:
+        return _send(res, {'error': 'introuvable'}, status: 404);
+    }
+    await tournaments.save();
+    return reply();
   }
 
   final Map<String, (int, DateTime?)> _fails = {};

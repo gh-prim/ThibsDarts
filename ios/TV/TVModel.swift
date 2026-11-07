@@ -14,6 +14,13 @@ final class TVModel: ObservableObject {
     @Published var nextUp: NextUp?
     /// Fête 180 en cours.
     @Published var fete180 = false
+    /// Tournoi de la cible (null sans tournoi).
+    @Published private(set) var tournament: TournamentInfo?
+    /// Le prochain match a changé à cette date : l'annonce passe d'abord, puis le tableau.
+    @Published private(set) var focusSince = Date()
+    /// Tournoi fini vu en direct : le tableau final reste affiché un moment.
+    private var finishedAt: Date?
+
     /// Mini player Spotify (compte du propriétaire relié sur le Pi).
     @Published var music: NowPlaying?
 
@@ -32,6 +39,8 @@ final class TVModel: ObservableObject {
 
     init() {
         base = defaults.url(forKey: "tvPiBase")
+        // Dev : forcer une cible (simulateur pointé sur un hub de test).
+        if let s = ProcessInfo.processInfo.environment["THIBSDARTS_PI"], let u = URL(string: s) { base = u }
     }
 
     // MARK: Connexion
@@ -69,11 +78,32 @@ final class TVModel: ObservableObject {
                 misses = 0
                 react(to: i)
                 info = i
+                if let t = try? await LobbyAPI.tournament(at: base) {
+                    follow(t)
+                } else {
+                    tournament = nil
+                }
             } catch {
                 misses += 1
                 if misses >= 10 { phase = .lost }
             }
             try? await Task.sleep(for: .seconds(info?.isPlaying == true ? 1 : 2))
+        }
+    }
+
+    private func follow(_ t: TournamentInfo) {
+        if t.next != tournament?.next { focusSince = Date() }
+        if t.state == "fini", tournament != nil, tournament?.state != "fini" { finishedAt = Date() }
+        tournament = t
+    }
+
+    /// Tournoi à montrer quand aucune partie ne tourne : tirage fait, en cours, ou fini depuis moins de 15 min.
+    var shownTournament: TournamentInfo? {
+        guard let t = tournament else { return nil }
+        switch t.state {
+        case "tirage", "en_cours": return t
+        case "fini": return finishedAt.map { Date().timeIntervalSince($0) < 900 } == true ? t : nil
+        default: return nil
         }
     }
 

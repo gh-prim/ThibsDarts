@@ -129,6 +129,28 @@ class Lobby extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Match de tournoi lancé sur la cible : pas de salon, mais la partie est suivie en direct
+  /// (Apple TV, iPhone) comme une partie de salon.
+  void playTournament(GameConfig cfg) {
+    config = cfg;
+    code = '';
+    players.clear();
+    final store = PlayerStore.instance;
+    for (final name in cfg.players) {
+      final prof = store.byName(name);
+      players.add(
+        prof == null
+            ? LobbyPlayer(id: 'guest-${players.length}', name: name, guest: true)
+            : LobbyPlayer(id: prof.id, name: name, host: prof.owner, photoPath: store.photoPath(prof.id)),
+      );
+    }
+    state = LobbyState.playing;
+    openedRemotely = false;
+    live = null;
+    arriving = null;
+    notifyListeners();
+  }
+
   void close() {
     state = LobbyState.closed;
     live = null;

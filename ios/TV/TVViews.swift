@@ -117,6 +117,16 @@ struct TVLiveView: View {
                 }
             } else if info.isOpen {
                 TVSalonView(info: info)
+            } else if let t = model.shownTournament {
+                // Annonce du prochain match 15 s, puis le tableau 25 s, en boucle.
+                TimelineView(.periodic(from: model.focusSince, by: 1)) { ctx in
+                    let s = Int(ctx.date.timeIntervalSince(model.focusSince)) % 40
+                    if t.state == "en_cours", let m = t.focus, m.state != "direct", s < 15 {
+                        TVTournamentMatchView(info: t, match: m)
+                    } else {
+                        TVTournamentView(info: t)
+                    }
+                }
             } else {
                 TVIdleView(owner: info.hostName)
             }

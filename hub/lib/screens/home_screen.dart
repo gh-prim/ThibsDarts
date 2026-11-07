@@ -65,7 +65,9 @@ class _HomeScreenState extends State<HomeScreen> {
             match: next,
             onLaunch: () {
               final cfg = TournamentStore.instance.startMatch(next.id);
-              if (cfg != null) _open(gameScreenFor(cfg));
+              if (cfg == null) return;
+              Lobby.instance.playTournament(cfg);
+              _open(gameScreenFor(cfg));
             },
           );
         }

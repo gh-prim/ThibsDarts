@@ -1,6 +1,7 @@
 @Tags(['screenshot'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -48,6 +49,8 @@ void main() {
       t.record(t.next!.id, 3, i % 3);
     }
     await tester.runAsync(() => TournamentStore.instance.set(t));
+    final json = Platform.environment['TOURNOI_JSON'];
+    if (json != null) File(json).writeAsStringSync(jsonEncode({'tournament': TournamentStore.instance.public()}));
 
     Future<void> shot(String name, Widget w) async {
       await tester.pumpWidget(

@@ -24,7 +24,6 @@ class SetupController extends ChangeNotifier {
       store = store ?? OwnerStore.instance,
       _rnd = random ?? Random.secure() {
     code = List.generate(4, (_) => _rnd.nextInt(10)).join();
-    hotspotPassword = List.generate(10, (_) => _alphabet[_rnd.nextInt(_alphabet.length)]).join();
   }
 
   static const port = 8420;
@@ -35,7 +34,6 @@ class SetupController extends ChangeNotifier {
   final Random _rnd;
 
   late final String code;
-  late final String hotspotPassword;
   String get hotspotSsid => 'ThibsDarts-$code';
 
   SetupPhase phase = SetupPhase.waiting;
@@ -56,13 +54,12 @@ class SetupController extends ChangeNotifier {
       'p': '$port',
       'c': code,
       if (!wifi.simulated) 's': hotspotSsid,
-      if (!wifi.simulated) 'k': hotspotPassword,
     };
     return Uri(scheme: 'thibsdarts', host: 'setup', queryParameters: q).toString();
   }
 
   Future<void> start() async {
-    await wifi.startHotspot(hotspotSsid, hotspotPassword);
+    await wifi.startHotspot(hotspotSsid);
     host = await _localAddress();
     _server = await HttpServer.bind(InternetAddress.anyIPv4, port, shared: true);
     _server!.listen(_handle);
@@ -194,7 +191,7 @@ class SetupController extends ChangeNotifier {
       });
     } else {
       // Retour au QR code avec le hotspot relancé.
-      await wifi.startHotspot(hotspotSsid, hotspotPassword);
+      await wifi.startHotspot(hotspotSsid);
       _set(() {
         wifiState = WifiState.error;
         wifiFailed = true;

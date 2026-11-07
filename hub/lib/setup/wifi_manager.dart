@@ -20,7 +20,8 @@ abstract class WifiManager {
   /// Vrai si c'est le simulateur du Mac (pas de vrai Wi-Fi touché).
   bool get simulated;
 
-  Future<void> startHotspot(String ssid, String password);
+  /// Wi-Fi ouvert (sans mot de passe) le temps du setup.
+  Future<void> startHotspot(String ssid);
   Future<void> stopHotspot();
   Future<List<WifiNetwork>> scan();
 
@@ -39,20 +40,30 @@ class NmcliWifi implements WifiManager {
   Future<ProcessResult> _nmcli(List<String> args) => Process.run('nmcli', args);
 
   @override
-  Future<void> startHotspot(String ssid, String password) async {
+  Future<void> startHotspot(String ssid) async {
+    // `nmcli dev wifi hotspot` impose toujours un mot de passe : on crée un point d'accès ouvert à la main.
+    await _nmcli(['con', 'delete', _hotspotName]);
     await _nmcli([
-      'dev',
+      'con',
+      'add',
+      'type',
       'wifi',
-      'hotspot',
       'ifname',
       iface,
       'con-name',
       _hotspotName,
+      'autoconnect',
+      'no',
       'ssid',
       ssid,
-      'password',
-      password,
+      '802-11-wireless.mode',
+      'ap',
+      '802-11-wireless.band',
+      'bg',
+      'ipv4.method',
+      'shared',
     ]);
+    await _nmcli(['con', 'up', _hotspotName]);
   }
 
   @override
@@ -96,7 +107,7 @@ class SimulatedWifi implements WifiManager {
   bool get simulated => true;
 
   @override
-  Future<void> startHotspot(String ssid, String password) async {}
+  Future<void> startHotspot(String ssid) async {}
 
   @override
   Future<void> stopHotspot() async {}

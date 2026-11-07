@@ -2,11 +2,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'cam/cam_link.dart';
 import 'screens/boot_screen.dart';
 import 'theme/tokens.dart';
 import 'widgets/music_button.dart';
 
-void main() => runApp(const DartOsApp());
+void main() {
+  CamLink.instance.start();
+  runApp(const DartOsApp());
+}
 
 /// Largeur d'un pixel de l'écran rapportée à sa hauteur. Les petites dalles 1024x600 (7")
 /// ont des pixels un peu plus larges que hauts : sans correction, la cible sort ovale.

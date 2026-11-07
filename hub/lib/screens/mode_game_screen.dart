@@ -4,6 +4,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../cam/cam_link.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../lobby/lobby.dart';
@@ -64,6 +65,20 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     super.initState();
     AppState.lastGame = widget.config;
     Lobby.instance.stopGame = _stopFromPhone;
+    CamLink.instance
+      ..onDart = _camDart
+      ..onTakeout = _camTakeout
+      ..setPlaying(true);
+  }
+
+  /// Fléchette détectée par le Pi 5, comme un toucher du plateau.
+  void _camDart(DartThrow d, Offset? pos) {
+    if (mounted) _throw(d, pos ?? boardPositionFor(d));
+  }
+
+  /// Fléchettes retirées : comme le bouton de fin de tour, une fois le tour fini.
+  void _camTakeout() {
+    if (mounted && _g.awaitingNextPlayer && !_g.isFinished) _endTurn();
   }
 
   /// Arrêt demandé depuis un iPhone du salon (déjà confirmé là-bas).
@@ -87,6 +102,12 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       );
     }
     if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
+    if (CamLink.instance.onDart == _camDart) {
+      CamLink.instance
+        ..onDart = null
+        ..onTakeout = null
+        ..setPlaying(false);
+    }
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }

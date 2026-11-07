@@ -5,6 +5,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../cam/cam_link.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../lobby/lobby.dart';
@@ -22,8 +23,8 @@ import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
 
-/// Partie 501 (planches J501*). En attendant le Pi 5, c'est un simulateur :
-/// toucher le plateau lance une fléchette à cet endroit.
+/// Partie 501 (planches J501*). Les fléchettes arrivent du Pi 5 (CamLink) ;
+/// toucher le plateau lance aussi une fléchette à cet endroit.
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key, required this.config});
 
@@ -64,11 +65,26 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     AppState.lastGame = widget.config;
     Lobby.instance.stopGame = _stopFromPhone;
+    CamLink.instance
+      ..onDart = _camDart
+      ..onTakeout = _camTakeout
+      ..setPlaying(true);
   }
 
   /// Arrêt demandé depuis un iPhone du salon (déjà confirmé là-bas).
   void _stopFromPhone() {
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Fléchette détectée par le Pi 5, comme un toucher du plateau.
+  void _camDart(DartThrow d, Offset? pos) {
+    if (mounted) _throw(d, pos ?? boardPositionFor(d));
+  }
+
+  /// Fléchettes retirées : comme le bouton de fin de tour, une fois le tour fini.
+  void _camTakeout() {
+    if (!mounted || _matchOver) return;
+    if (_game.awaitingNextPlayer || _game.isFinished) _endTurn();
   }
 
   void _recordResult() {
@@ -87,6 +103,12 @@ class _GameScreenState extends State<GameScreen> {
     _save();
     _reportTournament();
     if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
+    if (CamLink.instance.onDart == _camDart) {
+      CamLink.instance
+        ..onDart = null
+        ..onTakeout = null
+        ..setPlaying(false);
+    }
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }

@@ -27,78 +27,144 @@ class TournamentMatchView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Td.beton,
       body: Stage(
-        child: Padding(
-          padding: const EdgeInsets.all(Td.s5),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            spacing: Td.s5,
-            children: [
-              Transform.rotate(
-                angle: -0.052,
-                child: Text(
-                  Tournament.roundTitle(round.length),
-                  style: TdText.tag.copyWith(
-                    fontSize: 56,
-                    height: 61 / 56,
-                    color: Td.sunset,
-                    shadows: [Shadow(color: Td.sunset.withValues(alpha: 0.45), blurRadius: 32)],
-                  ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: Td.s5,
+              right: Td.s5,
+              child: SizedBox(
+                width: 330,
+                child: TdButton(
+                  label: 'Quitter le tournoi',
+                  icon: LucideIcons.x,
+                  variant: TdButtonVariant.secondary,
+                  height: 56,
+                  onPressed: () => confirmCancelTournament(context),
                 ),
               ),
-              Row(
+            ),
+            Padding(
+              padding: const EdgeInsets.all(Td.s5),
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                spacing: 48,
+                spacing: Td.s5,
                 children: [
-                  _Side(name: a, line: store.lastWin(match.a!)),
                   Transform.rotate(
-                    angle: -0.105,
+                    angle: -0.052,
                     child: Text(
-                      'contre',
+                      Tournament.roundTitle(round.length),
                       style: TdText.tag.copyWith(
-                        fontSize: 47,
-                        height: 1,
-                        color: Td.fluo,
-                        shadows: [Shadow(color: Td.fluo.withValues(alpha: 0.4), blurRadius: 20)],
+                        fontSize: 56,
+                        height: 61 / 56,
+                        color: Td.sunset,
+                        shadows: [Shadow(color: Td.sunset.withValues(alpha: 0.45), blurRadius: 32)],
                       ),
                     ),
                   ),
-                  _Side(name: b, line: store.lastWin(match.b!)),
-                ],
-              ),
-              Text('$legs · $a commence', style: TdText.inter(17, 22, 400, Td.ink2)),
-              SizedBox(
-                width: 600,
-                child: Row(
-                  spacing: Td.s3,
-                  children: [
-                    Expanded(
-                      child: TdButton(
-                        label: 'Voir le tableau',
-                        icon: LucideIcons.users,
-                        variant: TdButtonVariant.secondary,
-                        height: Td.ciblePi,
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(builder: (_) => const TournamentBracketScreen()),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: 48,
+                    children: [
+                      _Side(name: a, line: store.lastWin(match.a!)),
+                      Transform.rotate(
+                        angle: -0.105,
+                        child: Text(
+                          'contre',
+                          style: TdText.tag.copyWith(
+                            fontSize: 47,
+                            height: 1,
+                            color: Td.fluo,
+                            shadows: [Shadow(color: Td.fluo.withValues(alpha: 0.4), blurRadius: 20)],
+                          ),
                         ),
                       ),
+                      _Side(name: b, line: store.lastWin(match.b!)),
+                    ],
+                  ),
+                  Text('$legs · $a commence', style: TdText.inter(17, 22, 400, Td.ink2)),
+                  SizedBox(
+                    width: 600,
+                    child: Row(
+                      spacing: Td.s3,
+                      children: [
+                        Expanded(
+                          child: TdButton(
+                            label: 'Voir le tableau',
+                            icon: LucideIcons.users,
+                            variant: TdButtonVariant.secondary,
+                            height: Td.ciblePi,
+                            onPressed: () =>
+                                Navigator.of(context)
+                                    .push(MaterialPageRoute<void>(builder: (_) => const TournamentBracketScreen())),
+                          ),
+                        ),
+                        Expanded(
+                          child: TdButton(
+                            label: 'Lancer le match',
+                            icon: LucideIcons.play,
+                            height: Td.ciblePi,
+                            onPressed: onLaunch,
+                          ),
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: TdButton(
-                        label: 'Lancer le match',
-                        icon: LucideIcons.play,
-                        height: Td.ciblePi,
-                        onPressed: onLaunch,
-                      ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Quitter le tournoi depuis l'écran du Pi : confirmation, puis le tournoi est effacé partout.
+Future<void> confirmCancelTournament(BuildContext context) async {
+  final cancel = await showDialog<bool>(
+    context: context,
+    barrierColor: const Color(0xCC000000),
+    builder: (ctx) => Dialog(
+      backgroundColor: Td.plateauNoir,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Td.rXl)),
+      child: Padding(
+        padding: const EdgeInsets.all(Td.s8),
+        child: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Annuler le tournoi ?', style: TdText.headline),
+              const SizedBox(height: Td.s2),
+              Text('Le tableau est effacé, sur le Pi, les iPhone et l’Apple TV.', style: TdText.body),
+              const SizedBox(height: Td.s6),
+              Row(
+                spacing: Td.s3,
+                children: [
+                  Expanded(
+                    child: TdButton(
+                      label: 'Continuer',
+                      variant: TdButtonVariant.secondary,
+                      onPressed: () => Navigator.of(ctx).pop(false),
                     ),
-                  ],
-                ),
+                  ),
+                  Expanded(
+                    child: TdButton(
+                      label: 'Annuler',
+                      icon: LucideIcons.x,
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+  if (cancel == true) await TournamentStore.instance.set(null);
 }
 
 class _Side extends StatelessWidget {
@@ -275,7 +341,9 @@ class _MatchCard extends StatelessWidget {
       return Container(
         height: 26,
         padding: const EdgeInsets.symmetric(horizontal: Td.s2),
-        decoration: BoxDecoration(border: top ? null : const Border(top: BorderSide(color: Td.bord))),
+        decoration: BoxDecoration(
+          border: top ? null : const Border(top: BorderSide(color: Td.bord)),
+        ),
         child: Opacity(
           opacity: lost ? 0.42 : 1,
           child: Row(
@@ -285,7 +353,12 @@ class _MatchCard extends StatelessWidget {
                   id == null ? (match.bye ? 'Place libre' : 'À venir') : store.nameOf(id),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TdText.inter(13, 18, match.winner == id && id != null ? 700 : 500, id == null ? Td.ink3 : Td.ink),
+                  style: TdText.inter(
+                    13,
+                    18,
+                    match.winner == id && id != null ? 700 : 500,
+                    id == null ? Td.ink3 : Td.ink,
+                  ),
                 ),
               ),
               if (match.done && !match.bye)

@@ -1,0 +1,37 @@
+name: dartos_hub
+description: Écran joueur Dart OS (Raspberry Pi 4 + écran 7 pouces).
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  darts_engine:
+    path: ../packages/darts_engine
+  crypto: ^3.0.7
+  flutter_svg: ^2.3.2
+  lucide_icons_flutter: ^4.0.2
+  qr: ^4.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito.ttf
+    - family: PermanentMarker
+      fonts:
+        - asset: assets/fonts/PermanentMarker.ttf

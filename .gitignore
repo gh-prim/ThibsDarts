@@ -1,0 +1,9 @@
+.DS_Store
+.dart_tool/
+build/
+
+# iOS
+ios/*.xcodeproj
+ios/build/
+ios/ThibsDarts/Info.plist
+ios/TV/Info.plist

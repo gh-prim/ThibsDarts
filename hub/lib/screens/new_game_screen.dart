@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game_config.dart';
+import '../players/player_store.dart';
 import '../theme/tokens.dart';
 import '../widgets/controls.dart';
 import '../widgets/stage.dart';
@@ -102,7 +103,13 @@ class _NewGameScreenState extends State<NewGameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final everyone = [AppState.owner, ..._guests];
+    // Le propriétaire, puis les profils de la cible, puis les invités de cette partie.
+    final everyone = [
+      AppState.owner,
+      for (final p in PlayerStore.instance.all)
+        if (!p.owner) p.nickname,
+      ..._guests,
+    ];
     return Scaffold(
       backgroundColor: Td.beton,
       body: Stage(

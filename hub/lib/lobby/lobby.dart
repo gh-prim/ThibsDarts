@@ -10,6 +10,7 @@ import 'package:darts_engine/darts_engine.dart';
 
 import '../game_config.dart';
 import '../history/history_store.dart';
+import '../players/player_store.dart';
 import '../setup/owner_store.dart';
 
 /// Un joueur du salon : le propriétaire (hôte), un pote venu avec son iPhone, ou un invité.
@@ -81,8 +82,6 @@ class Lobby extends ChangeNotifier {
     queryParameters: {'h': host ?? '127.0.0.1', 'p': '$port', 'c': code},
   ).toString();
 
-  Directory get _photos => Directory('${OwnerStore.instance.dir.path}/players');
-
   /// Démarre le serveur (une fois, après le setup).
   Future<void> serve({int port = port}) async {
     if (_server != null) return;
@@ -105,13 +104,19 @@ class Lobby extends ChangeNotifier {
     config = cfg;
     code = List.generate(4, (_) => _codeAlphabet[_rnd.nextInt(_codeAlphabet.length)]).join();
     players.clear();
-    final owner = AppState.ownerProfile;
+    final store = PlayerStore.instance;
     players.add(
-      LobbyPlayer(id: 'owner', name: AppState.owner, host: true, photoPath: owner?.photoPath)
+      LobbyPlayer(id: 'owner', name: AppState.owner, host: true, photoPath: store.photoPath('owner'))
         ..playing = cfg.players.contains(AppState.owner),
     );
-    for (final g in cfg.players.where((p) => p != AppState.owner)) {
-      players.add(LobbyPlayer(id: 'guest-${players.length}', name: g, guest: true));
+    for (final name in cfg.players.where((p) => p != AppState.owner)) {
+      // Un profil de la cible garde son identifiant, un invité n'a qu'un nom pour cette partie.
+      final prof = store.byName(name);
+      players.add(
+        prof == null
+            ? LobbyPlayer(id: 'guest-${players.length}', name: name, guest: true)
+            : LobbyPlayer(id: prof.id, name: prof.nickname, photoPath: store.photoPath(prof.id)),
+      );
     }
     state = LobbyState.open;
     openedRemotely = false;
@@ -213,10 +218,10 @@ class Lobby extends ChangeNotifier {
           'version': 1,
           'setupDone': true,
           'owner': AppState.owner,
-          'pin': AppState.ownerProfile?.hasPin ?? false,
+          'pin': PlayerStore.instance.owner?.hasPin ?? false,
         });
       }
-      if (path.startsWith('/api/owner/')) return await _ownerRoute(req, res, path);
+      if (path == '/api/players' || path.startsWith('/api/players/')) return await _playersRoute(req, res, seg);
       if (req.method == 'GET' && path == '/api/lobby') return await _send(res, _json());
       if (req.method == 'GET' && path == '/api/history') {
         final id = req.uri.queryParameters['player'];
@@ -244,30 +249,6 @@ class Lobby extends ChangeNotifier {
         notifyListeners();
         return await _send(res, _json());
       }
-      if (seg.length == 4 && seg[0] == 'api' && seg[1] == 'players' && seg[3] == 'photo') {
-        final p = players.where((p) => p.id == seg[2]).firstOrNull;
-        if (p == null) return await _send(res, {'error': 'joueur'}, status: 404);
-        if (req.method == 'PUT') {
-          final bytes = await req.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
-          if (bytes.length < 1000 || bytes.length > 8 * 1024 * 1024) {
-            return await _send(res, {'error': 'photo'}, status: 400);
-          }
-          await _photos.create(recursive: true);
-          final f = File('${_photos.path}/${p.id.replaceAll(RegExp(r'[^A-Za-z0-9-]'), '')}.jpg');
-          await f.writeAsBytes(bytes, flush: true);
-          // Une photo remplacée doit se redessiner : on vide le cache d'images.
-          PaintingBinding.instance.imageCache.clear();
-          p.photoPath = f.path;
-          notifyListeners();
-          return await _send(res, {'ok': true});
-        }
-        if (req.method == 'GET' && p.photoPath != null) {
-          res.headers.contentType = ContentType('image', 'jpeg');
-          await res.addStream(File(p.photoPath!).openRead());
-          await res.close();
-          return;
-        }
-      }
       return await _send(res, {'error': 'introuvable'}, status: 404);
     } catch (e) {
       try {
@@ -276,72 +257,157 @@ class Lobby extends ChangeNotifier {
     }
   }
 
-  int _pinFails = 0;
-  DateTime? _pinLockedUntil;
+  final Map<String, (int, DateTime?)> _fails = {};
 
-  /// Compte du propriétaire : son code (PIN), sa reconnexion depuis un autre iPhone, sa photo.
-  Future<void> _ownerRoute(HttpRequest req, HttpResponse res, String path) async {
-    final owner = AppState.ownerProfile;
-    if (owner == null) return _send(res, {'error': 'setup'}, status: 409);
-    if (req.method == 'GET' && path == '/api/owner/photo') {
-      final f = OwnerStore.instance.photoFile;
-      if (!f.existsSync()) return _send(res, {'error': 'photo'}, status: 404);
-      res.headers.contentType = ContentType('image', 'jpeg');
-      await res.addStream(f.openRead());
-      await res.close();
-      return;
+  /// Profils de la cible : liste, création, connexion avec le code, surnom et photo.
+  Future<void> _playersRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
+    final store = PlayerStore.instance;
+    if (AppState.ownerProfile == null) return _send(res, {'error': 'setup'}, status: 409);
+    if (seg.length == 2) {
+      if (req.method == 'GET') return _send(res, {'players': store.all.map(store.public).toList()});
+      if (req.method == 'POST') return _createProfile(req, res);
+      return _send(res, {'error': 'introuvable'}, status: 404);
+    }
+    final p = store.byId(seg[2]);
+    if (p == null) return _send(res, {'error': 'joueur'}, status: 404);
+    final action = seg.length > 3 ? seg[3] : null;
+    if (action == 'photo') {
+      if (req.method == 'GET') {
+        final f = store.photoFile(p.id);
+        if (!f.existsSync()) return _send(res, {'error': 'photo'}, status: 404);
+        res.headers.contentType = ContentType('image', 'jpeg');
+        await res.addStream(f.openRead());
+        await res.close();
+        return;
+      }
+      if (req.method == 'PUT') {
+        if (!_authorized(req, p)) return _send(res, {'error': 'cle'}, status: 401);
+        final bytes = await req.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+        if (bytes.length < 1000 || bytes.length > 8 * 1024 * 1024) {
+          return _send(res, {'error': 'photo'}, status: 400);
+        }
+        final f = store.photoFile(p.id);
+        await f.parent.create(recursive: true);
+        await f.writeAsBytes(bytes, flush: true);
+        // Une photo remplacée doit se redessiner : on vide le cache d'images.
+        PaintingBinding.instance.imageCache.clear();
+        for (final lp in players.where((lp) => lp.id == p.id)) {
+          lp.photoPath = f.path;
+        }
+        notifyListeners();
+        return _send(res, {'ok': true});
+      }
+    }
+    if (req.method == 'GET' && action == null) return _send(res, store.public(p));
+    if (req.method == 'PATCH' && action == null) {
+      if (!_authorized(req, p)) return _send(res, {'error': 'cle'}, status: 401);
+      final b = await _body(req);
+      final name = (b['nickname'] as String? ?? '').trim();
+      if (name.isEmpty || name.length > 20) return _send(res, {'error': 'surnom'}, status: 400);
+      final other = store.byName(name);
+      if (other != null && other.id != p.id) return _send(res, {'error': 'pris'}, status: 409);
+      p.nickname = name;
+      await store.save();
+      if (p.owner) await _renameOwner(name);
+      return _send(res, store.public(p));
     }
     if (req.method != 'POST') return _send(res, {'error': 'introuvable'}, status: 404);
     final b = await _body(req);
     final pin = b['pin'] as String?;
-    if (!Owner.validPin(pin)) return _send(res, {'error': 'pin'}, status: 400);
-    switch (path) {
-      case '/api/owner/pin':
-        // Cibles installées avant le PIN : le premier code choisi devient celui du propriétaire.
-        if (owner.hasPin) return _send(res, {'error': 'deja'}, status: 409);
-        AppState.setOwner(await OwnerStore.instance.write(owner.withPin(pin!)));
-        return _send(res, {'ok': true});
-      case '/api/owner/login':
-        if (!owner.hasPin) return _send(res, {'error': 'pas_de_pin'}, status: 409);
+    if (!Profile.validPin(pin)) return _send(res, {'error': 'pin'}, status: 400);
+    switch (action) {
+      case 'claim':
+        // Profil sans code (pote sans appli, vieille cible) : le premier code choisi devient le sien.
+        if (p.hasPin) return _send(res, {'error': 'deja'}, status: 409);
+        p.setPin(pin!);
+        final token = p.issueToken();
+        await store.save();
+        return _send(res, {'token': token, 'player': store.public(p)});
+      case 'login':
+        if (!p.hasPin) return _send(res, {'error': 'pas_de_pin'}, status: 409);
         final now = DateTime.now();
-        if (_pinLockedUntil != null && now.isBefore(_pinLockedUntil!)) {
-          return _send(res, {'error': 'bloque', 'wait': _pinLockedUntil!.difference(now).inSeconds + 1}, status: 429);
+        final (fails, until) = _fails[p.id] ?? (0, null);
+        if (until != null && now.isBefore(until)) {
+          return _send(res, {'error': 'bloque', 'wait': until.difference(now).inSeconds + 1}, status: 429);
         }
-        if (!owner.checkPin(pin!)) {
-          _pinFails++;
-          if (_pinFails >= 5) {
-            _pinFails = 0;
-            _pinLockedUntil = now.add(const Duration(minutes: 1));
+        if (!p.checkPin(pin!)) {
+          if (fails + 1 >= 5) {
+            _fails[p.id] = (0, now.add(const Duration(minutes: 1)));
             return _send(res, {'error': 'bloque', 'wait': 60}, status: 429);
           }
-          return _send(res, {'error': 'pin', 'left': 5 - _pinFails}, status: 403);
+          _fails[p.id] = (fails + 1, null);
+          return _send(res, {'error': 'pin', 'left': 4 - fails}, status: 403);
         }
-        _pinFails = 0;
-        return _send(res, {
-          'firstName': owner.firstName,
-          'lastName': owner.lastName,
-          'nickname': owner.nickname,
-          'photo': OwnerStore.instance.photoFile.existsSync(),
-        });
+        _fails.remove(p.id);
+        final token = p.issueToken();
+        await store.save();
+        return _send(res, {'token': token, 'player': store.public(p)});
     }
     return _send(res, {'error': 'introuvable'}, status: 404);
+  }
+
+  /// Nouveau profil depuis un iPhone : surnom et code. Le propriétaire peut aussi créer
+  /// le profil d'un pote sans appli, sans code.
+  Future<void> _createProfile(HttpRequest req, HttpResponse res) async {
+    final store = PlayerStore.instance;
+    final b = await _body(req);
+    final name = (b['nickname'] as String? ?? '').trim();
+    final pin = b['pin'] as String?;
+    if (name.isEmpty || name.length > 20) return _send(res, {'error': 'surnom'}, status: 400);
+    if (store.byName(name) != null) return _send(res, {'error': 'pris'}, status: 409);
+    if (pin == null) {
+      if (!_authorized(req, store.owner)) return _send(res, {'error': 'cle'}, status: 401);
+      final p = await store.create(name);
+      return _send(res, {'player': store.public(p)});
+    }
+    if (!Profile.validPin(pin)) return _send(res, {'error': 'pin'}, status: 400);
+    final p = await store.create(name, pin: pin, id: b['id'] as String?);
+    final token = p.issueToken();
+    await store.save();
+    return _send(res, {'token': token, 'player': store.public(p)});
+  }
+
+  /// La clé de l'iPhone, dans l'en-tête Authorization: Bearer suivi de la clé.
+  static String? _token(HttpRequest req) {
+    final h = req.headers.value(HttpHeaders.authorizationHeader) ?? '';
+    return h.startsWith('Bearer ') ? h.substring(7).trim() : null;
+  }
+
+  static bool _authorized(HttpRequest req, Profile? p) => p != null && p.checkToken(_token(req));
+
+  Future<void> _renameOwner(String name) async {
+    final o = AppState.ownerProfile;
+    if (o == null) return;
+    final renamed = Owner(
+      firstName: o.firstName,
+      lastName: o.lastName,
+      nickname: name,
+      photoPath: o.photoPath,
+      pinSalt: o.pinSalt,
+      pinHash: o.pinHash,
+    );
+    final old = AppState.owner;
+    AppState.setOwner(await OwnerStore.instance.write(renamed));
+    AppState.photos.remove(old);
+    for (final lp in players.where((lp) => lp.host)) {
+      lp.name = AppState.owner;
+    }
+    notifyListeners();
   }
 
   /// Un iPhone sur le même Wi-Fi crée la partie : le salon s'ouvre sur le Pi et il est dedans.
   Future<void> _create(HttpRequest req, HttpResponse res) async {
     final b = await _body(req);
-    final id = (b['id'] as String? ?? '').trim();
-    final name = (b['name'] as String? ?? '').trim();
-    if (id.isEmpty || name.isEmpty) return _send(res, {'error': 'profil'}, status: 400);
+    final me = PlayerStore.instance.byId(b['player'] as String?);
+    if (!_authorized(req, me)) return _send(res, {'error': 'cle'}, status: 401);
     if (state == LobbyState.playing) return _send(res, {'error': 'en_cours'}, status: 409);
     if (state != LobbyState.closed) return _send(res, {'error': 'ouvert'}, status: 409);
     final m = b['mode'] as String? ?? '501';
     final x01 = int.tryParse(m);
     final mode = x01 == null ? GameMode.values.where((g) => g.name == m).firstOrNull : null;
     if (x01 == null && mode == null) return _send(res, {'error': 'mode'}, status: 400);
-    final owner = b['owner'] == true;
     final cfg = GameConfig(
-      players: owner ? [AppState.owner] : const [],
+      players: me!.owner ? [AppState.owner] : const [],
       startScore: x01 ?? 501,
       doubleOut: b['doubleOut'] as bool? ?? true,
       legsToWin: x01 == null ? 1 : ((b['legsToWin'] as num?)?.toInt() ?? 1).clamp(1, 5),
@@ -350,30 +416,29 @@ class Lobby extends ChangeNotifier {
     if (remoteOpen?.call(cfg) != true) return _send(res, {'error': 'occupe'}, status: 409);
     open(cfg);
     openedRemotely = true;
-    return _enter(b, id, name, res);
+    return _enter(me, res);
   }
 
   Future<void> _join(HttpRequest req, HttpResponse res) async {
     final b = await _body(req);
     if (state != LobbyState.open) return _send(res, {'error': 'ferme'}, status: 409);
     if ((b['code'] as String? ?? '').toUpperCase() != code) return _send(res, {'error': 'code'}, status: 403);
-    final id = (b['id'] as String? ?? '').trim();
-    final name = (b['name'] as String? ?? '').trim();
-    if (id.isEmpty || name.isEmpty) return _send(res, {'error': 'profil'}, status: 400);
-    return _enter(b, id, name, res);
+    final me = PlayerStore.instance.byId(b['player'] as String?);
+    if (!_authorized(req, me)) return _send(res, {'error': 'cle'}, status: 401);
+    return _enter(me!, res);
   }
 
   /// Place le joueur de cet iPhone dans le salon ouvert.
-  Future<void> _enter(Map<String, Object?> b, String id, String name, HttpResponse res) async {
+  Future<void> _enter(Profile me, HttpResponse res) async {
     LobbyPlayer? p;
-    if (b['owner'] == true) {
+    if (me.owner) {
       // L'iPhone du propriétaire rejoint sa propre place d'hôte.
       p = players.firstWhere((p) => p.host);
     } else {
-      p = players.where((p) => p.id == id).firstOrNull;
+      p = players.where((p) => p.id == me.id).firstOrNull;
       if (p == null) {
         if (players.length >= maxPlayers) return _send(res, {'error': 'complet'}, status: 410);
-        p = LobbyPlayer(id: id, name: _unique(name));
+        p = LobbyPlayer(id: me.id, name: _unique(me.nickname), photoPath: PlayerStore.instance.photoPath(me.id));
         players.add(p);
         arriving = p.name;
         // Le badge "arrive" reste le temps que la photo monte.

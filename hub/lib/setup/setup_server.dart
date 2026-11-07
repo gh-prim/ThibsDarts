@@ -5,6 +5,8 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../game_config.dart';
+import '../players/player_store.dart';
 import 'owner_store.dart';
 import 'wifi_manager.dart';
 
@@ -158,11 +160,16 @@ class SetupController extends ChangeNotifier {
             nickname: nick.isEmpty ? first : nick,
             pin: pin,
           );
+          // Le propriétaire devient le premier profil de la cible ; son iPhone reçoit sa clé.
+          AppState.setOwner(saved);
+          final profile = await PlayerStore.instance.syncOwner(saved);
+          final token = profile.issueToken();
+          await PlayerStore.instance.save();
           _set(() {
             owner = saved;
             phase = SetupPhase.done;
           });
-          return await _json(res, _status());
+          return await _json(res, {..._status(), 'player': profile.id, 'playerToken': token});
         case ('PUT', '/api/setup/photo'):
           final bytes = await req.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
           if (bytes.length < 1000 || bytes.length > 8 * 1024 * 1024) {

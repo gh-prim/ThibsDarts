@@ -91,6 +91,8 @@ void main() {
     );
     expect(s, 200);
     expect(c.phase, SetupPhase.done);
+    expect(j['player'], 'owner');
+    expect(j['playerToken'], isNotEmpty, reason: "l'iPhone du propriétaire reçoit sa clé");
 
     final saved = OwnerStore.instance.load()!;
     expect(saved.nickname, 'Thibs');

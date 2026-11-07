@@ -295,6 +295,55 @@ class TdToast extends StatelessWidget {
   }
 }
 
+/// Confirmation d'une action qui efface quelque chose : true si confirmée.
+Future<bool> confirmAction(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String action,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    barrierColor: const Color(0xCC000000),
+    builder: (ctx) => Dialog(
+      backgroundColor: Td.plateauNoir,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Td.rXl)),
+      child: Padding(
+        padding: const EdgeInsets.all(Td.s8),
+        child: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, style: TdText.headline),
+              const SizedBox(height: Td.s2),
+              Text(body, style: TdText.body),
+              const SizedBox(height: Td.s6),
+              Row(
+                spacing: Td.s3,
+                children: [
+                  Expanded(
+                    child: TdButton(
+                      label: 'Continuer',
+                      variant: TdButtonVariant.secondary,
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                    ),
+                  ),
+                  Expanded(
+                    child: TdButton(label: action, icon: LucideIcons.x, onPressed: () => Navigator.of(ctx).pop(true)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  return ok == true;
+}
+
 /// Bouton "Arrêter" de l'écran de jeu : demande confirmation puis revient à l'accueil.
 class StopGameButton extends StatelessWidget {
   const StopGameButton({super.key, this.size = 44});
@@ -302,46 +351,13 @@ class StopGameButton extends StatelessWidget {
   final double size;
 
   static Future<void> confirm(BuildContext context) async {
-    final stop = await showDialog<bool>(
-      context: context,
-      barrierColor: const Color(0xCC000000),
-      builder: (ctx) => Dialog(
-        backgroundColor: Td.plateauNoir,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Td.rXl)),
-        child: Padding(
-          padding: const EdgeInsets.all(Td.s8),
-          child: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Arrêter la partie ?', style: TdText.headline),
-                const SizedBox(height: Td.s2),
-                Text('Elle ne comptera pas dans l’historique.', style: TdText.body),
-                const SizedBox(height: Td.s6),
-                Row(
-                  spacing: Td.s3,
-                  children: [
-                    Expanded(
-                      child: TdButton(
-                        label: 'Continuer',
-                        variant: TdButtonVariant.secondary,
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                      ),
-                    ),
-                    Expanded(
-                      child: TdButton(label: 'Arrêter', icon: LucideIcons.x, onPressed: () => Navigator.of(ctx).pop(true)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    final stop = await confirmAction(
+      context,
+      title: 'Arrêter la partie ?',
+      body: 'Elle ne comptera pas dans l’historique.',
+      action: 'Arrêter',
     );
-    if (stop == true && context.mounted) Navigator.of(context).pop();
+    if (stop && context.mounted) Navigator.of(context).pop();
   }
 
   @override

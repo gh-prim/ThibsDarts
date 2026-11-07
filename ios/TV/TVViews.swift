@@ -86,8 +86,23 @@ struct TVLiveView: View {
             if model.fete180, let g = model.info?.game {
                 TVFete180View(name: g.current).transition(.opacity)
             }
+            if let m = model.music {
+                TVMiniPlayer(music: m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(48)
+                    .transition(.opacity)
+            }
         }
         .task { await model.follow() }
+        .task { await model.followMusic() }
+        // La télécommande pilote la musique : l'écran prend le focus sans effet visible.
+        .focusable()
+        .focusEffectDisabled()
+        .onPlayPauseCommand { model.music("toggle") }
+        .onMoveCommand { dir in
+            if dir == .right { model.music("next") }
+            if dir == .left { model.music("previous") }
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -484,5 +499,41 @@ struct TVVictoryView: View {
             .overlay(alignment: .leading) { Rectangle().fill(Color.white.opacity(0.10)).frame(width: 1) }
         }
         .ignoresSafeArea()
+    }
+}
+
+// MARK: Mini player Spotify
+
+/// Pochette, titre et artiste de ce qui joue. Lecture/pause et ← → à la télécommande.
+struct TVMiniPlayer: View {
+    let music: NowPlaying
+
+    var body: some View {
+        HStack(spacing: Td.s4) {
+            AsyncImage(url: music.art) { ph in
+                if let img = ph.image { img.resizable().scaledToFill() } else { Td.verreMoyen }
+            }
+            .frame(width: 96, height: 96)
+            .clipShape(RoundedRectangle(cornerRadius: Td.rMd))
+            VStack(alignment: .leading, spacing: Td.s1) {
+                Text(music.title ?? "").font(.td(28, .semibold)).lineLimit(1)
+                Text(music.artist ?? "").font(.td(22)).foregroundStyle(Td.ink2).lineLimit(1)
+                if let p = music.progressMs, let d = music.durationMs, d > 0 {
+                    GeometryReader { g in
+                        Capsule().fill(Td.verreMoyen)
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(Td.sunset).frame(width: g.size.width * min(1, CGFloat(p) / CGFloat(d)))
+                            }
+                    }
+                    .frame(height: 6)
+                    .padding(.top, Td.s1)
+                }
+            }
+            .frame(width: 380, alignment: .leading)
+            Text(music.playing == true ? "❚❚" : "▶").font(.td(28, .bold)).foregroundStyle(Td.ink2)
+        }
+        .padding(Td.s4)
+        .background(RoundedRectangle(cornerRadius: Td.rXl).fill(Td.verreMoyen))
+        .overlay(RoundedRectangle(cornerRadius: Td.rXl).strokeBorder(Td.verreBord))
     }
 }

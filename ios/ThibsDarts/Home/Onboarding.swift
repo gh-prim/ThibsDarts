@@ -84,6 +84,24 @@ struct ProfileView: View {
     @State private var addFriend = false
     @State private var busy = false
     @State private var error: String?
+    @State private var spotifyBusy = false
+    @State private var spotifyLinked = false
+    @State private var spotifyAuth = SpotifyAuth()
+
+    private func linkSpotify() {
+        spotifyBusy = true
+        error = nil
+        Task {
+            defer { spotifyBusy = false }
+            do {
+                let refresh = try await spotifyAuth.refreshToken()
+                try await LobbyAPI.linkSpotify(refreshToken: refresh, app: app)
+                spotifyLinked = true
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
 
     var body: some View {
         Stage {
@@ -123,6 +141,11 @@ struct ProfileView: View {
                                     addFriend = true
                                 }
                                 .padding(.top, Td.s2)
+                                TdButton(
+                                    title: spotifyLinked ? "Spotify relié à la cible" : "Relier Spotify (mini player TV)",
+                                    variant: .secondary, icon: spotifyLinked ? .check : .play, block: true,
+                                    state: spotifyBusy ? .loading : .normal
+                                ) { linkSpotify() }
                             }
                             TdButton(title: "Se déconnecter", variant: .tertiary, icon: .logOut, block: true) {
                                 confirmLogout = true
@@ -146,6 +169,9 @@ struct ProfileView: View {
         .onAppear {
             nickname = app.nickname
             photo = app.photo
+        }
+        .task {
+            if let base = app.piBase { spotifyLinked = await LobbyAPI.nowPlaying(at: base)?.linked == true }
         }
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { photo = $0 } }
         .sheet(isPresented: $addFriend) { AddFriendView().environmentObject(app) }

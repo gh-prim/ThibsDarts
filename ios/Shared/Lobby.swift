@@ -180,3 +180,31 @@ extension LobbyAPI {
         return h
     }
 }
+
+/// Ce qui joue sur le Spotify du propriétaire, servi par le Pi (/api/spotify).
+struct NowPlaying: Decodable, Equatable {
+    let linked: Bool
+    var active: Bool?
+    var playing: Bool?
+    var title: String?
+    var artist: String?
+    var art: URL?
+    var progressMs: Int?
+    var durationMs: Int?
+    var device: String?
+}
+
+extension LobbyAPI {
+    static func nowPlaying(at base: URL) async -> NowPlaying? {
+        guard let (data, res) = try? await session.data(from: base.appendingPathComponent("api/spotify")),
+              (res as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(NowPlaying.self, from: data)
+    }
+
+    /// play, pause, next, previous.
+    static func spotify(_ action: String, at base: URL) async {
+        var req = URLRequest(url: base.appendingPathComponent("api/spotify/\(action)"))
+        req.httpMethod = "POST"
+        _ = try? await session.data(for: req)
+    }
+}

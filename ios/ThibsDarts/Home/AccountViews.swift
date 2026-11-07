@@ -1,3 +1,5 @@
+import AuthenticationServices
+import CryptoKit
 import SwiftUI
 
 // Profils de la cible : chaque joueur a un profil sur le Pi (surnom, photo, code).
@@ -540,5 +542,102 @@ struct AddFriendView: View {
                 self.error = error.localizedDescription
             }
         }
+    }
+}
+
+// MARK: Spotify
+
+/// App développeur Spotify de ThibsDarts (developer.spotify.com), redirection thibsdarts://spotify-callback.
+enum SpotifyConfig {
+    static let clientID = ""
+    static let redirect = "thibsdarts://spotify-callback"
+    static let scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+}
+
+/// Connexion Spotify sur l'iPhone (PKCE, sans secret). Le jeton de rafraîchissement part sur le Pi.
+@MainActor
+final class SpotifyAuth: NSObject, ASWebAuthenticationPresentationContextProviding {
+    enum Failure: LocalizedError {
+        case config, cancelled, token
+        var errorDescription: String? {
+            switch self {
+            case .config: "Spotify n’est pas encore configuré dans l’app."
+            case .cancelled: "Connexion Spotify annulée."
+            case .token: "Spotify a refusé la connexion."
+            }
+        }
+    }
+
+    private var session: ASWebAuthenticationSession?
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first ?? ASPresentationAnchor()
+    }
+
+    func refreshToken() async throws -> String {
+        guard !SpotifyConfig.clientID.isEmpty else { throw Failure.config }
+        let verifier = Self.random(64)
+        let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URL
+        var c = URLComponents(string: "https://accounts.spotify.com/authorize")!
+        c.queryItems = [
+            .init(name: "client_id", value: SpotifyConfig.clientID),
+            .init(name: "response_type", value: "code"),
+            .init(name: "redirect_uri", value: SpotifyConfig.redirect),
+            .init(name: "scope", value: SpotifyConfig.scopes),
+            .init(name: "code_challenge_method", value: "S256"),
+            .init(name: "code_challenge", value: challenge),
+        ]
+        let callback: URL = try await withCheckedThrowingContinuation { cont in
+            let s = ASWebAuthenticationSession(url: c.url!, callbackURLScheme: "thibsdarts") { url, error in
+                if let url { cont.resume(returning: url) } else { cont.resume(throwing: error ?? Failure.cancelled) }
+            }
+            s.presentationContextProvider = self
+            session = s
+            s.start()
+        }
+        guard let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "code" })?.value else { throw Failure.cancelled }
+
+        var req = URLRequest(url: URL(string: "https://accounts.spotify.com/api/token")!)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var form = URLComponents()
+        form.queryItems = [
+            .init(name: "grant_type", value: "authorization_code"),
+            .init(name: "code", value: code),
+            .init(name: "redirect_uri", value: SpotifyConfig.redirect),
+            .init(name: "client_id", value: SpotifyConfig.clientID),
+            .init(name: "code_verifier", value: verifier),
+        ]
+        req.httpBody = form.percentEncodedQuery?.data(using: .utf8)
+        let (data, res) = try await URLSession.shared.data(for: req)
+        guard (res as? HTTPURLResponse)?.statusCode == 200,
+              let j = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let refresh = j["refresh_token"] as? String else { throw Failure.token }
+        return refresh
+    }
+
+    private static func random(_ n: Int) -> String {
+        let chars = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return String((0..<n).map { _ in chars.randomElement()! })
+    }
+}
+
+private extension Data {
+    var base64URL: String {
+        base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+extension LobbyAPI {
+    /// Relie le compte Spotify au Pi (propriétaire uniquement).
+    @MainActor
+    static func linkSpotify(refreshToken: String, app: AppModel) async throws {
+        guard let base = app.piBase else { throw PiError.unreachable }
+        let (status, _) = try await send(
+            "POST", base, "api/spotify/link", json: ["clientId": SpotifyConfig.clientID, "refreshToken": refreshToken], app: app
+        )
+        guard status == 200 else { throw PiError.http(status, "Spotify") }
     }
 }

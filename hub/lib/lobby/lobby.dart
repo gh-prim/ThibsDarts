@@ -12,6 +12,7 @@ import '../game_config.dart';
 import '../history/history_store.dart';
 import '../players/player_store.dart';
 import '../setup/owner_store.dart';
+import '../spotify/spotify_link.dart';
 
 /// Un joueur du salon : le propriétaire (hôte), un pote venu avec son iPhone, ou un invité.
 class LobbyPlayer {
@@ -238,6 +239,7 @@ class Lobby extends ChangeNotifier {
       }
       if (req.method == 'POST' && path == '/api/lobby/join') return await _join(req, res);
       if (req.method == 'POST' && path == '/api/lobby/create') return await _create(req, res);
+      if (path == '/api/spotify' || path.startsWith('/api/spotify/')) return await _spotifyRoute(req, res, seg);
       if (req.method == 'POST' && path == '/api/lobby/stop') {
         // Un joueur du salon arrête la partie depuis son iPhone (confirmé dans l'app).
         final b = await _body(req);
@@ -266,6 +268,32 @@ class Lobby extends ChangeNotifier {
         await _send(res, {'error': '$e'}, status: 500);
       } catch (_) {}
     }
+  }
+
+  /// Mini player Spotify : lecture et commandes ouvertes au Wi-Fi de la maison (Apple TV),
+  /// liaison du compte réservée au propriétaire.
+  Future<void> _spotifyRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
+    final spotify = SpotifyLink.instance;
+    final action = seg.length > 2 ? seg[2] : null;
+    if (req.method == 'GET' && action == null) return _send(res, await spotify.nowPlaying());
+    if (action == 'link') {
+      if (!_authorized(req, PlayerStore.instance.owner)) return _send(res, {'error': 'cle'}, status: 401);
+      if (req.method == 'DELETE') {
+        await spotify.unlink();
+        return _send(res, {'linked': false});
+      }
+      final b = await _body(req);
+      final client = b['clientId'] as String?;
+      final refresh = b['refreshToken'] as String?;
+      if (client == null || refresh == null) return _send(res, {'error': 'spotify'}, status: 400);
+      await spotify.link(client, refresh);
+      return _send(res, await spotify.nowPlaying());
+    }
+    if (req.method == 'POST' && action != null) {
+      if (!await spotify.control(action)) return _send(res, {'error': 'spotify'}, status: 409);
+      return _send(res, {'ok': true});
+    }
+    return _send(res, {'error': 'introuvable'}, status: 404);
   }
 
   final Map<String, (int, DateTime?)> _fails = {};

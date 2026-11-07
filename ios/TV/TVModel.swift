@@ -14,6 +14,8 @@ final class TVModel: ObservableObject {
     @Published var nextUp: NextUp?
     /// Fête 180 en cours.
     @Published var fete180 = false
+    /// Mini player Spotify (compte du propriétaire relié sur le Pi).
+    @Published var music: NowPlaying?
 
     struct NextUp: Equatable {
         let name: String
@@ -72,6 +74,29 @@ final class TVModel: ObservableObject {
                 if misses >= 10 { phase = .lost }
             }
             try? await Task.sleep(for: .seconds(info?.isPlaying == true ? 1 : 2))
+        }
+    }
+
+    // MARK: Spotify
+
+    /// Suit la musique toutes les 3 s. Lancé par l'écran connecté.
+    func followMusic() async {
+        while !Task.isCancelled, phase == .connected, let base {
+            let now = await LobbyAPI.nowPlaying(at: base)
+            withAnimation(Td.sortie) { music = now?.active == true ? now : nil }
+            try? await Task.sleep(for: .seconds(3))
+        }
+    }
+
+    /// Télécommande : lecture/pause, piste suivante ou précédente.
+    func music(_ action: String) {
+        guard let base, let m = music else { return }
+        let a = action == "toggle" ? (m.playing == true ? "pause" : "play") : action
+        if a == "pause" || a == "play" { music?.playing = a == "play" }
+        Task {
+            await LobbyAPI.spotify(a, at: base)
+            try? await Task.sleep(for: .milliseconds(400))
+            if let now = await LobbyAPI.nowPlaying(at: base) { music = now.active == true ? now : nil }
         }
     }
 

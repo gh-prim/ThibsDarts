@@ -45,7 +45,11 @@ struct TVConnexionView: View {
                         } label: {
                             HStack(spacing: Td.s4) {
                                 Icon(name: .target, size: 40).foregroundStyle(Td.sunset)
-                                Text("Cible de \(pi.owner)").font(.td(34, .semibold))
+                                VStack(alignment: .leading, spacing: Td.s1) {
+                                    Text("Cible de \(pi.owner)").font(.td(34, .semibold))
+                                    // Deux cibles au même nom (ex. le hub de dev sur le Mac) : l'adresse les distingue.
+                                    Text(pi.base.host ?? "").font(.td(24)).foregroundStyle(Td.ink2)
+                                }
                             }
                             .padding(.horizontal, Td.s8).padding(.vertical, Td.s6)
                         }

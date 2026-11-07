@@ -1,0 +1,17 @@
+[Unit]
+Description=ThibsDarts hub (flutter-pi)
+After=systemd-user-sessions.service network-online.target
+Wants=network-online.target
+
+[Service]
+User=thibs
+Group=thibs
+SupplementaryGroups=video render input
+Environment=DARTOS_DATA=/data/thibsdarts
+WorkingDirectory=/opt/thibsdarts/hub
+ExecStart=/opt/thibsdarts/hub/flutter-pi --release /opt/thibsdarts/hub
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

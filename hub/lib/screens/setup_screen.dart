@@ -333,7 +333,25 @@ class _ProgressView extends StatelessWidget {
             detail: 'après le Pi 5',
           ),
           const Spacer(),
-          const TdBanner(error: false, text: 'Le Wi-Fi ne passe pas ? Le Pi revient tout seul au QR code.'),
+          if (c.phase == SetupPhase.profile)
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(Td.s2),
+                  decoration: BoxDecoration(color: Td.plateauCreme, borderRadius: BorderRadius.circular(Td.rLg)),
+                  child: SizedBox.square(dimension: 110, child: SetupQrCode(data: c.qrPayload)),
+                ),
+                const SizedBox(width: Td.s4),
+                Expanded(
+                  child: Text(
+                    'iPhone déconnecté ? Rescanne ce QR code dans l’app pour reprendre.\nCode ${c.code}',
+                    style: TdText.inter(15, 20, 400, Td.ink2),
+                  ),
+                ),
+              ],
+            )
+          else
+            const TdBanner(error: false, text: 'Le Wi-Fi ne passe pas ? Le Pi revient tout seul au QR code.'),
         ],
       ),
     );

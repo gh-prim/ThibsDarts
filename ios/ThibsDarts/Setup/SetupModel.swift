@@ -56,6 +56,11 @@ final class SetupModel: ObservableObject {
                 let url = try await client.locate(preferred: l.host, port: l.port)
                 try await client.pair(at: url, code: l.code, device: UIDevice.current.name)
                 try? await Task.sleep(for: .milliseconds(600))
+                // Setup interrompu après le Wi-Fi (app fermée, iPhone resté sur le hotspot) : on reprend au profil.
+                if let s = try? await client.status(), s.phase == "profile" {
+                    withAnimation(Td.sortie) { step = .profile }
+                    return
+                }
                 withAnimation(Td.sortie) { step = .wifi }
                 loadNetworks()
             } catch {

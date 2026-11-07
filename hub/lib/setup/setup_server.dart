@@ -53,7 +53,8 @@ class SetupController extends ChangeNotifier {
       'h': host ?? '10.42.0.1',
       'p': '$port',
       'c': code,
-      if (!wifi.simulated) 's': hotspotSsid,
+      // Une fois sur le Wi-Fi de la maison, plus de hotspot à rejoindre : le QR sert juste à reprendre.
+      if (!wifi.simulated && phase == SetupPhase.waiting) 's': hotspotSsid,
     };
     return Uri(scheme: 'thibsdarts', host: 'setup', queryParameters: q).toString();
   }
@@ -185,6 +186,7 @@ class SetupController extends ChangeNotifier {
     await Future<void>.delayed(const Duration(milliseconds: 500));
     final ok = await wifi.connect(name, password);
     if (ok) {
+      host = await _localAddress();
       _set(() {
         wifiState = WifiState.ok;
         phase = SetupPhase.profile;

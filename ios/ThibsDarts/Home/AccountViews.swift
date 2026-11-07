@@ -549,7 +549,7 @@ struct AddFriendView: View {
 
 /// App développeur Spotify de ThibsDarts (developer.spotify.com), redirection thibsdarts://spotify-callback.
 enum SpotifyConfig {
-    static let clientID = ""
+    static let clientID = "dddb74e15eab43e4b275995dffd6d0bd"
     static let redirect = "thibsdarts://spotify-callback"
     static let scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 }

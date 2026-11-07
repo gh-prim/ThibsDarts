@@ -193,9 +193,9 @@ extension LobbyAPI {
         var req = URLRequest(url: base.appendingPathComponent("api/lobby/create"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        app.authorize(&req)
         let body: [String: Any] = [
-            "id": app.deviceId, "name": app.nickname, "owner": app.isOwner,
-            "mode": mode, "doubleOut": doubleOut, "legsToWin": legsToWin,
+            "player": app.playerId, "mode": mode, "doubleOut": doubleOut, "legsToWin": legsToWin,
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let data: Data, res: URLResponse
@@ -205,6 +205,7 @@ extension LobbyAPI {
             throw PiError.unreachable
         }
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401 { throw ProfileError.signedOut }
         if status == 409 {
             let err = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
             switch err {
@@ -214,19 +215,6 @@ extension LobbyAPI {
             }
         }
         guard status == 200 else { throw CreateError.other(status) }
-        let info = try JSONDecoder().decode(LobbyInfo.self, from: data)
-        await uploadPhoto(at: base, info: info, app: app)
-        return info
-    }
-
-    /// Envoie la photo du profil au Pi pour un pote (le propriétaire a déjà la sienne).
-    @MainActor
-    static func uploadPhoto(at base: URL, info: LobbyInfo, app: AppModel) async {
-        guard let you = info.you, let jpeg = app.photoJpeg, !app.isOwner else { return }
-        var up = URLRequest(url: base.appendingPathComponent("api/players/\(you)/photo"))
-        up.httpMethod = "PUT"
-        up.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
-        up.httpBody = jpeg
-        _ = try? await session.data(for: up)
+        return try JSONDecoder().decode(LobbyInfo.self, from: data)
     }
 }

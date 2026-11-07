@@ -147,6 +147,9 @@ final class SetupModel: ObservableObject {
         photo != nil && !firstName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Clé du profil du propriétaire, donnée par le Pi à la fin du setup.
+    var ownerKey: String?
+
     /// Profil rempli : on passe au code du propriétaire.
     func toPin() {
         guard canFinish else { return }
@@ -162,7 +165,7 @@ final class SetupModel: ObservableObject {
             defer { busy = false }
             do {
                 try await client.uploadPhoto(jpeg)
-                try await client.sendProfile(
+                ownerKey = try await client.sendProfile(
                     firstName: firstName.trimmingCharacters(in: .whitespaces),
                     lastName: lastName.trimmingCharacters(in: .whitespaces),
                     nickname: nickname.trimmingCharacters(in: .whitespaces),

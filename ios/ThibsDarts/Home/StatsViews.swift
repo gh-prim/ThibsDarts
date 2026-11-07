@@ -111,7 +111,7 @@ final class HistoryModel: ObservableObject {
 
 extension AppModel {
     /// Identifiant du joueur dans l'historique du Pi : "owner" pour le propriétaire, sinon ce téléphone.
-    var playerId: String { isOwner ? "owner" : deviceId }
+    var playerId: String { profileId ?? (isOwner ? "owner" : deviceId) }
 }
 
 // MARK: Format

@@ -30,9 +30,12 @@ struct SetupFlow: View {
         }
         .onChange(of: model.step) { _, step in
             guard step == .done else { return }
-            app.saveProfile(nickname: model.nickname.isEmpty ? model.firstName : model.nickname,
-                            firstName: model.firstName, lastName: model.lastName, photo: model.photo)
-            app.setOwner(piBase: model.client.base)
+            let nick = model.nickname.isEmpty ? model.firstName : model.nickname
+            app.saveProfile(nickname: nick, firstName: model.firstName, lastName: model.lastName, photo: model.photo)
+            if let key = model.ownerKey, let base = model.client.base {
+                app.signIn(PiPlayer(id: "owner", nickname: nick, owner: true, pin: true, photo: true),
+                           token: key, base: base, photo: model.photo, onboard: false)
+            }
         }
     }
 }

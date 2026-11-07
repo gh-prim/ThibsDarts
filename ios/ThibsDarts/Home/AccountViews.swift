@@ -1,6 +1,7 @@
 import SwiftUI
 
-// Compte : code PIN du propriétaire, déconnexion, reconnexion en propriétaire.
+// Profils de la cible : chaque joueur a un profil sur le Pi (surnom, photo, code).
+// L'appli s'y connecte avec le code et garde la clé donnée par le Pi.
 
 // MARK: Pavé de code
 
@@ -145,36 +146,61 @@ struct PinChooser: View {
     }
 }
 
-// MARK: API du compte
+// MARK: API des profils
 
-extension LobbyAPI {
-    struct OwnerProfile: Decodable {
-        let firstName: String
-        let lastName: String
-        let nickname: String
-        let photo: Bool
-    }
+/// Un profil de la cible (GET /api/players).
+struct PiPlayer: Decodable, Identifiable, Hashable {
+    let id: String
+    let nickname: String
+    let owner: Bool
+    /// Le profil a un code. Sans code : créé pour un pote sans appli, à réclamer.
+    let pin: Bool
+    let photo: Bool
+}
 
-    enum PinError: LocalizedError {
-        case wrong(Int?), locked(Int), noPin, other(Int)
+enum ProfileError: LocalizedError {
+    case wrong(Int?), locked(Int), taken, signedOut, other(Int)
 
-        var errorDescription: String? {
-            switch self {
-            case let .wrong(left):
-                if let left, left > 0, left < 3 { return "Mauvais code. Encore \(left) essai\(left > 1 ? "s" : "")." }
-                return "Mauvais code."
-            case let .locked(s): return "Trop d’essais. Réessaie dans \(s) secondes."
-            case .noPin: return "Cette cible n’a pas encore de code. Ouvre l’appli sur l’iPhone du propriétaire."
-            case let .other(s): return "Le Pi a répondu \(s)."
-            }
+    var errorDescription: String? {
+        switch self {
+        case let .wrong(left):
+            if let left, left > 0, left < 3 { return "Mauvais code. Encore \(left) essai\(left > 1 ? "s" : "")." }
+            return "Mauvais code."
+        case let .locked(s): return "Trop d’essais. Réessaie dans \(s) secondes."
+        case .taken: return "Ce surnom est déjà pris sur la cible."
+        case .signedOut: return "Ta clé n’est plus reconnue par la cible. Déconnecte-toi puis reconnecte-toi avec ton code."
+        case let .other(s): return "Le Pi a répondu \(s)."
         }
     }
+}
 
-    private static func postPin(_ base: URL, _ path: String, _ pin: String) async throws -> (Int, Data) {
+extension LobbyAPI {
+    struct SignIn: Decodable {
+        let token: String
+        let player: PiPlayer
+    }
+
+    static func players(at base: URL) async throws -> [PiPlayer] {
+        struct List: Decodable { let players: [PiPlayer] }
+        guard let (data, res) = try? await session.data(from: base.appendingPathComponent("api/players")),
+              (res as? HTTPURLResponse)?.statusCode == 200 else { throw PiError.unreachable }
+        return try JSONDecoder().decode(List.self, from: data).players
+    }
+
+    @MainActor
+    private static func send(
+        _ method: String, _ base: URL, _ path: String, json: [String: Any]? = nil, body: Data? = nil, app: AppModel? = nil
+    ) async throws -> (Int, Data) {
         var req = URLRequest(url: base.appendingPathComponent(path))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["pin": pin])
+        req.httpMethod = method
+        if let json {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: json)
+        } else if let body {
+            req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+            req.httpBody = body
+        }
+        app?.authorize(&req)
         do {
             let (data, res) = try await session.data(for: req)
             return ((res as? HTTPURLResponse)?.statusCode ?? 0, data)
@@ -183,61 +209,85 @@ extension LobbyAPI {
         }
     }
 
-    static func ownerLogin(at base: URL, pin: String) async throws -> OwnerProfile {
-        let (status, data) = try await postPin(base, "api/owner/login", pin)
+    private static func signIn(_ status: Int, _ data: Data) throws -> SignIn {
         let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         switch status {
-        case 200: return try JSONDecoder().decode(OwnerProfile.self, from: data)
-        case 403: throw PinError.wrong(j?["left"] as? Int)
-        case 429: throw PinError.locked(j?["wait"] as? Int ?? 60)
-        case 409: throw PinError.noPin
-        default: throw PinError.other(status)
+        case 200: return try JSONDecoder().decode(SignIn.self, from: data)
+        case 403: throw ProfileError.wrong(j?["left"] as? Int)
+        case 429: throw ProfileError.locked(j?["wait"] as? Int ?? 60)
+        case 409 where j?["error"] as? String == "pris": throw ProfileError.taken
+        case 401: throw ProfileError.signedOut
+        default: throw ProfileError.other(status)
         }
     }
 
-    static func setOwnerPin(at base: URL, pin: String) async throws {
-        let (status, _) = try await postPin(base, "api/owner/pin", pin)
-        // 409 : un code existe déjà (choisi depuis un autre iPhone), rien à faire.
-        guard status == 200 || status == 409 else { throw PinError.other(status) }
+    /// Se connecter à son profil avec son code.
+    @MainActor
+    static func login(at base: URL, player: String, pin: String) async throws -> SignIn {
+        let (s, d) = try await send("POST", base, "api/players/\(player)/login", json: ["pin": pin])
+        return try signIn(s, d)
     }
 
-    static func ownerPhoto(at base: URL) async -> UIImage? {
-        guard let (data, res) = try? await session.data(from: base.appendingPathComponent("api/owner/photo")),
+    /// Réclamer un profil sans code (pote ajouté sans appli, ou vieille cible) en choisissant son code.
+    @MainActor
+    static func claim(at base: URL, player: String, pin: String) async throws -> SignIn {
+        let (s, d) = try await send("POST", base, "api/players/\(player)/claim", json: ["pin": pin])
+        return try signIn(s, d)
+    }
+
+    /// Nouveau profil. L'identifiant du téléphone est repris pour garder ses anciennes parties.
+    @MainActor
+    static func createProfile(at base: URL, nickname: String, pin: String, app: AppModel) async throws -> SignIn {
+        let (s, d) = try await send(
+            "POST", base, "api/players", json: ["nickname": nickname, "pin": pin, "id": app.deviceId]
+        )
+        return try signIn(s, d)
+    }
+
+    /// Le propriétaire ajoute un pote sans appli : un profil sans code.
+    @MainActor
+    static func addFriend(at base: URL, nickname: String, app: AppModel) async throws {
+        let (s, d) = try await send("POST", base, "api/players", json: ["nickname": nickname], app: app)
+        if s != 200 { _ = try signIn(s, d) }
+    }
+
+    /// Envoie le surnom et la photo du profil connecté à la cible.
+    @MainActor
+    static func syncProfile(app: AppModel) async throws {
+        guard let base = app.piBase, let id = app.profileId else { return }
+        let (s, d) = try await send("PATCH", base, "api/players/\(id)", json: ["nickname": app.nickname], app: app)
+        if s != 200 { _ = try signIn(s, d) }
+        if let jpeg = app.photoJpeg {
+            let (s, d) = try await send("PUT", base, "api/players/\(id)/photo", body: jpeg, app: app)
+            if s != 200 { _ = try signIn(s, d) }
+        }
+    }
+
+    static func profilePhoto(at base: URL, id: String) async -> UIImage? {
+        guard let (data, res) = try? await session.data(from: base.appendingPathComponent("api/players/\(id)/photo")),
               (res as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return UIImage(data: data)
     }
 }
 
-// MARK: Reconnexion du propriétaire
+// MARK: Trouver la cible
 
-/// "C'est ma cible" : on trouve la cible sur le Wi-Fi, puis le code du propriétaire.
-struct OwnerLoginView: View {
-    @EnvironmentObject var app: AppModel
+/// On cherche les cibles sur le Wi-Fi. Une seule : on la prend.
+struct CibleFinder: View {
     let onBack: () -> Void
+    let onFound: (URL) -> Void
 
     @State private var found: [FoundPi] = []
     @State private var searching = true
-    @State private var chosen: FoundPi?
-    @State private var busy = false
-    @State private var error: String?
 
     var body: some View {
         Stage {
             VStack(spacing: Td.s4) {
-                NavBar(title: "Propriétaire", back: "Retour") {
-                    if chosen != nil && found.count > 1 { chosen = nil } else { onBack() }
-                }
-                if let chosen {
-                    PinPad(
-                        title: "Ton code",
-                        detail: "Les 4 chiffres choisis à l’installation de la cible de \(chosen.owner).",
-                        error: error, busy: busy
-                    ) { login(chosen, $0) }
-                    .frame(maxHeight: .infinity)
-                } else if searching {
+                NavBar(title: "Ta cible", back: "Retour", onBack: onBack)
+                if searching {
                     VStack(spacing: Td.s3) {
                         Spinner(size: 32)
-                        Text("On cherche ta cible sur le Wi-Fi.").font(.td(17, .semibold))
+                        Text("On cherche la cible sur le Wi-Fi.").font(.td(17, .semibold))
                         Text("Reste sur le même Wi-Fi que la cible.").font(.td(15)).foregroundStyle(Td.ink2)
                     }
                     .frame(maxHeight: .infinity)
@@ -251,18 +301,10 @@ struct OwnerLoginView: View {
                     .frame(maxHeight: .infinity)
                 } else {
                     VStack(alignment: .leading, spacing: Td.s3) {
-                        ObHeader(title: "Quelle cible ?", detail: "Choisis la tienne.")
+                        ObHeader(title: "Quelle cible ?", detail: "Celle où tu joues.")
                         ForEach(found) { pi in
-                            Button { chosen = pi } label: {
-                                HStack(spacing: Td.s3) {
-                                    Icon(name: .target, size: 20).foregroundStyle(Td.sunset)
-                                    Text("Cible de \(pi.owner)").font(.td(17, .semibold))
-                                    Spacer()
-                                    Icon(name: .chevronRight, size: 18).foregroundStyle(Td.ink3)
-                                }
-                                .padding(Td.s4)
-                                .background(RoundedRectangle(cornerRadius: Td.rLg).fill(Td.asphalte))
-                                .overlay(RoundedRectangle(cornerRadius: Td.rLg).strokeBorder(Td.bord))
+                            Button { onFound(pi.base) } label: {
+                                Row(icon: .target, title: "Cible de \(pi.owner)")
                             }
                             .buttonStyle(PressScale())
                         }
@@ -281,18 +323,135 @@ struct OwnerLoginView: View {
         searching = true
         found = await Discovery.scan()
         searching = false
-        if found.count == 1 { chosen = found[0] }
+        if found.count == 1 { onFound(found[0].base) }
+    }
+}
+
+/// Ligne touchable : icône ou photo, titre, détail, chevron.
+private struct Row<Lead: View>: View {
+    let lead: Lead
+    let title: String
+    var detail: String?
+
+    init(icon: LucideIcon, title: String, detail: String? = nil) where Lead == AnyView {
+        lead = AnyView(Icon(name: icon, size: 20).foregroundStyle(Td.sunset))
+        self.title = title
+        self.detail = detail
     }
 
-    private func login(_ pi: FoundPi, _ pin: String) {
+    init(title: String, detail: String? = nil, @ViewBuilder lead: () -> Lead) {
+        self.lead = lead()
+        self.title = title
+        self.detail = detail
+    }
+
+    var body: some View {
+        HStack(spacing: Td.s3) {
+            lead
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.td(17, .semibold))
+                if let detail { Text(detail).font(.td(13)).foregroundStyle(Td.ink2) }
+            }
+            Spacer()
+            Icon(name: .chevronRight, size: 18).foregroundStyle(Td.ink3)
+        }
+        .foregroundStyle(Td.ink)
+        .padding(Td.s4)
+        .background(RoundedRectangle(cornerRadius: Td.rLg).fill(Td.asphalte))
+        .overlay(RoundedRectangle(cornerRadius: Td.rLg).strokeBorder(Td.bord))
+    }
+}
+
+// MARK: Qui es-tu ?
+
+/// Les profils de la cible : on choisit le sien et on tape son code, ou on en crée un.
+struct WhoView: View {
+    @EnvironmentObject var app: AppModel
+    let base: URL
+    let onBack: () -> Void
+    let onNew: () -> Void
+
+    @State private var players: [PiPlayer]?
+    @State private var chosen: PiPlayer?
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        Stage {
+            VStack(spacing: Td.s4) {
+                NavBar(title: chosen == nil ? "" : chosen!.nickname, back: "Retour") {
+                    if chosen != nil { chosen = nil; error = nil } else { onBack() }
+                }
+                if let chosen {
+                    if chosen.pin {
+                        PinPad(title: "Ton code", detail: "Les 4 chiffres de ton profil.", error: error, busy: busy) {
+                            signIn(chosen, $0, claim: false)
+                        }
+                        .frame(maxHeight: .infinity)
+                    } else {
+                        PinChooser(
+                            title: "Choisis ton code",
+                            detail: "4 chiffres pour retrouver ton profil sur n’importe quel iPhone.",
+                            busy: busy, serverError: error
+                        ) { signIn(chosen, $0, claim: true) }
+                    }
+                } else if let players {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: Td.s3) {
+                            ObHeader(title: "C’est qui ?", detail: "Choisis ton profil sur la cible.")
+                            ForEach(players) { p in
+                                Button { chosen = p } label: {
+                                    Row(title: p.nickname, detail: p.owner ? "Propriétaire" : (p.pin ? nil : "Sans code")) {
+                                        Avatar(name: p.nickname, url: p.photo ? base.appendingPathComponent("api/players/\(p.id)/photo") : nil, size: 40)
+                                    }
+                                }
+                                .buttonStyle(PressScale())
+                            }
+                            if let error { Banner(text: error, error: true) }
+                        }
+                    }
+                    TdButton(title: "Je suis nouveau", icon: .plus, block: true, action: onNew)
+                } else {
+                    VStack(spacing: Td.s4) {
+                        if let error {
+                            ChartState(icon: .wifiOff, text: error)
+                            TdButton(title: "Réessayer", variant: .secondary, icon: .refreshCw, block: true) {
+                                Task { await load() }
+                            }
+                        } else {
+                            Spinner(size: 32)
+                        }
+                    }
+                    .frame(maxHeight: .infinity)
+                }
+            }
+            .padding(.horizontal, Td.s4)
+            .padding(.top, 6)
+            .padding(.bottom, Td.s5)
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        error = nil
+        do {
+            players = try await LobbyAPI.players(at: base)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func signIn(_ p: PiPlayer, _ pin: String, claim: Bool) {
         busy = true
         error = nil
         Task {
             defer { busy = false }
             do {
-                let p = try await LobbyAPI.ownerLogin(at: pi.base, pin: pin)
-                let photo = p.photo ? await LobbyAPI.ownerPhoto(at: pi.base) : nil
-                app.restoreOwner(p, photo: photo, piBase: pi.base)
+                let r = claim
+                    ? try await LobbyAPI.claim(at: base, player: p.id, pin: pin)
+                    : try await LobbyAPI.login(at: base, player: p.id, pin: pin)
+                let photo = r.player.photo ? await LobbyAPI.profilePhoto(at: base, id: r.player.id) : nil
+                app.signIn(r.player, token: r.token, base: base, photo: photo)
             } catch {
                 self.error = error.localizedDescription
             }
@@ -300,47 +459,86 @@ struct OwnerLoginView: View {
     }
 }
 
-/// Cible installée avant le code : le propriétaire le choisit à l'ouverture de l'appli.
-struct OwnerPinSetupView: View {
+/// Nouveau profil : surnom et photo (déjà saisis), puis le code, puis on l'envoie à la cible.
+struct NewProfilePinView: View {
     @EnvironmentObject var app: AppModel
     let base: URL
-    let onDone: () -> Void
+    let onBack: () -> Void
 
     @State private var busy = false
     @State private var error: String?
 
     var body: some View {
         Stage {
-            PinChooser(
-                title: "Choisis ton code",
-                detail: "Nouveau : 4 chiffres pour te reconnaître comme propriétaire de la cible, même sur un autre iPhone.",
-                busy: busy, serverError: error
-            ) { pin in
-                busy = true
-                error = nil
-                Task {
-                    defer { busy = false }
-                    do {
-                        try await LobbyAPI.setOwnerPin(at: base, pin: pin)
-                        onDone()
-                    } catch {
-                        self.error = error.localizedDescription
-                    }
-                }
+            VStack(spacing: Td.s4) {
+                NavBar(title: "", back: "Profil", onBack: onBack)
+                PinChooser(
+                    title: "Choisis ton code",
+                    detail: "4 chiffres pour retrouver ton profil sur n’importe quel iPhone.",
+                    busy: busy, serverError: error
+                ) { create($0) }
             }
             .padding(.horizontal, Td.s4)
+            .padding(.top, 6)
+            .padding(.bottom, Td.s5)
         }
-        .interactiveDismissDisabled()
+    }
+
+    private func create(_ pin: String) {
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                let r = try await LobbyAPI.createProfile(at: base, nickname: app.nickname, pin: pin, app: app)
+                app.signIn(r.player, token: r.token, base: base, photo: app.photo)
+                try? await LobbyAPI.syncProfile(app: app)
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
     }
 }
 
-// MARK: Déconnexion
+/// Le propriétaire ajoute un pote sans appli. Il pourra réclamer son profil plus tard.
+struct AddFriendView: View {
+    @EnvironmentObject var app: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var busy = false
+    @State private var error: String?
 
-extension AppModel {
-    /// Reconnecté en propriétaire avec son code : profil et cible repris du Pi.
-    func restoreOwner(_ p: LobbyAPI.OwnerProfile, photo: UIImage?, piBase: URL) {
-        saveProfile(nickname: p.nickname, firstName: p.firstName, lastName: p.lastName, photo: photo)
-        setOwner(piBase: piBase)
-        onboarded = true
+    var body: some View {
+        Stage {
+            VStack(alignment: .leading, spacing: Td.s4) {
+                NavBar(title: "Ajouter un joueur", back: "Profil") { dismiss() }
+                ObHeader(title: "Un pote sans appli", detail: "Il apparaît sur la cible. S’il installe l’appli, il choisit son code et garde ses parties.")
+                Field(label: "Son surnom", text: $name, placeholder: "Lou", icon: .user, contentType: .nickname)
+                if let error { Banner(text: error, error: true) }
+                Spacer()
+                TdButton(
+                    title: "Ajouter", icon: .plus, block: true,
+                    state: busy ? .loading : (name.trimmingCharacters(in: .whitespaces).isEmpty ? .disabled : .normal)
+                ) { add() }
+            }
+            .padding(.horizontal, Td.s4)
+            .padding(.top, 6)
+            .padding(.bottom, Td.s5)
+        }
+    }
+
+    private func add() {
+        guard let base = app.piBase else { return }
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await LobbyAPI.addFriend(at: base, nickname: name.trimmingCharacters(in: .whitespaces), app: app)
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
     }
 }

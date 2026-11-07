@@ -1,9 +1,10 @@
 import PhotosUI
 import SwiftUI
 
-/// Premier lancement d'un joueur : Bienvenue, Ton profil, Rejoindre ou installer.
+/// Premier lancement : Bienvenue, trouver la cible, choisir son profil et taper son code.
+/// Ou installer sa cible (le propriétaire devient le premier profil).
 struct OnboardingFlow: View {
-    enum Step { case welcome, profile, choice, install, join, owner }
+    enum Step: Equatable { case welcome, find, who(URL), newProfile(URL), newPin(URL), photo, install }
 
     @EnvironmentObject var app: AppModel
     @State private var step: Step = .welcome
@@ -11,21 +12,22 @@ struct OnboardingFlow: View {
     var body: some View {
         Group {
             switch step {
-            case .welcome: WelcomeView(onStart: { go(.profile) }, onOwner: { go(.owner) })
-            case .profile:
-                ProfileView(onBack: { go(.welcome) }, onDone: {
-                    // Propriétaire reconnecté sans photo : la photo suffit, pas besoin du choix.
-                    if app.isOwner && app.piBase != nil { app.onboarded = true } else { go(.choice) }
-                })
-            case .choice: ChoiceView(onBack: { go(.profile) }, onJoin: { go(.join) }, onInstall: { go(.install) })
-            case .install: SetupFlow(onExit: { go(.choice) })
-            case .join: JoinView(onBack: { go(.choice) })
-            case .owner: OwnerLoginView(onBack: { go(.welcome) })
+            case .welcome: WelcomeView(onJoin: { go(.find) }, onInstall: { go(.install) })
+            case .find: CibleFinder(onBack: { go(.welcome) }, onFound: { go(.who($0)) })
+            case let .who(base): WhoView(base: base, onBack: { go(.welcome) }, onNew: { go(.newProfile(base)) })
+            case let .newProfile(base):
+                ProfileView(onBack: { go(.who(base)) }, onDone: { go(.newPin(base)) })
+            case let .newPin(base): NewProfilePinView(base: base, onBack: { go(.newProfile(base)) })
+            case .photo:
+                // Connecté à un profil sans photo (pote ajouté par le propriétaire) : on la prend.
+                ProfileView(onBack: nil, onDone: {})
+            case .install: SetupFlow(onExit: { go(.welcome) })
             }
         }
         .transition(.opacity)
-        .onChange(of: app.isOwner) { _, owner in
-            if owner && step == .owner && !app.hasProfile { go(.profile) }
+        .onAppear { if app.signedIn && !app.hasProfile { step = .photo } }
+        .onChange(of: app.signedIn) { _, inside in
+            if inside && !app.hasProfile { go(.photo) }
         }
     }
 
@@ -37,8 +39,8 @@ struct OnboardingFlow: View {
 // MARK: Main "Bienvenue"
 
 private struct WelcomeView: View {
-    let onStart: () -> Void
-    let onOwner: () -> Void
+    let onJoin: () -> Void
+    let onInstall: () -> Void
 
     var body: some View {
         Stage {
@@ -55,8 +57,8 @@ private struct WelcomeView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxHeight: .infinity)
                 VStack(spacing: Td.s2) {
-                    TdButton(title: "Créer mon profil", icon: .arrowRight, block: true, action: onStart)
-                    TdButton(title: "C’est ma cible, j’ai mon code", variant: .tertiary, block: true, action: onOwner)
+                    TdButton(title: "C’est parti", icon: .arrowRight, block: true, action: onJoin)
+                    TdButton(title: "Installer ma cible", variant: .tertiary, icon: .cpu, block: true, action: onInstall)
                 }
             }
             .padding(.horizontal, Td.s6)
@@ -79,6 +81,9 @@ struct ProfileView: View {
     @State private var shooting = false
     @State private var pick: PhotosPickerItem?
     @State private var confirmLogout = false
+    @State private var addFriend = false
+    @State private var busy = false
+    @State private var error: String?
 
     var body: some View {
         Stage {
@@ -111,11 +116,17 @@ struct ProfileView: View {
                         .padding(Td.s4)
                         .background(RoundedRectangle(cornerRadius: Td.rLg).fill(Td.verreLeger))
                         .overlay(RoundedRectangle(cornerRadius: Td.rLg).strokeBorder(Td.verreBord))
+                        if let error { Banner(text: error, error: true) }
                         if onBack == nil {
+                            if app.isOwner && app.hasProfile {
+                                TdButton(title: "Ajouter un pote sans appli", variant: .secondary, icon: .plus, block: true) {
+                                    addFriend = true
+                                }
+                                .padding(.top, Td.s2)
+                            }
                             TdButton(title: "Se déconnecter", variant: .tertiary, icon: .logOut, block: true) {
                                 confirmLogout = true
                             }
-                            .padding(.top, Td.s2)
                         }
                     }
                 }
@@ -124,11 +135,9 @@ struct ProfileView: View {
                 TdButton(
                     title: photo == nil ? "Ajoute ta photo pour continuer" : "Continuer",
                     icon: .arrowRight, block: true,
-                    state: photo != nil && !nickname.trimmingCharacters(in: .whitespaces).isEmpty ? .normal : .disabled
-                ) {
-                    app.saveProfile(nickname: nickname, photo: photo)
-                    onDone()
-                }
+                    state: busy ? .loading
+                        : (photo != nil && !nickname.trimmingCharacters(in: .whitespaces).isEmpty ? .normal : .disabled)
+                ) { save() }
             }
             .padding(.horizontal, Td.s4)
             .padding(.top, 6)
@@ -139,19 +148,37 @@ struct ProfileView: View {
             photo = app.photo
         }
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { photo = $0 } }
+        .sheet(isPresented: $addFriend) { AddFriendView().environmentObject(app) }
         .confirmationDialog("Se déconnecter ?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Se déconnecter", role: .destructive) { app.logout() }
             Button("Annuler", role: .cancel) {}
         } message: {
-            Text(app.isOwner
-                 ? "Tes parties restent sur la cible. Pour revenir en propriétaire, il te faudra ton code."
-                 : "Tes parties restent sur la cible.")
+            Text("Ton profil et tes parties restent sur la cible. Pour revenir, il te faudra ton code.")
         }
         .onChange(of: pick) { _, item in
             Task {
                 if let data = try? await item?.loadTransferable(type: Data.self), let img = UIImage(data: data) {
                     photo = img
                 }
+            }
+        }
+    }
+
+    /// Connecté à un profil : le surnom et la photo partent aussi sur la cible.
+    private func save() {
+        let old = (app.nickname, app.photo)
+        app.saveProfile(nickname: nickname, photo: photo)
+        guard app.signedIn else { return onDone() }
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await LobbyAPI.syncProfile(app: app)
+                onDone()
+            } catch {
+                app.saveProfile(nickname: old.0, photo: old.1)
+                self.error = error.localizedDescription
             }
         }
     }
@@ -173,60 +200,5 @@ struct ProfileView: View {
                 .overlay(RoundedRectangle(cornerRadius: Td.rSm).strokeBorder(Td.verreBord))
             }
         }
-    }
-}
-
-// MARK: Choix "T'es là pour quoi ?"
-
-private struct ChoiceView: View {
-    let onBack: () -> Void
-    let onJoin: () -> Void
-    let onInstall: () -> Void
-
-    var body: some View {
-        Stage {
-            VStack(alignment: .leading, spacing: Td.s4) {
-                NavBar(title: "", back: "Profil", onBack: onBack)
-                VStack(alignment: .leading, spacing: Td.s1) {
-                    Text("T’es là pour quoi ?").font(.td(34, .heavy)).tracking(-0.5)
-                    Text("Tu pourras changer d’avis plus tard.").font(.td(17)).foregroundStyle(Td.ink2)
-                }
-                card(
-                    icon: .target, tint: Td.sunset, title: "Rejoindre une partie",
-                    detail: "Tu es chez un pote. Scanne le QR code sur l’écran du Pi et c’est parti.",
-                    accent: true, action: onJoin
-                )
-                card(
-                    icon: .cpu, tint: Td.ink2, title: "Installer ma cible",
-                    detail: "Tu as les 2 Pi et les caméras. On les connecte au Wi-Fi, une seule fois.",
-                    accent: false, action: onInstall
-                )
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Td.s4)
-            .padding(.top, 6)
-        }
-    }
-
-    private func card(
-        icon: LucideIcon, tint: Color, title: String, detail: String, accent: Bool, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                Icon(name: icon, size: 32).foregroundStyle(tint)
-                Text(title).font(.td(22, .bold))
-                Text(detail).font(.td(15)).foregroundStyle(Td.ink2).multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Td.s5)
-            .background(RoundedRectangle(cornerRadius: Td.rXl).fill(accent ? Td.sunset.opacity(0.12) : Td.verreLeger))
-            .overlay(
-                RoundedRectangle(cornerRadius: Td.rXl)
-                    .strokeBorder(accent ? Td.sunset.opacity(0.6) : Td.verreBord)
-            )
-            .shadow(color: accent ? Td.sunset.opacity(0.25) : .clear, radius: 16)
-        }
-        .buttonStyle(PressScale())
-        .foregroundStyle(Td.ink)
     }
 }

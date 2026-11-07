@@ -7,7 +7,7 @@ struct ThibsDartsApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if app.onboarded && app.hasProfile {
+                if app.onboarded && app.hasProfile && app.signedIn {
                     HomeView()
                 } else {
                     OnboardingFlow()

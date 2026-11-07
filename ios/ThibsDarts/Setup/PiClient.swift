@@ -136,12 +136,16 @@ final class PiClient {
         guard status == 200 else { throw PiError.http(status, "photo") }
     }
 
-    func sendProfile(firstName: String, lastName: String, nickname: String, pin: String) async throws {
-        let (status, _) = try await send(
+    /// Envoie le profil du propriétaire. Renvoie la clé de son profil sur la cible.
+    func sendProfile(firstName: String, lastName: String, nickname: String, pin: String) async throws -> String {
+        let (status, data) = try await send(
             "POST", "api/setup/profile",
             json: ["firstName": firstName, "lastName": lastName, "nickname": nickname, "pin": pin]
         )
-        guard status == 200 else { throw PiError.http(status, "profil") }
+        guard status == 200,
+              let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = j["playerToken"] as? String else { throw PiError.http(status, "profil") }
+        return key
     }
 
     private func send(

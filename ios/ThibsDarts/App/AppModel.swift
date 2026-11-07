@@ -12,8 +12,12 @@ final class AppModel: ObservableObject {
         didSet { defaults.set(notify, forKey: "notify") }
     }
 
-    /// Ce téléphone a installé la cible : il est l'hôte de son salon.
+    /// Le profil connecté est le propriétaire de la cible : il est l'hôte de son salon.
     @Published private(set) var isOwner: Bool
+
+    /// Profil de la cible auquel ce téléphone est connecté, et sa clé (donnée par le Pi après le code).
+    @Published private(set) var profileId: String?
+    private(set) var token: String?
 
     /// Adresse du Pi, apprise au setup ou au scan d'un salon.
     @Published private(set) var piBase: URL?
@@ -30,6 +34,7 @@ final class AppModel: ObservableObject {
     private let defaults = UserDefaults.standard
 
     var hasProfile: Bool { !nickname.isEmpty && photo != nil }
+    var signedIn: Bool { profileId != nil && token != nil }
 
     private static var photoURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("profile.jpg")
@@ -43,6 +48,8 @@ final class AppModel: ObservableObject {
         isOwner = defaults.bool(forKey: "isOwner")
         piBase = defaults.url(forKey: "piBase")
         onboarded = defaults.bool(forKey: "onboarded")
+        profileId = defaults.string(forKey: "playerId")
+        token = defaults.string(forKey: "playerToken")
         if let id = defaults.string(forKey: "deviceId") {
             deviceId = id
         } else {
@@ -69,10 +76,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func setOwner(piBase: URL?) {
-        isOwner = true
-        defaults.set(true, forKey: "isOwner")
-        remember(piBase: piBase)
+    /// Connecté à un profil de la cible avec son code (ou à la fin du setup pour le propriétaire).
+    func signIn(_ player: PiPlayer, token: String, base: URL, photo: UIImage?, onboard: Bool = true) {
+        profileId = player.id
+        self.token = token
+        isOwner = player.owner
+        defaults.set(player.id, forKey: "playerId")
+        defaults.set(token, forKey: "playerToken")
+        defaults.set(player.owner, forKey: "isOwner")
+        remember(piBase: base)
+        saveProfile(nickname: player.nickname, photo: photo)
+        if onboard { onboarded = true }
     }
 
     func remember(piBase: URL?) {
@@ -86,7 +100,7 @@ final class AppModel: ObservableObject {
     /// Se déconnecter : on oublie le profil et la cible. L'identifiant du téléphone reste.
     func logout() {
         lobby = nil
-        for key in ["nickname", "firstName", "lastName", "isOwner", "piBase", "onboarded"] {
+        for key in ["nickname", "firstName", "lastName", "isOwner", "piBase", "onboarded", "playerId", "playerToken"] {
             defaults.removeObject(forKey: key)
         }
         try? FileManager.default.removeItem(at: Self.photoURL)
@@ -95,6 +109,8 @@ final class AppModel: ObservableObject {
         lastName = ""
         photo = nil
         isOwner = false
+        profileId = nil
+        token = nil
         piBase = nil
         onboarded = false
     }
@@ -119,21 +135,24 @@ extension LobbyAPI {
         var req = URLRequest(url: base.appendingPathComponent("api/lobby/join"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "code": code, "id": app.deviceId, "name": app.nickname, "owner": app.isOwner,
-        ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        app.authorize(&req)
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["code": code, "player": app.playerId])
         let (data, res) = try await session.data(for: req)
         switch (res as? HTTPURLResponse)?.statusCode ?? 0 {
         case 200: break
+        case 401: throw ProfileError.signedOut
         case 403: throw JoinError.code
         case 409: throw JoinError.closed
         case 410: throw JoinError.full
         case let s: throw JoinError.other(s)
         }
-        let info = try JSONDecoder().decode(LobbyInfo.self, from: data)
-        await uploadPhoto(at: base, info: info, app: app)
-        return info
+        return try JSONDecoder().decode(LobbyInfo.self, from: data)
     }
+}
 
+extension AppModel {
+    /// Ajoute la clé du profil à une requête vers le Pi.
+    func authorize(_ req: inout URLRequest) {
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+    }
 }

@@ -61,7 +61,8 @@ final class SetupModel: ObservableObject {
             } catch {
                 found = nil
                 if let ssid = l.ssid, isUnreachable(error) {
-                    self.error = "Rejoins le Wi-Fi \(ssid) dans Réglages, puis rescanne."
+                    let pass = l.key.map { " (mot de passe : \($0))" } ?? ""
+                    self.error = "Rejoins le Wi-Fi \(ssid)\(pass) dans Réglages, puis rescanne."
                 } else {
                     self.error = error.localizedDescription
                 }

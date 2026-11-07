@@ -257,6 +257,12 @@ class _QrView extends StatelessWidget {
               Text('Code d’appairage', style: TdText.inter(13, 18, 600, Td.ink3)),
               const SizedBox(height: 2),
               Text(c.code, style: TdText.rounded(44, 900, Td.ink, height: 48).copyWith(letterSpacing: 8)),
+              if (!c.wifi.simulated) ...[
+                const SizedBox(height: Td.s4),
+                Text('Wi-Fi ${c.hotspotSsid}', style: TdText.inter(13, 18, 600, Td.ink3)),
+                const SizedBox(height: 2),
+                Text(c.hotspotPassword, style: TdText.rounded(28, 800, Td.ink, height: 34).copyWith(letterSpacing: 2)),
+              ],
             ],
           ),
         ),

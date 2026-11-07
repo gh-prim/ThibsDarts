@@ -62,6 +62,12 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   void initState() {
     super.initState();
     AppState.lastGame = widget.config;
+    Lobby.instance.stopGame = _stopFromPhone;
+  }
+
+  /// Arrêt demandé depuis un iPhone du salon (déjà confirmé là-bas).
+  void _stopFromPhone() {
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -69,6 +75,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     _tagTimer?.cancel();
     _winTimer?.cancel();
     _save();
+    if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }
@@ -384,6 +391,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
         onLongPress: () => Navigator.of(context).pop(),
         child: const Logo(variant: LogoVariant.icon, height: 44),
       ),
+      const SizedBox(width: Td.s2),
+      const StopGameButton(),
       const SizedBox(width: Td.s3),
       Expanded(
         child: Text(
@@ -481,6 +490,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                       onLongPress: () => Navigator.of(context).pop(),
                       child: const Logo(variant: LogoVariant.icon, height: 40),
                     ),
+                    const SizedBox(width: Td.s2),
+                    const StopGameButton(size: 40),
                     const SizedBox(width: Td.s3),
                     Text(_header, style: TdText.inter(15, 20, 400, Td.ink2)),
                     const Spacer(),

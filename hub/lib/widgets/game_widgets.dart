@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'td_button.dart';
 
 /// Gros score (composant ScoreDisplay, taille l).
 enum ScoreState { normal, out, bust }
@@ -292,4 +293,72 @@ class TdToast extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Bouton "Arrêter" de l'écran de jeu : demande confirmation puis revient à l'accueil.
+class StopGameButton extends StatelessWidget {
+  const StopGameButton({super.key, this.size = 44});
+
+  final double size;
+
+  static Future<void> confirm(BuildContext context) async {
+    final stop = await showDialog<bool>(
+      context: context,
+      barrierColor: const Color(0xCC000000),
+      builder: (ctx) => Dialog(
+        backgroundColor: Td.plateauNoir,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Td.rXl)),
+        child: Padding(
+          padding: const EdgeInsets.all(Td.s8),
+          child: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Arrêter la partie ?', style: TdText.headline),
+                const SizedBox(height: Td.s2),
+                Text('Elle ne comptera pas dans l’historique.', style: TdText.body),
+                const SizedBox(height: Td.s6),
+                Row(
+                  spacing: Td.s3,
+                  children: [
+                    Expanded(
+                      child: TdButton(
+                        label: 'Continuer',
+                        variant: TdButtonVariant.secondary,
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                      ),
+                    ),
+                    Expanded(
+                      child: TdButton(label: 'Arrêter', icon: LucideIcons.x, onPressed: () => Navigator.of(ctx).pop(true)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (stop == true && context.mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Arrêter la partie',
+    child: GestureDetector(
+      onTap: () => confirm(context),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Td.rMd),
+          border: Border.all(color: Td.plateauFil),
+        ),
+        child: Icon(LucideIcons.x, size: size * 0.5, color: Td.ink2),
+      ),
+    ),
+  );
 }

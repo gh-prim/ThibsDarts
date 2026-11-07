@@ -69,6 +69,9 @@ class Lobby extends ChangeNotifier {
 
   void publishGame(Map<String, Object?> game) => live = game;
 
+  /// Branché par l'écran de jeu : arrête la partie en cours et revient à l'accueil.
+  VoidCallback? stopGame;
+
   /// Branché par l'accueil du Pi : affiche le salon créé depuis un iPhone.
   /// Renvoie false si l'écran n'est pas libre (menu ou partie en cours).
   bool Function(GameConfig cfg)? remoteOpen;
@@ -235,6 +238,14 @@ class Lobby extends ChangeNotifier {
       }
       if (req.method == 'POST' && path == '/api/lobby/join') return await _join(req, res);
       if (req.method == 'POST' && path == '/api/lobby/create') return await _create(req, res);
+      if (req.method == 'POST' && path == '/api/lobby/stop') {
+        // Un joueur du salon arrête la partie depuis son iPhone (confirmé dans l'app).
+        final b = await _body(req);
+        if (!players.any((p) => p.id == b['id'])) return await _send(res, {'error': 'joueur'}, status: 403);
+        if (state != LobbyState.playing || stopGame == null) return await _send(res, {'error': 'partie'}, status: 409);
+        stopGame!();
+        return await _send(res, _json());
+      }
       if (req.method == 'POST' && path == '/api/lobby/leave') {
         final b = await _body(req);
         final p = players.where((p) => p.id == b['id']).firstOrNull;

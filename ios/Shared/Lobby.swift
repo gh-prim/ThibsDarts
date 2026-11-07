@@ -145,6 +145,16 @@ enum LobbyAPI {
         _ = try? await session.data(for: req)
     }
 
+    /// Arrête la partie en cours sur le Pi (retour à l'accueil, rien n'est enregistré).
+    static func stop(at base: URL, id: String) async -> Bool {
+        var req = URLRequest(url: base.appendingPathComponent("api/lobby/stop"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["id": id])
+        guard let (_, res) = try? await session.data(for: req) else { return false }
+        return (res as? HTTPURLResponse)?.statusCode == 200
+    }
+
     static func photoURL(base: URL, player: LobbyPlayer) -> URL? {
         player.photo ? base.appendingPathComponent("api/players/\(player.id)/photo") : nil
     }

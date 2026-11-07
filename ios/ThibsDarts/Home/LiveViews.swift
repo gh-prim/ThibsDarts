@@ -149,8 +149,10 @@ struct LiveGameView: View {
     let info: LobbyInfo
     let game: LiveGame
     let onLeave: () -> Void
+    var onStop: (() -> Void)?
 
     @EnvironmentObject var app: AppModel
+    @State private var confirmStop = false
     @State private var dismissedTurn: String?
     @State private var seen180: String?
 
@@ -171,12 +173,21 @@ struct LiveGameView: View {
                 } else {
                     follow
                 }
+                if game.winner == nil, onStop != nil {
+                    TdButton(title: "Arrêter la partie", variant: .secondary, size: .sm, block: true) { confirmStop = true }
+                }
             }
             .padding(.horizontal, Td.s4)
             .padding(.top, 6)
             .padding(.bottom, Td.s2)
         }
         .animation(Td.sortie, value: game)
+        .alert("Arrêter la partie ?", isPresented: $confirmStop) {
+            Button("Continuer", role: .cancel) {}
+            Button("Arrêter", role: .destructive) { onStop?() }
+        } message: {
+            Text("Le Pi revient à l’accueil. La partie ne comptera pas dans l’historique.")
+        }
         .overlay {
             if game.winner == nil, is180, seen180 != turnKey {
                 Stage {

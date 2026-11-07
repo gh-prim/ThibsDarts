@@ -303,7 +303,7 @@ struct SalonView: View {
     var body: some View {
         let info = app.lobby?.info
         if let info, info.isPlaying, let game = info.game {
-            LiveGameView(info: info, game: game, onLeave: leave)
+            LiveGameView(info: info, game: game, onLeave: leave, onStop: stop)
                 .task { await poll() }
         } else {
             waiting(info)
@@ -368,6 +368,12 @@ struct SalonView: View {
         let id = l.info.you ?? app.deviceId
         Task { await LobbyAPI.leave(at: l.base, id: id) }
         app.lobby = nil
+    }
+
+    private func stop() {
+        guard let l = app.lobby else { return }
+        let id = l.info.you ?? app.deviceId
+        Task { _ = await LobbyAPI.stop(at: l.base, id: id) }
     }
 
     private func poll() async {

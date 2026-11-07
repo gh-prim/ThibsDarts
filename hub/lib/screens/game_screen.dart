@@ -62,6 +62,12 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     AppState.lastGame = widget.config;
+    Lobby.instance.stopGame = _stopFromPhone;
+  }
+
+  /// Arrêt demandé depuis un iPhone du salon (déjà confirmé là-bas).
+  void _stopFromPhone() {
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _recordResult() {
@@ -78,6 +84,7 @@ class _GameScreenState extends State<GameScreen> {
     _tagTimer?.cancel();
     _winTimer?.cancel();
     _save();
+    if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
     if (Lobby.instance.state == LobbyState.playing) Lobby.instance.close();
     super.dispose();
   }
@@ -430,6 +437,8 @@ class _GameScreenState extends State<GameScreen> {
                         onLongPress: () => Navigator.of(context).pop(),
                         child: const Logo(variant: LogoVariant.icon, height: 44),
                       ),
+                      const SizedBox(width: Td.s2),
+                      const StopGameButton(),
                       const Spacer(),
                       Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
                     ],

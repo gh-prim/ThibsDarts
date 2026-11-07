@@ -10,6 +10,9 @@ struct ThibsDartsTVApp: App {
                 .environmentObject(model)
                 .preferredColorScheme(.dark)
                 .task { await model.start() }
+                // L'app est un écran d'affichage : pas d'économiseur ni d'écran "À l'écoute"
+                // de Spotify par-dessus quand personne ne touche la télécommande.
+                .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         }
     }
 }

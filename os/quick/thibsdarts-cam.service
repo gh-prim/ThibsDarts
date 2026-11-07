@@ -1,0 +1,18 @@
+[Unit]
+Description=ThibsDarts cam (simulateur de lancers, MQTT vers le hub)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=thibs
+Group=thibs
+SupplementaryGroups=video
+Environment=MQTT_HOST=192.168.1.239
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/opt/thibsdarts-cam/simulator
+ExecStart=/usr/bin/python3 sim.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -8,6 +8,8 @@ User=thibs
 Group=thibs
 SupplementaryGroups=video render input
 Environment=DARTOS_DATA=/data/thibsdarts
+# Dalle 7" 1024x600 (CX070) : pixels environ 5 % plus larges que hauts.
+Environment=DARTOS_PIXEL_ASPECT=1.052
 WorkingDirectory=/opt/thibsdarts/hub
 ExecStart=/opt/thibsdarts/hub/flutter-pi --release /opt/thibsdarts/hub
 Restart=on-failure

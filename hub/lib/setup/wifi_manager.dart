@@ -94,10 +94,38 @@ class NmcliWifi implements WifiManager {
   @override
   Future<bool> connect(String ssid, String password) async {
     await stopHotspot();
-    final args = ['dev', 'wifi', 'connect', ssid, 'ifname', iface];
-    if (password.isNotEmpty) args.addAll(['password', password]);
-    final r = await _nmcli(args);
-    return r.exitCode == 0;
+    // Profil déjà enregistré pour ce réseau (ex. Raspberry Pi Imager) : on met le mot de passe à jour et on l'active.
+    final saved = await _savedConnection(ssid);
+    if (saved != null) {
+      if (password.isNotEmpty) {
+        await _nmcli(['con', 'modify', saved, 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', password]);
+      }
+      if ((await _nmcli(['con', 'up', saved])).exitCode == 0) return true;
+    }
+    // En mode point d'accès, la puce ne scanne pas : la liste est vide juste après. On rescanne et on réessaie.
+    for (var i = 0; i < 4; i++) {
+      await _nmcli(['dev', 'wifi', 'rescan', 'ifname', iface]);
+      await Future<void>.delayed(const Duration(seconds: 3));
+      final args = ['dev', 'wifi', 'connect', ssid, 'ifname', iface];
+      if (password.isNotEmpty) args.addAll(['password', password]);
+      final r = await _nmcli(args);
+      if (r.exitCode == 0) return true;
+      stderr.writeln('nmcli connect "$ssid" : ${(r.stderr as String).trim()}');
+    }
+    return false;
+  }
+
+  Future<String?> _savedConnection(String ssid) async {
+    final r = await _nmcli(['-t', '-f', 'NAME,TYPE', 'con', 'show']);
+    for (final line in (r.stdout as String).split('\n')) {
+      final i = line.lastIndexOf(':');
+      if (i <= 0 || !line.substring(i + 1).contains('wireless')) continue;
+      final name = line.substring(0, i).replaceAll(r'\:', ':');
+      if (name == _hotspotName) continue;
+      final s = await _nmcli(['-g', '802-11-wireless.ssid', 'con', 'show', name]);
+      if ((s.stdout as String).trim() == ssid) return name;
+    }
+    return null;
   }
 }
 

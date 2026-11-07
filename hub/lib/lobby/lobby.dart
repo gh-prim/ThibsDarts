@@ -344,11 +344,27 @@ class Lobby extends ChangeNotifier {
           if (t.entrants.length >= Tournament.maxPlayers) return _send(res, {'error': 'complet'}, status: 410);
           t.entrants.add(who.id);
         }
+      case 'guest':
+        // Un pote sans profil : juste un nom, pour ce tournoi.
+        if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
+        if (t.state != 'inscriptions') return _send(res, {'error': 'tire'}, status: 409);
+        final name = (b['name'] as String? ?? '').trim();
+        if (name.isEmpty || name.length > 20) return _send(res, {'error': 'nom'}, status: 400);
+        final taken = [
+          ...t.guests.values,
+          for (final e in t.entrants) store.byId(e)?.nickname ?? '',
+        ].any((n) => n.toLowerCase() == name.toLowerCase());
+        if (taken) return _send(res, {'error': 'pris'}, status: 409);
+        if (t.entrants.length >= Tournament.maxPlayers) return _send(res, {'error': 'complet'}, status: 410);
+        final id = 'invite-${DateTime.now().microsecondsSinceEpoch}';
+        t.guests[id] = name;
+        t.entrants.add(id);
       case 'remove':
         final id = b['id'] as String? ?? me.id;
         if (id != me.id && !boss) return _send(res, {'error': 'organisateur'}, status: 403);
         if (t.state != 'inscriptions') return _send(res, {'error': 'tire'}, status: 409);
         t.entrants.remove(id);
+        t.guests.remove(id);
       case 'draw':
         if (!boss) return _send(res, {'error': 'organisateur'}, status: 403);
         if (t.state != 'inscriptions' && t.state != 'tirage') return _send(res, {'error': 'lance'}, status: 409);

@@ -88,6 +88,9 @@ class Tournament {
   String state;
   final DateTime createdAt;
   final List<String> entrants = [];
+
+  /// Invités sans profil, ajoutés à la main par l'organisateur : identifiant vers nom.
+  final Map<String, String> guests = {};
   List<List<TournamentMatch>> rounds = [];
 
   bool get finished => state == 'fini';
@@ -196,6 +199,7 @@ class Tournament {
     'state': state,
     'createdAt': createdAt.toIso8601String(),
     'entrants': entrants,
+    'guests': guests,
     'rounds': [
       for (final r in rounds) [for (final m in r) m.toJson()],
     ],
@@ -211,6 +215,7 @@ class Tournament {
       createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
     t.entrants.addAll([for (final e in j['entrants'] as List? ?? const []) e as String]);
+    t.guests.addAll({for (final g in (j['guests'] as Map? ?? const {}).entries) g.key as String: g.value as String});
     t.rounds = [
       for (final r in j['rounds'] as List? ?? const [])
         [for (final m in r as List) TournamentMatch.fromJson(m as Map<String, Object?>)],
@@ -268,6 +273,8 @@ class TournamentStore extends ChangeNotifier {
     final store = PlayerStore.instance;
     Map<String, Object?>? player(String? id) {
       if (id == null) return null;
+      final guest = t.guests[id];
+      if (guest != null) return {'id': id, 'name': guest, 'photo': false, 'guest': true};
       final p = store.byId(id);
       return {'id': id, 'name': p?.nickname ?? '?', 'photo': store.photoPath(id) != null};
     }

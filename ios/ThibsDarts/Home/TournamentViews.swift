@@ -121,7 +121,10 @@ struct TournamentCreateView: View {
         .onChange(of: mode) { if boss && mode != info.modeLabel { settings() } }
         .onChange(of: legs) { if boss && legs != info.legsToWin { settings() } }
         .sheet(isPresented: $picking) {
-            TournamentPickPlayer(base: base, taken: Set(info.entrants.map(\.id))) { p in
+            TournamentPickPlayer(base: base, taken: Set(info.entrants.map(\.id)), onGuest: { name in
+                picking = false
+                send("guest", ["name": name])
+            }) { p in
                 picking = false
                 send("add", ["id": p.id])
             }
@@ -161,6 +164,7 @@ struct TournamentCreateView: View {
                     VStack(spacing: Td.s1) {
                         Circle().strokeBorder(Td.bordControle, style: StrokeStyle(lineWidth: 2, dash: [4, 4]))
                             .frame(width: 44, height: 44)
+                            .overlay { if boss { Icon(name: .plus, size: 20).foregroundStyle(Td.ink3) } }
                         Text("Libre").font(.td(12)).foregroundStyle(Td.ink3)
                     }
                 }
@@ -201,12 +205,23 @@ struct TournamentCreateView: View {
 private struct TournamentPickPlayer: View {
     let base: URL
     let taken: Set<String>
+    /// Invité sans profil : juste un nom.
+    var onGuest: (String) -> Void
     var onPick: (PiPlayer) -> Void
     @State private var players: [PiPlayer]?
+    @State private var guest = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Td.s3) {
             Text("Ajouter un joueur").font(.td(17, .semibold)).frame(maxWidth: .infinity).padding(.top, Td.s5)
+            HStack(alignment: .bottom, spacing: Td.s2) {
+                Field(label: "Invité, sans profil", text: $guest, placeholder: "Son prénom", icon: .user)
+                    .onSubmit(addGuest)
+                TdButton(title: "Ajouter", icon: .plus,
+                         state: guest.trimmingCharacters(in: .whitespaces).isEmpty ? .disabled : .normal) { addGuest() }
+                    .fixedSize()
+            }
+            Text("Ou un profil de la cible").font(.td(13, .semibold)).foregroundStyle(Td.ink2).padding(.top, Td.s2)
             ScrollView {
                 VStack(spacing: Td.s2) {
                     if let players {
@@ -238,6 +253,12 @@ private struct TournamentPickPlayer: View {
         }
         .padding(.horizontal, Td.s4)
         .task { players = try? await LobbyAPI.players(at: base) }
+    }
+
+    private func addGuest() {
+        let name = guest.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        onGuest(String(name.prefix(20)))
     }
 }
 
@@ -343,7 +364,7 @@ struct TournamentDrawView: View {
 
 extension LobbyAPI {
     enum TournamentError: LocalizedError {
-        case exists, notEnough, full, closed, notBoss, other(Int)
+        case exists, notEnough, full, closed, taken, notBoss, other(Int)
 
         var errorDescription: String? {
             switch self {
@@ -351,6 +372,7 @@ extension LobbyAPI {
             case .notEnough: "Il faut au moins 3 joueurs pour un tournoi."
             case .full: "Le tournoi est complet, 16 joueurs max."
             case .closed: "Le tirage est déjà fait, les inscriptions sont fermées."
+            case .taken: "Ce nom est déjà dans le tournoi."
             case .notBoss: "Seul l’organisateur peut faire ça."
             case let .other(s): "Le Pi a répondu \(s)."
             }
@@ -386,6 +408,7 @@ extension LobbyAPI {
             switch err {
             case "en_cours": throw TournamentError.exists
             case "pas_assez": throw TournamentError.notEnough
+            case "pris": throw TournamentError.taken
             default: throw TournamentError.closed
             }
         default: throw TournamentError.other(status)

@@ -142,6 +142,30 @@ void main() {
       }
       (s, j) = await call(
         'POST',
+        '/api/tournament/guest',
+        body: {'player': ids['Max'], 'name': 'Paul'},
+        token: keys['Max'],
+      );
+      expect(s, 200);
+      final paul = (j['tournament']['entrants'] as List).last as Map;
+      expect(paul['name'], 'Paul');
+      expect(paul['guest'], true);
+      (s, j) = await call(
+        'POST',
+        '/api/tournament/guest',
+        body: {'player': ids['Max'], 'name': 'paul'},
+        token: keys['Max'],
+      );
+      expect(s, 409);
+      (s, j) = await call(
+        'POST',
+        '/api/tournament/remove',
+        body: {'player': ids['Max'], 'id': paul['id']},
+        token: keys['Max'],
+      );
+      expect(j['tournament']['entrants'], hasLength(4));
+      (s, j) = await call(
+        'POST',
         '/api/tournament/settings',
         body: {'player': ids['Max'], 'mode': 'cricket', 'legsToWin': 2},
         token: keys['Max'],

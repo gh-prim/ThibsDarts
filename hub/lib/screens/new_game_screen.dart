@@ -44,7 +44,7 @@ Widget _header(BuildContext context, String title, {double size = 28, Widget? tr
           style: TdText.inter(size, size + 6, 700, Td.ink).copyWith(letterSpacing: -0.3),
         ),
       ),
-      if (trailing != null) trailing,
+      ?trailing,
     ],
   ),
 );
@@ -185,7 +185,7 @@ class _Poster extends StatelessWidget {
         decoration: _glass(strong: true),
         child: Stack(
           children: [
-            if (backdrop != null) backdrop!,
+            ?backdrop,
             Padding(
               padding: const EdgeInsets.all(28),
               child: Column(

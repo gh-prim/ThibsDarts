@@ -41,6 +41,14 @@ Une pre-release sert à tester sans que les Pi la prennent.
 `sudo thibsdarts-factory-reset` efface `/data/thibsdarts` et redémarre. Les versions dans
 `/data/system` restent : on repart sur la dernière mise à jour, pas sur la version de l'image.
 
+## Écran de démarrage
+
+Pas de texte console : Plymouth montre la tête de Thibs (`splash/boot.gif`), une barre et des
+phrases qui défilent. Source dans `splash/` : modifier `quotes.txt` ou `boot.gif`, puis
+`python3 os/splash/make-theme.py` (Pillow) régénère `image/common/usr/share/plymouth/themes/thibsdarts/`.
+L'image l'installe toute seule (`thibsdarts-splash-setup`). Sur un Pi déjà installé :
+`os/quick/install-splash.sh thibs@dartos-hub.local` (le Pi redémarre).
+
 ## Construire une image
 
 Sur GitHub : automatique à chaque release. Réglages du repo nécessaires :

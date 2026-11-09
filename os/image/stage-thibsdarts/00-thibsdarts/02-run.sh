@@ -14,11 +14,14 @@ touch "${ROOTFS_DIR}/etc/thibsdarts/firstboot"
 sed -i 's/ resize//' "${ROOTFS_DIR}/boot/firmware/cmdline.txt"
 
 case "${TD_ROLE}" in
-hub) UNITS="thibsdarts-hub mosquitto" ;;
+# Hub : l'ecran passe directement de la tete de Thibs a l'app, sans invite de connexion.
+hub) UNITS="thibsdarts-hub mosquitto"; MASK="getty@tty1" ;;
 cam) UNITS="thibsdarts-cam thibsdarts-vision" ;;
 esac
 
 on_chroot <<- CHROOT
 	systemctl disable rpi-resize || true
 	systemctl enable thibsdarts-firstboot thibsdarts-update.timer ${UNITS}
+	if [ -n "${MASK:-}" ]; then systemctl mask ${MASK}; fi
+	/usr/local/sbin/thibsdarts-splash-setup
 CHROOT

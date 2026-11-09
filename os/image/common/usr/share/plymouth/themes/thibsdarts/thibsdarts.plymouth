@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=ThibsDarts
+Description=Demarrage ThibsDarts : la tete de Thibs, une barre et ses phrases
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/thibsdarts
+ScriptFile=/usr/share/plymouth/themes/thibsdarts/thibsdarts.script

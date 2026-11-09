@@ -1,0 +1,124 @@
+# Theme Plymouth ThibsDarts (genere par os/splash/make-theme.py, ne pas modifier a la main).
+# La tete de Thibs tourne au centre, une barre avance dessous et ses phrases defilent.
+
+NB_FRAMES = @FRAMES@;
+FRAME_MS = @FRAME_MS@;
+NB_QUOTES = @QUOTES@;
+QUOTE_TICKS = 200;   # 4 s par phrase (le rafraichissement tourne a 50 Hz)
+FADE_TICKS = 20;
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+W = Window.GetWidth();
+H = Window.GetHeight();
+# Images dessinees pour un ecran de 600 px de haut.
+k = Math.Min(H / 600, W / 1024);
+
+fun pad(n) {
+  if (n < 10) return "0" + n;
+  return "" + n;
+}
+
+fun scaled(img) {
+  if (global.k == 1) return img;
+  return img.Scale(Math.Int(img.GetWidth() * global.k), Math.Int(img.GetHeight() * global.k));
+}
+
+for (i = 0; i < NB_FRAMES; i++)
+  frames[i] = scaled(Image("frame-" + pad(i) + ".png"));
+for (i = 0; i < NB_QUOTES; i++)
+  quotes[i] = scaled(Image("quote-" + pad(i) + ".png"));
+
+head = Sprite(frames[0]);
+head.SetX(Math.Int((W - frames[0].GetWidth()) / 2));
+head.SetY(Math.Int(H * 0.43 - frames[0].GetHeight() / 2));
+head.SetZ(1);
+
+bar_track = scaled(Image("bar-track.png"));
+bar_fill_src = Image("bar-fill.png");
+bar_w = bar_track.GetWidth();
+bar_h = bar_track.GetHeight();
+bar_x = Math.Int((W - bar_w) / 2);
+bar_y = Math.Int(H * 0.8);
+track = Sprite(bar_track);
+track.SetPosition(bar_x, bar_y, 2);
+fill = Sprite();
+fill.SetPosition(bar_x, bar_y, 3);
+
+quote = Sprite();
+quote.SetZ(2);
+quote_y = Math.Int(bar_y + bar_h + 22 * k);
+
+tick = 0;
+progress = 0;
+shown = 0;
+q = Math.Int(Math.Random() * NB_QUOTES) % NB_QUOTES;
+
+fun show_quote() {
+  img = global.quotes[global.q];
+  global.quote.SetImage(img);
+  global.quote.SetX(Math.Int((global.W - img.GetWidth()) / 2));
+  global.quote.SetY(global.quote_y);
+}
+show_quote();
+
+fun boot_progress(duration, p) {
+  global.progress = p;
+}
+Plymouth.SetBootProgressFunction(boot_progress);
+
+last_w = -1;
+bar_visible = 1;
+
+fun refresh() {
+  global.tick = global.tick + 1;
+  tk = global.tick;
+
+  # GIF : une image toutes les FRAME_MS millisecondes.
+  f = Math.Int(tk * 20 / global.FRAME_MS) % global.NB_FRAMES;
+  global.head.SetImage(global.frames[f]);
+
+  # Barre : on suit l'estimation de Plymouth, avec un minimum qui avance tout seul
+  # (sur un systeme en lecture seule Plymouth ne retient pas la duree du demarrage).
+  lent = 1 - 1 / (1 + tk / 900);
+  cible = Math.Max(global.progress, lent);
+  if (cible > global.shown) global.shown = global.shown + (cible - global.shown) * 0.08;
+  w = Math.Int(global.bar_w * Math.Min(global.shown, 1));
+  if (w != global.last_w && global.bar_visible) {
+    global.last_w = w;
+    if (w >= global.bar_h) {
+      global.fill.SetImage(global.bar_fill_src.Scale(w, global.bar_h));
+      global.fill.SetOpacity(1);
+    } else {
+      global.fill.SetOpacity(0);
+    }
+  }
+
+  # Phrases : une toutes les 4 s, avec un fondu.
+  t = tk % global.QUOTE_TICKS;
+  if (t == 0) {
+    global.q = (global.q + 1) % global.NB_QUOTES;
+    show_quote();
+  }
+  a = 0.8;
+  if (t < global.FADE_TICKS) a = 0.8 * t / global.FADE_TICKS;
+  if (t > global.QUOTE_TICKS - global.FADE_TICKS) a = 0.8 * (global.QUOTE_TICKS - t) / global.FADE_TICKS;
+  global.quote.SetOpacity(a);
+}
+Plymouth.SetRefreshFunction(refresh);
+
+# A l'extinction, pas de barre : juste la tete et les phrases.
+mode = Plymouth.GetMode();
+if (mode == "shutdown" || mode == "reboot") {
+  bar_visible = 0;
+  track.SetOpacity(0);
+  fill.SetOpacity(0);
+}
+
+# Pas de texte systeme a l'ecran (messages, mots de passe).
+fun nothing(text) {
+  return;
+}
+Plymouth.SetMessageFunction(nothing);
+Plymouth.SetUpdateStatusFunction(nothing);

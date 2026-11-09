@@ -1,0 +1,20 @@
+#!/bin/bash
+# Ecran de demarrage ThibsDarts : plus de texte console, la tete de Thibs (Plymouth).
+# Lance par l'image (chroot pi-gen) ou par os/quick/install-splash.sh sur un Pi deja installe.
+# Le theme doit etre dans /usr/share/plymouth/themes/thibsdarts. Relancer ne change rien.
+set -euo pipefail
+BOOT=/boot/firmware
+CMDLINE="$BOOT/cmdline.txt"
+
+# Noyau : console sur tty3 (invisible), pas de logo framboise, pas de curseur, pas de messages.
+line=$(head -n1 "$CMDLINE")
+line=$(echo "$line" | sed -E 's/console=tty1/console=tty3/; s/ (quiet|splash|plymouth\.ignore-serial-consoles|logo\.nologo|vt\.global_cursor_default=[0-9]|loglevel=[0-9]|udev\.log_level=[0-9]|rd\.udev\.log_level=[0-9]|systemd\.show_status=[a-z]+)//g')
+line="$line quiet splash plymouth.ignore-serial-consoles logo.nologo vt.global_cursor_default=0 loglevel=3 udev.log_level=3 rd.udev.log_level=3 systemd.show_status=false"
+echo "$line" >"$CMDLINE"
+
+# Firmware : pas d'ecran arc-en-ciel.
+grep -q '^disable_splash=1' "$BOOT/config.txt" || echo 'disable_splash=1' >>"$BOOT/config.txt"
+
+plymouth-set-default-theme thibsdarts
+# Le theme est lu depuis l'initramfs : on le reconstruit pour tous les noyaux installes.
+update-initramfs -u -k all

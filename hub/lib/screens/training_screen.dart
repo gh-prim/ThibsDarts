@@ -17,6 +17,24 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 
+/// Record d'entraînement dans l'historique : réussites sur une série ([target], [darts]),
+/// ou meilleure volée libre quand [target] est null. Null si jamais joué.
+int? practiceRecord(String name, {TrainingTarget? target, int darts = 15}) {
+  final id = HistoryStore.playerId(name);
+  int? best;
+  for (final m in HistoryStore.instance.all()) {
+    if (m['kind'] != 'training') continue;
+    if (target == null ? m['drill'] != 'volleys' : (m['target'] != target.key || m['length'] != darts)) continue;
+    for (final p in m['players'] as List) {
+      final pm = p as Map;
+      if (pm['id'] != id) continue;
+      final h = ((target == null ? pm['best'] : pm['score']) as num?)?.toInt();
+      if (h != null && (best == null || h > best)) best = h;
+    }
+  }
+  return best;
+}
+
 /// Entraînement en solo (planche Entraînement), par volées de 3 :
 /// série sur une cible ([GameConfig.training]) ou volées libres où l'on compte les points ([GameConfig.freeVolleys]).
 /// Toucher le plateau lance aussi une fléchette à cet endroit.
@@ -83,24 +101,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     super.dispose();
   }
 
-  /// Meilleur résultat dans l'historique : réussites sur cette série, ou meilleure volée libre.
-  int? _bestSoFar() {
-    final id = HistoryStore.playerId(_name);
-    int? best;
-    for (final m in HistoryStore.instance.all()) {
-      if (m['kind'] != 'training') continue;
-      if (_volleys ? m['drill'] != 'volleys' : (m['target'] != _target.key || m['length'] != _cfg.trainingDarts)) {
-        continue;
-      }
-      for (final p in m['players'] as List) {
-        final pm = p as Map;
-        if (pm['id'] != id) continue;
-        final h = ((_volleys ? pm['best'] : pm['score']) as num?)?.toInt();
-        if (h != null && (best == null || h > best)) best = h;
-      }
-    }
-    return best;
-  }
+  int? _bestSoFar() => practiceRecord(_name, target: _cfg.training, darts: _cfg.trainingDarts);
 
   /// Fin d'entraînement : série finie, ou volées sans fin arrêtées après au moins une volée.
   bool get _over => _g.isFinished || (_g is VolleyGame && (_g as VolleyGame).volleys == 0 && _stopped);

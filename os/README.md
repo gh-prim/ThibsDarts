@@ -48,8 +48,10 @@ Sur GitHub : automatique à chaque release. Réglages du repo nécessaires :
 - variable `SSH_PUBKEY` : clé publique du Mac (connexion `ssh thibs@dartos-hub.local`)
 - secret `PI_PASSWORD` (optionnel) : mot de passe de `thibs`. Sans lui, connexion par clé seulement.
 
-À la main sur Linux arm64 : `os/image/package.sh cam v1.0.0 dist` puis
-`os/image/build.sh cam dist/thibsdarts-cam-v1.0.0.tar.gz deploy`.
+Sur le Mac, sans attendre GitHub (Docker Desktop lancé) : `os/image/local.sh hub` ou
+`os/image/local.sh cam`. Le script compile, construit l'image dans Docker (30 à 50 min), puis
+propose de la flasher (`os/image/flash-sd.sh`, demande le disque et une confirmation). La clé
+`~/.ssh/id_ed25519.pub` du Mac est mise dans l'image.
 
 Pour modifier le système une fois l'image flashée : `sudo raspi-config nonint do_overlayfs 1`,
 redémarrer, modifier, puis `do_overlayfs 0` et redémarrer.

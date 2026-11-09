@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Construit l'image Dart OS d'un Pi avec pi-gen (Raspberry Pi OS Lite 64-bit trixie).
-# A lancer sur Linux arm64 (runner GitHub ubuntu-24.04-arm) avec sudo.
+# Sur Linux (runner GitHub ubuntu-24.04-arm) : pi-gen natif avec sudo.
+# Sur Mac (ou DOCKER=1) : pi-gen dans Docker (Docker Desktop doit tourner).
 #
 # Usage : os/image/build.sh hub|cam <paquet thibsdarts-<role>-<tag>.tar.gz> <dossier de sortie>
 # Variables : SSH_PUBKEY (cle publique du Mac, recommande), PI_PASSWORD (mot de passe de thibs)
@@ -31,6 +32,16 @@ git -C "$WORK/pi-gen" checkout -q "$PIGEN_COMMIT"
 # On s'arrete a la base Lite (stage2) sans exporter son image, puis notre stage.
 touch "$WORK/pi-gen/stage2/SKIP_IMAGES"
 
+# Nos fichiers vont dans le dossier pi-gen : en mode Docker, seul ce dossier est copie dans le conteneur.
+mkdir -p "$WORK/pi-gen/thibsdarts"
+cp -R "$HERE/common" "$HERE/roles" "$HERE/stage-thibsdarts" "$WORK/pi-gen/thibsdarts/"
+cp "$SEED" "$WORK/pi-gen/thibsdarts/seed.tar.gz"
+if [ "$(uname -s)" = Linux ] && [ "${DOCKER:-0}" != 1 ]; then
+  USE_DOCKER=0 PG="$WORK/pi-gen" DEPLOY="$OUT"
+else
+  USE_DOCKER=1 PG=/pi-gen DEPLOY=/pi-gen/deploy
+fi
+
 cat >"$WORK/config" <<CONF
 IMG_NAME=$HOST
 RELEASE=trixie
@@ -49,14 +60,20 @@ KEYBOARD_LAYOUT=French
 TIMEZONE_DEFAULT=Europe/Paris
 WPA_COUNTRY=FR
 DEPLOY_COMPRESSION=xz
-DEPLOY_DIR=$OUT
+DEPLOY_DIR=$DEPLOY
 ARCHIVE_FILENAME=$HOST-$TAG
-STAGE_LIST="stage0 stage1 stage2 $HERE/stage-thibsdarts"
+STAGE_LIST="stage0 stage1 stage2 $PG/thibsdarts/stage-thibsdarts"
 export TD_ROLE=$ROLE
-export TD_IMAGE_DIR=$HERE
-export TD_SEED=$SEED
+export TD_IMAGE_DIR=$PG/thibsdarts
+export TD_SEED=$PG/thibsdarts/seed.tar.gz
 CONF
 
 cd "$WORK/pi-gen"
-sudo ./build.sh -c "$WORK/config"
+if [ $USE_DOCKER = 1 ]; then
+  docker rm -v "pigen_$ROLE" >/dev/null 2>&1 || true
+  CONTAINER_NAME="pigen_$ROLE" ./build-docker.sh -c "$WORK/config"
+  cp deploy/*.img.xz "$OUT/"
+else
+  sudo ./build.sh -c "$WORK/config"
+fi
 ls -la "$OUT"

@@ -27,7 +27,10 @@ Publier une release GitHub (pas une pre-release) lance `.github/workflows/releas
 
 1. compile le hub (flutterpi_tool), emballe `cam/`, attache `thibsdarts-hub-<tag>.tar.gz`,
    `thibsdarts-cam-<tag>.tar.gz` et `SHA256SUMS` à la release
-2. construit les deux images et attache `dartos-hub-<tag>.img.xz` et `dartos-cam-<tag>.img.xz`
+2. construit les deux images et attache `dartos-hub-<tag>.img.xz` et `dartos-cam-<tag>.img.xz`,
+   seulement pour une version en .0 (v0.3.0, v1.0.0) ou si `os/image/` a changé depuis la release
+   d'avant (lancement manuel : case "image" pour forcer). Les paquets ne changent que l'app, jamais le
+   système : pour installer un Pi, flasher la dernière image publiée puis mettre à jour depuis Réglages.
 
 Sur chaque Pi, `thibsdarts-update.timer` lance `thibsdarts-update` 2 min après le démarrage puis
 toutes les 15 min. Il attend la fin de la partie en cours, télécharge le paquet, vérifie le SHA256,

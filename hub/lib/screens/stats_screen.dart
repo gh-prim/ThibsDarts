@@ -654,15 +654,18 @@ class _StatsScreenState extends State<StatsScreen> {
                     size: Size.infinite,
                   ),
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            spacing: 6,
-            children: [
-              Text(c.best == null ? '0' : '${c.best}', style: TdText.rounded(40, 900, Td.ink, height: 40)),
-              Text('sur 15, record', style: TdText.inter(13, 18, 400, Td.ink2)),
-            ],
-          ),
+          if (c.best == null)
+            const SizedBox(height: 40)
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              spacing: 6,
+              children: [
+                Text('${c.best}', style: TdText.rounded(40, 900, Td.ink, height: 40)),
+                Text('sur 15, record', style: TdText.inter(13, 18, 400, Td.ink2)),
+              ],
+            ),
         ],
       ),
     );
@@ -705,7 +708,7 @@ class _StatsScreenState extends State<StatsScreen> {
                   line: fav == null
                       ? ''
                       : '${fav.wins} victoire${fav.wins > 1 ? 's' : ''}, ${fav.losses} défaite${fav.losses > 1 ? 's' : ''}.',
-                  caption: fav == null ? '' : 'Dernière partie : ${fav.lastMode}, ${dayFr(fav.lastAt!)}.',
+                  caption: fav == null ? '' : _sentence('Dernière partie : ${fav.lastMode}, ${dayFr(fav.lastAt!)}'),
                   empty: 'Gagne quelques parties contre un pote pour le voir ici.',
                 ),
               ),
@@ -804,7 +807,7 @@ class _StatsScreenState extends State<StatsScreen> {
   String _worstMode(Rival r) {
     final m = r.byMode.entries.where((e) => e.value.$2 > e.value.$1).toList()
       ..sort((a, b) => (b.value.$2 - b.value.$1) - (a.value.$2 - a.value.$1));
-    if (m.isEmpty) return 'Dernière partie : ${r.lastMode}, ${dayFr(r.lastAt!)}.';
+    if (m.isEmpty) return _sentence('Dernière partie : ${r.lastMode}, ${dayFr(r.lastAt!)}');
     final mode = m.first.key;
     return 'Surtout au $mode.';
   }
@@ -1342,3 +1345,6 @@ class MonthStatsScreen extends StatelessWidget {
     ),
   );
 }
+
+/// Termine une phrase par un point, sans doubler celui d'une abréviation ("nov.").
+String _sentence(String s) => s.endsWith('.') ? s : '$s.';

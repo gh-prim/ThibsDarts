@@ -50,8 +50,8 @@ mkdir -p /data/system/releases
 rm -rf /data/system/tmp.*  # restes d'une installation interrompue
 if [ ! -e /data/system/current ]; then
   tmp=$(mktemp -d /data/system/tmp.XXXXXX)
-  chmod 755 "$tmp"
   tar -xzf /usr/share/thibsdarts/seed.tar.gz -C "$tmp"
+  chmod 755 "$tmp" # apres tar : il remet les droits de la racine de l'archive (700 jusqu'a v0.2.2)
   tag=$(cat "$tmp/VERSION")
   rm -rf "/data/system/releases/$tag"
   mv "$tmp" "/data/system/releases/$tag"
@@ -62,6 +62,9 @@ systemd-tmpfiles --create /etc/tmpfiles.d/thibsdarts.conf
 step 4  # lecture seule (reconstruit l'initramfs : l'etape la plus longue)
 # Systeme en lecture seule : tout ce qui doit survivre est sur /data.
 raspi-config nonint do_overlayfs 0 || echo "overlayfs non active, le systeme reste en ecriture"
+# Par defaut overlayroot recouvre aussi /data d'une couche en RAM : tout serait perdu au redemarrage.
+# recurse=0 : seule la racine est en lecture seule, /data reste la vraie partition.
+sed -i 's/overlayroot=tmpfs\( \|$\)/overlayroot=tmpfs:recurse=0\1/' /boot/firmware/cmdline.txt
 
 step 5
 rm -f /etc/thibsdarts/firstboot

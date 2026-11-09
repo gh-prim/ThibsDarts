@@ -7,6 +7,7 @@ set -euo pipefail
 ROLE="$1" TAG="$2" OUT="$(mkdir -p "$3" && cd "$3" && pwd)"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 STAGE="$(mktemp -d)"
+chmod 755 "$STAGE" # mktemp donne 700 : la racine de l'archive doit rester lisible par thibs
 trap 'rm -rf "$STAGE"' EXIT
 
 echo "$TAG" >"$STAGE/VERSION"

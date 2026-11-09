@@ -62,4 +62,5 @@ propose de la flasher (`os/image/flash-sd.sh`, demande le disque et une confirma
 `~/.ssh/id_ed25519.pub` du Mac est mise dans l'image.
 
 Pour modifier le système une fois l'image flashée : `sudo raspi-config nonint do_overlayfs 1`,
-redémarrer, modifier, puis `do_overlayfs 0` et redémarrer.
+redémarrer, modifier, puis `do_overlayfs 0`, remettre `overlayroot=tmpfs:recurse=0` dans
+`/boot/firmware/cmdline.txt` (sinon `/data` passe aussi en RAM) et redémarrer.

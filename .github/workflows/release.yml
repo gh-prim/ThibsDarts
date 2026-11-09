@@ -17,6 +17,8 @@ permissions:
 
 env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  # Lancement manuel : le tag n'existe peut-etre pas encore, on compile le commit lance.
+  SRC: ${{ github.event.release.tag_name || github.sha }}
   GH_TOKEN: ${{ github.token }}
 
 jobs:
@@ -25,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.SRC }}
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -47,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.SRC }}
       - run: os/image/package.sh cam "$TAG" dist
       - uses: actions/upload-artifact@v4
         with:
@@ -67,9 +69,9 @@ jobs:
         run: |
           cd dist
           sha256sum thibsdarts-*.tar.gz > SHA256SUMS
-          # Lance a la main (workflow_dispatch) sans release : on la cree ici, sur le tag deja pousse.
+          # Lancement manuel sans release : on cree le tag et la release sur le commit compile.
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
-            gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
           gh release upload "$TAG" thibsdarts-*.tar.gz SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
 
   image:

@@ -486,7 +486,7 @@ struct ProfileRing: View {
     }
 }
 
-/// Logo ThibsDarts complet (SVG du design system dans le catalogue d'images).
+/// Logo ThibsDarts complet : tête + mot (généré par brand/generate.py).
 struct LogoView: View {
     var height: CGFloat = 48
 

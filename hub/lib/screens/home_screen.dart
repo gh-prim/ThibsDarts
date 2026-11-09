@@ -123,11 +123,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(last == null ? 'Prêt à jouer.' : "Le ${last.title} t'attend.", style: TdText.title),
+                          Text(
+                            last == null
+                                ? 'Prêt à jouer.'
+                                : (last.training != null ? "Ta série t'attend." : "Le ${last.title} t'attend."),
+                            style: TdText.title,
+                          ),
                           const SizedBox(height: Td.s4),
                           Text(
                             last == null
                                 ? 'Lance une partie ici. Les potes rejoignent depuis leur iPhone.'
+                                : last.training != null
+                                ? 'Dernier entraînement : ${last.label}.'
+                                      '${AppState.lastResult == null ? '' : ' ${AppState.lastResult}'}'
                                 : 'Dernière partie : ${last.label}, avec ${players.join(', ')}.'
                                       '${AppState.lastResult == null ? '' : ' ${AppState.lastResult}'}',
                             style: TdText.body,

@@ -44,6 +44,8 @@ struct HistoryMatch: Decodable, Identifiable, Hashable {
     let players: [HistoryPlayer]
 
     var isX01: Bool { kind == "x01" }
+    /// Série d'entraînement en solo : ni gagnée ni perdue, hors des parties jouées.
+    var isTraining: Bool { kind == "training" }
     var isDraw: Bool { winner?.contains(" et ") == true }
 
     var date: Date {
@@ -316,7 +318,9 @@ struct MatchRow: View {
                 Text(frMatchDate(match.date)).font(.td(13)).foregroundStyle(Td.ink3).lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if match.isDraw, p?.won == true {
+            if match.isTraining {
+                Badge(text: "Série", tone: .neutre)
+            } else if match.isDraw, p?.won == true {
                 Badge(text: "Égalité", tone: .info)
             } else {
                 Badge(text: p?.won == true ? "Gagné" : "Perdu", tone: p?.won == true ? .succes : .neutre)
@@ -384,7 +388,7 @@ struct StatsTab: View {
 
     private func numbers(back: Int = 0) -> Numbers {
         var n = Numbers()
-        for m in history.matches where inPeriod(m, back: back) {
+        for m in history.matches where inPeriod(m, back: back) && !m.isTraining {
             guard let p = m.me(app.playerId) else { continue }
             n.games += 1
             if p.won { n.won += 1 }
@@ -562,7 +566,7 @@ struct MatchDetailView: View {
         }
         var s: [(String, String)] = []
         if match.kind == "cricket", let v = p.value { s.append(("Marques par tour", frDecimal(v))) }
-        if let sc = p.score { s.append((match.kind == "killer" ? "Vies" : "Score", "\(sc)")) }
+        if let sc = p.score { s.append((match.kind == "killer" ? "Vies" : (match.isTraining ? "Réussies" : "Score"), "\(sc)")) }
         s.append(("Fléchettes", "\(p.darts ?? 0)"))
         return s
     }
@@ -576,7 +580,11 @@ struct MatchDetailView: View {
                         Text(frMatchDate(match.date)).font(.td(13)).foregroundStyle(Td.ink3)
                     }
                     Spacer()
-                    Badge(text: me?.won == true ? "Gagné" : "Perdu", tone: me?.won == true ? .succes : .neutre)
+                    if match.isTraining {
+                        Badge(text: "Série", tone: .neutre)
+                    } else {
+                        Badge(text: me?.won == true ? "Gagné" : "Perdu", tone: me?.won == true ? .succes : .neutre)
+                    }
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: Td.s3)], alignment: .leading, spacing: Td.s3) {
                     ForEach(stats, id: \.0) { s in

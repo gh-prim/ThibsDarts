@@ -15,7 +15,11 @@ class ScoreDisplay extends StatelessWidget {
     this.sub,
     this.state = ScoreState.normal,
     this.size = 140,
+    this.text,
   });
+
+  /// Texte à la place de [value] ("7/9"), réduit pour tenir dans la largeur.
+  final String? text;
 
   /// 140 (l), 88 (m) ou 48 (s).
   final double size;
@@ -27,7 +31,8 @@ class ScoreDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget v = Text(
-      '$value',
+      text ?? '$value',
+      maxLines: 1,
       style: TdText.rounded(
         size,
         size >= 140 ? 900 : 800,
@@ -38,6 +43,7 @@ class ScoreDisplay extends StatelessWidget {
     if (state == ScoreState.out) {
       v = ShaderMask(blendMode: BlendMode.srcIn, shaderCallback: (r) => Td.goldenHour.createShader(r), child: v);
     }
+    if (text != null) v = FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: v);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -58,6 +64,47 @@ class ScoreDisplay extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Tuile chiffre clé (composant KpiTile) : libellé, valeur, unité. En verre avec [glass].
+class KpiTile extends StatelessWidget {
+  const KpiTile({super.key, required this.label, required this.value, this.unit, this.glass = true});
+
+  final String label;
+  final String value;
+  final String? unit;
+  final bool glass;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Td.s4, vertical: Td.s3),
+      decoration: BoxDecoration(
+        color: glass ? Td.verreMoyen : Td.asphalte,
+        borderRadius: BorderRadius.circular(Td.rLg),
+        border: Border.all(color: glass ? Td.verreBord : Td.bord),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TdText.inter(13, 18, 600, Td.ink2)),
+          const SizedBox(height: Td.s1),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: TdText.rounded(40, 900, Td.ink, height: 44)),
+              if (unit != null) ...[
+                const SizedBox(width: Td.s2),
+                Text(unit!, style: TdText.inter(15, 20, 400, Td.ink2)),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -22,9 +22,14 @@ import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
 import 'game_screen.dart';
+import 'training_screen.dart';
 
 /// Écran de jeu pour un X01 ou un autre mode, selon la config.
-Widget gameScreenFor(GameConfig cfg) => cfg.mode == null ? GameScreen(config: cfg) : ModeGameScreen(config: cfg);
+Widget gameScreenFor(GameConfig cfg) => cfg.training != null
+    ? TrainingScreen(config: cfg)
+    : cfg.mode == null
+    ? GameScreen(config: cfg)
+    : ModeGameScreen(config: cfg);
 
 /// Cricket, Around the clock, Shanghai, Killer, Halve-it, Bob's 27 (planches du même nom).
 /// En attendant le Pi 5, toucher le plateau lance une fléchette à cet endroit.

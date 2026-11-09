@@ -11,6 +11,8 @@ class GameConfig {
     this.legsToWin = 1,
     this.mode,
     this.tournamentMatch,
+    this.training,
+    this.trainingDarts = 15,
   });
 
   final List<String> players;
@@ -22,10 +24,18 @@ class GameConfig {
   /// Match de tournoi joué par cette partie : le résultat remonte au tableau.
   final String? tournamentMatch;
 
-  String get label => mode == null ? '$startScore ${doubleOut ? 'double out' : 'single out'}' : title;
+  /// Série libre en solo sur cette cible (planche Entraînement). Prioritaire sur [mode].
+  final TrainingTarget? training;
+
+  /// Fléchettes dans la série.
+  final int trainingDarts;
+
+  String get label => training != null
+      ? 'série ${training!.label} de $trainingDarts fléchettes'
+      : mode == null ? '$startScore ${doubleOut ? 'double out' : 'single out'}' : title;
 
   /// Nom du jeu : "501", "Cricket"...
-  String get title => switch (mode) {
+  String get title => training != null ? 'Entraînement' : switch (mode) {
     null => '$startScore',
     GameMode.cricket => 'Cricket',
     GameMode.clock => 'Around the clock',
@@ -42,6 +52,8 @@ class GameConfig {
     legsToWin: legsToWin,
     mode: mode,
     tournamentMatch: tournamentMatch,
+    training: training,
+    trainingDarts: trainingDarts,
   );
 }
 

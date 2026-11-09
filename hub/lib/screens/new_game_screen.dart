@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/controls.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
+import 'mode_game_screen.dart';
 import 'salon_screen.dart';
 
 /// "Choisis ton jeu" (planche NouvellePartie).
@@ -19,12 +20,15 @@ class NewGameScreen extends StatefulWidget {
 }
 
 class _Mode {
-  const _Mode(this.glyph, this.title, this.desc, {this.start, this.mode});
+  const _Mode(this.glyph, this.title, this.desc, {this.start, this.mode, this.training = false});
   final String glyph, title, desc;
   final int? start;
   final GameMode? mode;
 
-  bool get playable => start != null || mode != null;
+  /// Série libre en solo (planche Entraînement).
+  final bool training;
+
+  bool get playable => start != null || mode != null || training;
 }
 
 const _modes = [
@@ -36,7 +40,7 @@ const _modes = [
   _Mode('K', 'Killer', 'Trois vies. Pas d’amis.', mode: GameMode.killer),
   _Mode('½', 'Halve-it', 'Rate, ton score fond.', mode: GameMode.halveIt),
   _Mode('27', 'Bob’s 27', 'Doubles, pour souffrir.', mode: GameMode.bobs27),
-  _Mode('T20', 'Entraînements', 'Solo, séries et routines.'),
+  _Mode('T20', 'Entraînements', 'Solo, séries et routines.', training: true),
 ];
 
 /// Règle en une phrase, à la place des options du X01.
@@ -56,8 +60,19 @@ class _NewGameScreenState extends State<NewGameScreen> {
   final List<String> _guests = [];
   String _out = 'Double';
   int _legs = 2;
+  TrainingTarget _target = TrainingTarget.presets.first;
+  int _series = 15;
 
-  void _toggle(String name) => setState(() => _order.contains(name) ? _order.remove(name) : _order.add(name));
+  void _toggle(String name) => setState(() {
+    if (_mode.training) {
+      // Entraînement en solo : un seul joueur à la fois.
+      _order
+        ..clear()
+        ..add(name);
+    } else {
+      _order.contains(name) ? _order.remove(name) : _order.add(name);
+    }
+  });
 
   void _addGuest() {
     if (_order.length >= 8) return;
@@ -81,10 +96,25 @@ class _NewGameScreenState extends State<NewGameScreen> {
         );
       return;
     }
-    setState(() => _mode = m);
+    setState(() {
+      _mode = m;
+      if (m.training && _order.length > 1) _order.removeRange(1, _order.length);
+    });
   }
 
   void _launch() {
+    if (_mode.training) {
+      // Pas de salon : on tire tout de suite.
+      final cfg = GameConfig(
+        players: [_order.isEmpty ? AppState.owner : _order.first],
+        training: _target,
+        trainingDarts: _series,
+      );
+      Navigator.of(
+        context,
+      ).pushAndRemoveUntil(MaterialPageRoute<void>(builder: (_) => gameScreenFor(cfg)), (r) => r.isFirst);
+      return;
+    }
     // Le salon s'ouvre : les potes rejoignent avec leur iPhone, puis "Lancer".
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -181,7 +211,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text("Joueurs, dans l'ordre", style: TdText.inter(13, 18, 600, Td.ink2)),
+                    Text(_mode.training ? 'Joueur' : "Joueurs, dans l'ordre", style: TdText.inter(13, 18, 600, Td.ink2)),
                     const SizedBox(height: Td.s3),
                     Wrap(
                       spacing: Td.s2,
@@ -189,15 +219,36 @@ class _NewGameScreenState extends State<NewGameScreen> {
                       children: [
                         for (final n in everyone)
                           TdChip(
-                            label: _order.contains(n) ? '${_order.indexOf(n) + 1}. $n' : n,
+                            label: _order.contains(n) && !_mode.training ? '${_order.indexOf(n) + 1}. $n' : n,
                             icon: LucideIcons.user,
                             selected: _order.contains(n),
                             onTap: () => _toggle(n),
                           ),
-                        TdChip(label: 'Invité', icon: LucideIcons.plus, onTap: _addGuest),
+                        if (!_mode.training) TdChip(label: 'Invité', icon: LucideIcons.plus, onTap: _addGuest),
                       ],
                     ),
-                    if (_mode.start != null) ...[
+                    if (_mode.training) ...[
+                      const SizedBox(height: Td.s5),
+                      Text('Cible', style: TdText.inter(13, 18, 600, Td.ink2)),
+                      const SizedBox(height: Td.s3),
+                      Wrap(
+                        spacing: Td.s2,
+                        runSpacing: Td.s2,
+                        children: [
+                          for (final t in TrainingTarget.presets)
+                            TdChip(label: t.label, selected: t == _target, onTap: () => setState(() => _target = t)),
+                        ],
+                      ),
+                      const SizedBox(height: Td.s5),
+                      Text('Fléchettes par série', style: TdText.inter(13, 18, 600, Td.ink2)),
+                      const SizedBox(height: Td.s3),
+                      TdSegmented(
+                        options: const ['9', '15', '30'],
+                        value: '$_series',
+                        touch: true,
+                        onChanged: (v) => setState(() => _series = int.parse(v)),
+                      ),
+                    ] else if (_mode.start != null) ...[
                       const SizedBox(height: Td.s5),
                       Text('Sortie', style: TdText.inter(13, 18, 600, Td.ink2)),
                       const SizedBox(height: Td.s3),
@@ -219,7 +270,10 @@ class _NewGameScreenState extends State<NewGameScreen> {
                       Text(_rules[_mode.mode]!, style: TdText.inter(15, 20, 400, Td.ink2)),
                     ],
                     const Spacer(),
-                    Text('Les potes rejoignent depuis leur iPhone.', style: TdText.inter(13, 18, 400, Td.ink3)),
+                    Text(
+                      _mode.training ? 'Toi, la cible, et rien d’autre.' : 'Les potes rejoignent depuis leur iPhone.',
+                      style: TdText.inter(13, 18, 400, Td.ink3),
+                    ),
                     const SizedBox(height: Td.s3),
                     TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _launch),
                   ],

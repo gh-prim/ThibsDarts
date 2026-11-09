@@ -3,11 +3,13 @@ Description=ThibsDarts premier demarrage (partition /data, version livree, lectu
 ConditionPathExists=/etc/thibsdarts/firstboot
 After=local-fs.target regenerate_ssh_host_keys.service
 Before=NetworkManager.service thibsdarts-hub.service thibsdarts-cam.service thibsdarts-vision.service
+# L'ecran de demarrage reste affiche pendant l'installation (sinon ecran noir jusqu'au redemarrage).
+Before=plymouth-quit.service plymouth-quit-wait.service getty@tty1.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/thibsdarts-firstboot
-StandardOutput=journal+console
+StandardOutput=journal
 
 [Install]
 WantedBy=multi-user.target

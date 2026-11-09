@@ -1,0 +1,13 @@
+[Unit]
+Description=ThibsDarts premier demarrage (partition /data, version livree, lecture seule)
+ConditionPathExists=/etc/thibsdarts/firstboot
+After=local-fs.target regenerate_ssh_host_keys.service
+Before=NetworkManager.service thibsdarts-hub.service thibsdarts-cam.service thibsdarts-vision.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/thibsdarts-firstboot
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

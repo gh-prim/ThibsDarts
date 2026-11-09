@@ -1,0 +1,98 @@
+# Une release publiee sur GitHub = une mise a jour pour les deux Pi.
+# 1. paquets de mise a jour (hub, cam) + SHA256SUMS attaches a la release : les Pi se mettent a jour
+# 2. images .img.xz completes (a flasher une seule fois) attachees ensuite
+name: Release Dart OS
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag de la release a completer
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Compiler le hub pour le Pi 4
+        run: |
+          dart pub global activate --source git https://github.com/ardera/flutterpi_tool
+          cd hub
+          flutter pub get
+          flutterpi_tool build --arch=arm64 --cpu=pi4 --release
+      - run: os/image/package.sh hub "$TAG" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-hub
+          path: dist/
+
+  cam:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - run: os/image/package.sh cam "$TAG" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-cam
+          path: dist/
+
+  publish:
+    needs: [hub, cam]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: dist
+      - name: Attacher les paquets a la release
+        run: |
+          cd dist
+          sha256sum thibsdarts-*.tar.gz > SHA256SUMS
+          gh release upload "$TAG" thibsdarts-*.tar.gz SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
+
+  image:
+    needs: publish
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        role: [hub, cam]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: pkg-${{ matrix.role }}
+          path: dist
+      - name: Dependances pi-gen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coreutils quilt parted qemu-user-binfmt debootstrap zerofree zip dosfstools \
+            e2fsprogs libcap2-bin grep rsync xz-utils curl xxd file git kmod bc gpg pigz arch-test
+      - name: Construire l'image
+        env:
+          SSH_PUBKEY: ${{ vars.SSH_PUBKEY }}
+          PI_PASSWORD: ${{ secrets.PI_PASSWORD }}
+        run: os/image/build.sh ${{ matrix.role }} "dist/thibsdarts-${{ matrix.role }}-$TAG.tar.gz" deploy
+      - name: Attacher l'image a la release
+        run: gh release upload "$TAG" deploy/*.img.xz --clobber --repo "$GITHUB_REPOSITORY"

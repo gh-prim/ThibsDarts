@@ -1,0 +1,10 @@
+[Unit]
+Description=ThibsDarts mise a jour depuis GitHub
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/data
+ConditionPathExists=/data/system/current
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/thibsdarts-update

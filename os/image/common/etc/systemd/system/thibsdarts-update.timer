@@ -1,0 +1,10 @@
+[Unit]
+Description=ThibsDarts verifie les mises a jour (au demarrage puis toutes les 15 min)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+RandomizedDelaySec=1min
+
+[Install]
+WantedBy=timers.target

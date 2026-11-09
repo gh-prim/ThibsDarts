@@ -1,0 +1,41 @@
+#!/bin/bash
+# Premier demarrage d'une image Dart OS :
+#  1. cree la partition /data dans la place libre de la carte SD
+#  2. installe la version de ThibsDarts livree avec l'image (/usr/share/thibsdarts/seed.tar.gz)
+#  3. passe le systeme en lecture seule (overlayfs) puis redemarre
+set -euxo pipefail
+
+root_part=$(findmnt -no SOURCE /)
+disk="/dev/$(lsblk -no PKNAME "$root_part")"
+case "$disk" in *[0-9]) data_part="${disk}p3" ;; *) data_part="${disk}3" ;; esac
+
+if ! blkid -L thibsdata >/dev/null; then
+  if [ ! -b "$data_part" ]; then
+    echo ',,L' | sfdisk --force --no-reread --append "$disk"
+    partx -a -n 3 "$disk" || partprobe "$disk" || true
+    udevadm settle
+  fi
+  mkfs.ext4 -F -L thibsdata "$data_part"
+fi
+grep -q '^LABEL=thibsdata' /etc/fstab || echo 'LABEL=thibsdata /data ext4 defaults,noatime 0 2' >>/etc/fstab
+mkdir -p /data
+mountpoint -q /data || mount /data
+
+mkdir -p /data/system/releases
+if [ ! -e /data/system/current ]; then
+  tmp=$(mktemp -d /data/system/tmp.XXXXXX)
+  chmod 755 "$tmp"
+  tar -xzf /usr/share/thibsdarts/seed.tar.gz -C "$tmp"
+  tag=$(cat "$tmp/VERSION")
+  rm -rf "/data/system/releases/$tag"
+  mv "$tmp" "/data/system/releases/$tag"
+  ln -sfn "releases/$tag" /data/system/current
+fi
+systemd-tmpfiles --create /etc/tmpfiles.d/thibsdarts.conf
+
+# Systeme en lecture seule : tout ce qui doit survivre est sur /data.
+raspi-config nonint do_overlayfs 0 || echo "overlayfs non active, le systeme reste en ecriture"
+
+rm -f /etc/thibsdarts/firstboot
+sync
+systemctl reboot

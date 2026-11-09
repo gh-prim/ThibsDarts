@@ -1,0 +1,15 @@
+#!/bin/bash
+# Reset usine : efface profils, historique, Wi-Fi, cameras nommees (/data/thibsdarts).
+# Garde les mises a jour installees (/data/system), donc on repart sur la derniere version.
+# Usage : sudo thibsdarts-factory-reset [--no-reboot]
+set -euo pipefail
+# shellcheck source=/dev/null
+. /etc/thibsdarts/thibsdarts.conf
+
+# shellcheck disable=SC2086
+systemctl stop $SERVICES || true
+find /data/thibsdarts -mindepth 1 -delete
+rm -f /data/system/bad-releases
+systemd-tmpfiles --create /etc/tmpfiles.d/thibsdarts.conf
+sync
+[ "${1:-}" = "--no-reboot" ] || systemctl reboot

@@ -14,6 +14,7 @@ import '../widgets/td_button.dart';
 import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
 import 'settings_screen.dart';
+import 'stats_screen.dart';
 import 'salon_screen.dart';
 import 'tournament_screen.dart';
 
@@ -109,7 +110,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: Td.s3),
                   const MusicButton(size: 48),
                   const SizedBox(width: Td.s2),
-                  _SettingsButton(onTap: () => _open(const SettingsScreen())),
+                  _PillButton(icon: LucideIcons.trophy, label: 'Mes stats', onTap: () => _open(const StatsScreen())),
+                  const SizedBox(width: Td.s2),
+                  _PillButton(
+                    icon: LucideIcons.settings,
+                    label: 'Réglages',
+                    onTap: () => _open(const SettingsScreen()),
+                  ),
                 ],
               ),
               const SizedBox(height: Td.s5),
@@ -192,16 +199,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Bouton "Réglages" en haut à droite de l'accueil.
-class _SettingsButton extends StatelessWidget {
-  const _SettingsButton({required this.onTap});
+/// Bouton pilule en haut à droite de l'accueil ("Mes stats", "Réglages").
+class _PillButton extends StatelessWidget {
+  const _PillButton({required this.icon, required this.label, required this.onTap});
 
+  final IconData icon;
+  final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: 'Réglages',
+    label: label,
     child: GestureDetector(
       onTap: onTap,
       child: Container(
@@ -216,8 +225,8 @@ class _SettingsButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           spacing: Td.s2,
           children: [
-            const Icon(LucideIcons.settings, size: 22, color: Td.ink),
-            Text('Réglages', style: TdText.label.copyWith(color: Td.ink)),
+            Icon(icon, size: 22, color: Td.ink),
+            Text(label, style: TdText.label.copyWith(color: Td.ink)),
           ],
         ),
       ),

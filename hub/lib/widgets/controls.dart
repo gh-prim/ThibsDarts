@@ -145,13 +145,19 @@ class TdSegmented extends StatelessWidget {
                     color: o == value ? Td.ink : Colors.transparent,
                     borderRadius: BorderRadius.circular(Td.rMd - 3),
                   ),
-                  child: Text(
-                    o,
-                    style: TdText.inter(
-                      touch ? 22 : 15,
-                      touch ? 28 : 20,
-                      touch ? 700 : 600,
-                      disabled.contains(o) ? Td.desactiveInk : (o == value ? Td.beton : Td.ink2),
+                  padding: const EdgeInsets.symmetric(horizontal: Td.s2),
+                  // Réduit le libellé s'il est trop long pour sa case (onglets des stats).
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      o,
+                      maxLines: 1,
+                      style: TdText.inter(
+                        touch ? 22 : 15,
+                        touch ? 28 : 20,
+                        touch ? 700 : 600,
+                        disabled.contains(o) ? Td.desactiveInk : (o == value ? Td.beton : Td.ink2),
+                      ),
                     ),
                   ),
                 ),

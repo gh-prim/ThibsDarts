@@ -99,7 +99,14 @@ class KpiTile extends StatelessWidget {
               Text(value, style: TdText.rounded(40, 900, Td.ink, height: 44)),
               if (unit != null) ...[
                 const SizedBox(width: Td.s2),
-                Text(unit!, style: TdText.inter(15, 20, 400, Td.ink2)),
+                Flexible(
+                  child: Text(
+                    unit!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TdText.inter(15, 20, 400, Td.ink2),
+                  ),
+                ),
               ],
             ],
           ),

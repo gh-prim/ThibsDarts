@@ -50,6 +50,9 @@ class TrainingScreen extends StatefulWidget {
 class _TrainingScreenState extends State<TrainingScreen> {
   late TurnGame _g = _newGame();
   final List<BoardHit> _hits = [];
+
+  /// Toutes les fléchettes de la série, avec leur position (carte de la cible dans les stats).
+  final List<Map<String, Object?>> _throws = [];
   DartThrow? _tagDart;
   int _tagKey = 0;
   Timer? _tagTimer;
@@ -123,6 +126,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     setState(() {
       _g.throwDart(d);
       _hits.add(BoardHit(d, pos, _hits.length + 1));
+      _throws.add({'d': d.label, 'x': (pos.dx * 10).round() / 10, 'y': (pos.dy * 10).round() / 10});
       _tagDart = d;
       _tagKey++;
     });
@@ -187,6 +191,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       _stopped = false;
       _record = _bestSoFar();
       _g = _newGame();
+      _throws.clear();
       _hits.clear();
       _tagDart = null;
       _showEnd = false;
@@ -219,6 +224,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
             'valueLabel': 'moy.',
             'best': g.best,
             'volleys': g.done,
+            'scores': List.of(g.scores),
+            'max180': g.max180,
+            'throws': List.of(_throws),
           },
         ],
       });
@@ -244,6 +252,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
           'value': g.hits.toDouble(),
           'valueLabel': 'sur ${g.darts}',
           'bestStreak': g.bestStreak,
+          'throws': List.of(_throws),
         },
       ],
     });

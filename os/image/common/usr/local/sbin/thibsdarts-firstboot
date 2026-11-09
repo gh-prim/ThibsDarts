@@ -14,12 +14,30 @@ root_part=$(findmnt -no SOURCE /)
 disk="/dev/$(lsblk -no PKNAME "$root_part")"
 case "$disk" in *[0-9]) data_part="${disk}p3" ;; *) data_part="${disk}3" ;; esac
 
-if ! blkid -L thibsdata >/dev/null; then
-  if [ ! -b "$data_part" ]; then
-    echo ',,L' | sfdisk --force --no-reread --append "$disk"
-    partx -a -n 3 "$disk" || partprobe "$disk" || true
+# /data commence juste apres le systeme (aligne sur 4 Mo) et va jusqu'au bout de la carte.
+# Sans debut explicite, sfdisk prenait le petit trou libre entre bootfs et rootfs (7 Mo).
+root_name=$(basename "$root_part")
+root_end=$(( $(cat "/sys/class/block/$root_name/start") + $(cat "/sys/class/block/$root_name/size") ))
+data_start=$(( (root_end + 8191) / 8192 * 8192 ))
+
+# Partition ratee par une ancienne image : mal placee ou trop petite, et rien d'installe dessus.
+if [ -b "$data_part" ] && [ ! -e /data/system/current ]; then
+  part_name=$(basename "$data_part")
+  if [ "$(cat "/sys/class/block/$part_name/start")" -lt "$root_end" ] ||
+     [ "$(cat "/sys/class/block/$part_name/size")" -lt 2097152 ]; then
+    umount /data 2>/dev/null || true
+    sfdisk --force --no-reread --delete "$disk" 3
+    partx -d -n 3 "$disk" || true
     udevadm settle
   fi
+fi
+
+if [ ! -b "$data_part" ]; then
+  echo "$data_start,+,L" | sfdisk --force --no-reread --append "$disk"
+  partx -a -n 3 "$disk" || partprobe "$disk" || true
+  udevadm settle
+fi
+if [ "$(blkid -s LABEL -o value "$data_part" 2>/dev/null)" != thibsdata ]; then
   step 2  # formatage
   mkfs.ext4 -F -L thibsdata "$data_part"
 fi
@@ -29,6 +47,7 @@ mountpoint -q /data || mount /data
 
 step 3  # installation de ThibsDarts
 mkdir -p /data/system/releases
+rm -rf /data/system/tmp.*  # restes d'une installation interrompue
 if [ ! -e /data/system/current ]; then
   tmp=$(mktemp -d /data/system/tmp.XXXXXX)
   chmod 755 "$tmp"

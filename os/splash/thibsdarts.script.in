@@ -87,6 +87,11 @@ fun refresh() {
   # (sur un systeme en lecture seule Plymouth ne retient pas la duree du demarrage).
   lent = 1 - 1 / (1 + tk / 900);
   cible = Math.Max(global.progress, lent);
+  if (global.inst_to > 0) {
+    # Premier demarrage : la barre suit les etapes de l'installation et avance doucement vers la suivante.
+    d = (tk - global.inst_tick) / 1500;
+    cible = global.inst_from + (global.inst_to - global.inst_from) * (1 - 1 / (1 + d));
+  }
   if (cible > global.shown) global.shown = global.shown + (cible - global.shown) * 0.08;
   w = Math.Int(global.bar_w * Math.Min(global.shown, 1));
   if (w != global.last_w && global.bar_visible) {
@@ -121,8 +126,26 @@ if (mode == "shutdown" || mode == "reboot") {
 }
 
 # Pas de texte systeme a l'ecran (messages, mots de passe).
+# Etapes du premier demarrage envoyees par thibsdarts-firstboot :
+# plymouth update --status=install-N (N de 1 a 5).
+inst_from = 0;
+inst_to = 0;
+inst_tick = 0;
+fun install_step(from, to) {
+  global.inst_from = Math.Max(from, global.shown);
+  global.inst_to = to;
+  global.inst_tick = global.tick;
+}
+fun update_status(status) {
+  if (status == "install-1") install_step(0.05, 0.25);
+  if (status == "install-2") install_step(0.25, 0.4);
+  if (status == "install-3") install_step(0.4, 0.6);
+  if (status == "install-4") install_step(0.6, 0.95);
+  if (status == "install-5") install_step(1, 1);
+}
+Plymouth.SetUpdateStatusFunction(update_status);
+
 fun nothing(text) {
   return;
 }
 Plymouth.SetMessageFunction(nothing);
-Plymouth.SetUpdateStatusFunction(nothing);

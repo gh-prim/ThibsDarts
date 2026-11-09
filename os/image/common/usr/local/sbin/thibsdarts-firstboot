@@ -5,6 +5,11 @@
 #  3. passe le systeme en lecture seule (overlayfs) puis redemarre
 set -euxo pipefail
 
+# Avance la barre de l'ecran de demarrage (theme thibsdarts, etapes install-1 a install-5).
+step() { plymouth update --status="install-$1" 2>/dev/null || true; }
+
+step 1  # carte SD : partition /data
+
 root_part=$(findmnt -no SOURCE /)
 disk="/dev/$(lsblk -no PKNAME "$root_part")"
 case "$disk" in *[0-9]) data_part="${disk}p3" ;; *) data_part="${disk}3" ;; esac
@@ -15,12 +20,14 @@ if ! blkid -L thibsdata >/dev/null; then
     partx -a -n 3 "$disk" || partprobe "$disk" || true
     udevadm settle
   fi
+  step 2  # formatage
   mkfs.ext4 -F -L thibsdata "$data_part"
 fi
 grep -q '^LABEL=thibsdata' /etc/fstab || echo 'LABEL=thibsdata /data ext4 defaults,noatime 0 2' >>/etc/fstab
 mkdir -p /data
 mountpoint -q /data || mount /data
 
+step 3  # installation de ThibsDarts
 mkdir -p /data/system/releases
 if [ ! -e /data/system/current ]; then
   tmp=$(mktemp -d /data/system/tmp.XXXXXX)
@@ -33,9 +40,11 @@ if [ ! -e /data/system/current ]; then
 fi
 systemd-tmpfiles --create /etc/tmpfiles.d/thibsdarts.conf
 
+step 4  # lecture seule (reconstruit l'initramfs : l'etape la plus longue)
 # Systeme en lecture seule : tout ce qui doit survivre est sur /data.
 raspi-config nonint do_overlayfs 0 || echo "overlayfs non active, le systeme reste en ecriture"
 
+step 5
 rm -f /etc/thibsdarts/firstboot
 sync
 systemctl reboot

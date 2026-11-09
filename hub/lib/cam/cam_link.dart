@@ -30,6 +30,13 @@ class CamLink {
   /// Dernier statut publié par le Pi 5 (online, mode...), null si jamais reçu.
   final ValueNotifier<Map<String, dynamic>?> camStatus = ValueNotifier(null);
 
+  /// Adresse du serveur d'aperçu des caméras (ex. http://192.168.1.160:8081), si le Pi 5 est en ligne.
+  Uri? get previewBase {
+    final s = camStatus.value;
+    final url = s?['preview'];
+    return s?['state'] == 'online' && url is String ? Uri.tryParse(url) : null;
+  }
+
   MqttServerClient? _client;
   bool _playing = false;
   final _seen = <String>{};

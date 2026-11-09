@@ -8,6 +8,7 @@ import 'package:flutter/painting.dart';
 
 import 'package:darts_engine/darts_engine.dart';
 
+import '../cam/cam_link.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../players/player_store.dart';
@@ -263,6 +264,7 @@ class Lobby extends ChangeNotifier {
       if (req.method == 'POST' && path == '/api/lobby/join') return await _join(req, res);
       if (req.method == 'POST' && path == '/api/lobby/create') return await _create(req, res);
       if (path == '/api/spotify' || path.startsWith('/api/spotify/')) return await _spotifyRoute(req, res, seg);
+      if (path == '/api/cams' || path.startsWith('/api/cams/')) return await _camsRoute(req, res, seg);
       if (path == '/api/tournament' || path.startsWith('/api/tournament/')) return await _tournamentRoute(req, res, seg);
       if (req.method == 'POST' && path == '/api/lobby/stop') {
         // Un joueur du salon arrête la partie depuis son iPhone (confirmé dans l'app).
@@ -318,6 +320,32 @@ class Lobby extends ChangeNotifier {
       return _send(res, {'ok': true});
     }
     return _send(res, {'error': 'introuvable'}, status: 404);
+  }
+
+  /// Caméras du Pi 5 relayées pour les iPhone (réservé au propriétaire) :
+  /// GET /api/cams pour l'état, GET /api/cams/A.mjpg pour le flux en direct.
+  Future<void> _camsRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
+    if (!_authorized(req, PlayerStore.instance.owner)) return _send(res, {'error': 'cle'}, status: 401);
+    final base = CamLink.instance.previewBase;
+    if (base == null) return _send(res, {'error': 'camera'}, status: 503);
+    final target = seg.length == 2 ? base.resolve('/status') : base.resolve('/cam/${seg[2]}');
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+    try {
+      final up = await (await client.getUrl(target)).close();
+      res.statusCode = up.statusCode;
+      res.headers.contentType = up.headers.contentType;
+      res.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      res.bufferOutput = false;
+      await res.addStream(up);
+      await res.close();
+    } catch (_) {
+      // L'iPhone a fermé le flux, ou le Pi 5 a décroché.
+      try {
+        await res.close();
+      } catch (_) {}
+    } finally {
+      client.close(force: true);
+    }
   }
 
   /// Tournoi : création et inscriptions depuis les iPhone, tirage et lancement par l'organisateur.

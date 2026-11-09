@@ -12,6 +12,7 @@ import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
 import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
+import 'settings_screen.dart';
 import 'salon_screen.dart';
 import 'tournament_screen.dart';
 
@@ -94,19 +95,25 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Logo(height: 40),
-                  Spacer(),
-                  Row(
-                    spacing: Td.s2,
-                    children: [
-                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
-                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
-                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
-                      StatusIndicator(kind: StatusKind.wifi, compact: true),
-                      StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
-                    ],
+                  const Logo(height: 40),
+                  const Spacer(),
+                  // Les pastilles et la roue ouvrent les réglages (caméras en direct).
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _open(const SettingsScreen()),
+                    child: const Row(
+                      spacing: Td.s2,
+                      children: [
+                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
+                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
+                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
+                        StatusIndicator(kind: StatusKind.wifi, compact: true),
+                        StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
+                        _SettingsPill(),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -180,4 +187,26 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+/// Pastille "Réglages", à côté des pastilles d'état.
+class _SettingsPill extends StatelessWidget {
+  const _SettingsPill();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Réglages',
+    child: Container(
+      height: 32,
+      width: 32,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Td.verreLeger,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Td.verreBord),
+      ),
+      child: const Icon(LucideIcons.settings, size: 18, color: Td.ink2),
+    ),
+  );
 }

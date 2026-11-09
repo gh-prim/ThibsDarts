@@ -100,6 +100,7 @@ awk -v a="$asset" '$2 == a' "$tmp/SHA256SUMS" >"$tmp/sum"
 
 mkdir "$tmp/x"
 tar -xzf "$tmp/$asset" -C "$tmp/x"
+chmod 755 "$tmp/x" # les paquets <= v0.2.2 ont une racine en 700 : le hub (thibs) ne pourrait pas y entrer
 [ "$(cat "$tmp/x/VERSION" 2>/dev/null)" = "$tag" ] || { log "VERSION ne correspond pas a $tag"; exit 1; }
 rm -rf "${REL:?}/$tag"
 mv "$tmp/x" "$REL/$tag"

@@ -25,7 +25,7 @@ import 'game_screen.dart';
 import 'training_screen.dart';
 
 /// Écran de jeu pour un X01 ou un autre mode, selon la config.
-Widget gameScreenFor(GameConfig cfg) => cfg.training != null
+Widget gameScreenFor(GameConfig cfg) => cfg.drill
     ? TrainingScreen(config: cfg)
     : cfg.mode == null
     ? GameScreen(config: cfg)
@@ -241,6 +241,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       'at': DateTime.now().toIso8601String(),
       'mode': _cfg.title,
       'kind': _mode.name,
+      if (_cfg.practice) 'training': true,
       'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,
       'players': [
         for (var i = 0; i < g.names.length; i++)

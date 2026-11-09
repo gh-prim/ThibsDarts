@@ -247,6 +247,7 @@ class _GameScreenState extends State<GameScreen> {
       'at': DateTime.now().toIso8601String(),
       'mode': '${_cfg.startScore}',
       'kind': 'x01',
+      if (_cfg.practice) 'training': true,
       'doubleOut': _cfg.doubleOut,
       'legsToWin': _cfg.legsToWin,
       'winner': winner,

@@ -42,4 +42,30 @@ void main() {
     expect(g.bestStreak, 2);
     expect(g.thrown, 2);
   });
+
+  test('volées libres : moyenne, meilleure volée, fin', () {
+    final g = VolleyGame('Thibs', volleys: 2);
+    for (final d in [t20, t20, t20]) {
+      g.throwDart(d);
+    }
+    expect(g.max180, 1);
+    expect(g.isFinished, isFalse);
+    g.nextPlayer();
+    for (final d in [s20, miss, const DartThrow.triple(19)]) {
+      g.throwDart(d);
+    }
+    expect(g.isFinished, isTrue);
+    expect(g.scores, [180, 77]);
+    expect(g.best, 180);
+    expect(g.average, closeTo(128.5, 0.01));
+  });
+
+  test('volées libres sans fin, volée courte', () {
+    final g = VolleyGame('Thibs', volleys: 0);
+    g.throwDart(t20);
+    g.nextPlayer();
+    expect(g.done, 1);
+    expect(g.scores, [60]);
+    expect(g.isFinished, isFalse);
+  });
 }

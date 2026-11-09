@@ -13,6 +13,8 @@ class GameConfig {
     this.tournamentMatch,
     this.training,
     this.trainingDarts = 15,
+    this.freeVolleys,
+    this.practice = false,
   });
 
   final List<String> players;
@@ -30,12 +32,23 @@ class GameConfig {
   /// Fléchettes dans la série.
   final int trainingDarts;
 
+  /// Volées libres de 3 : nombre de volées, 0 pour sans fin. Prioritaire sur [mode].
+  final int? freeVolleys;
+
+  /// Partie d'entraînement en solo : sans salon, hors des parties gagnées ou perdues.
+  final bool practice;
+
+  /// Écran d'entraînement dédié (série sur cible ou volées libres).
+  bool get drill => training != null || freeVolleys != null;
+
   String get label => training != null
       ? 'série ${training!.label} de $trainingDarts fléchettes'
+      : freeVolleys != null
+      ? (freeVolleys == 0 ? 'volées libres' : '$freeVolleys volées libres')
       : mode == null ? '$startScore ${doubleOut ? 'double out' : 'single out'}' : title;
 
   /// Nom du jeu : "501", "Cricket"...
-  String get title => training != null ? 'Entraînement' : switch (mode) {
+  String get title => drill ? 'Entraînement' : switch (mode) {
     null => '$startScore',
     GameMode.cricket => 'Cricket',
     GameMode.clock => 'Around the clock',
@@ -54,6 +67,8 @@ class GameConfig {
     tournamentMatch: tournamentMatch,
     training: training,
     trainingDarts: trainingDarts,
+    freeVolleys: freeVolleys,
+    practice: practice,
   );
 }
 

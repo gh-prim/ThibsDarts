@@ -85,3 +85,72 @@ class TrainingGame extends TurnGame {
     if (thrown >= darts) finish(player);
   }
 }
+
+/// Volées libres : un joueur tire des volées de 3, n'importe où. On compte les points.
+class VolleyGame extends TurnGame {
+  /// [volleys] à 0 : sans fin, on arrête quand on veut.
+  VolleyGame(String name, {this.volleys = 10})
+    : assert(volleys >= 0),
+      super([name]);
+
+  final int volleys;
+
+  int done = 0;
+  int total = 0;
+  int dartsThrown = 0;
+  int best = 0;
+  int ton = 0;
+  int ton40 = 0;
+  int max180 = 0;
+
+  /// Scores des volées finies, dans l'ordre.
+  final List<int> scores = [];
+
+  /// Moyenne sur 3 fléchettes, 0 avant la première.
+  double get average => dartsThrown == 0 ? 0 : total * 3 / dartsThrown;
+
+  /// Points de la volée en cours.
+  int get current => currentTurn.fold(0, (n, d) => n + d.score);
+
+  @override
+  int scoreOf(int player) => total;
+
+  @override
+  void resetState() {
+    done = 0;
+    total = 0;
+    dartsThrown = 0;
+    best = 0;
+    ton = 0;
+    ton40 = 0;
+    max180 = 0;
+    scores.clear();
+  }
+
+  @override
+  void onDart(int player, DartThrow d) {
+    dartsThrown++;
+    total += d.score;
+    if (currentTurn.length == 3) _volley(player, current);
+  }
+
+  /// Volée arrêtée avant 3 fléchettes : elle compte quand même.
+  @override
+  void onTurnEnd(int player, List<DartThrow> turn) {
+    if (turn.isNotEmpty && turn.length < 3) _volley(player, turn.fold(0, (n, d) => n + d.score));
+  }
+
+  void _volley(int player, int score) {
+    done++;
+    scores.add(score);
+    if (score > best) best = score;
+    if (score == 180) {
+      max180++;
+    } else if (score >= 140) {
+      ton40++;
+    } else if (score >= 100) {
+      ton++;
+    }
+    if (volleys > 0 && done >= volleys) finish(player);
+  }
+}

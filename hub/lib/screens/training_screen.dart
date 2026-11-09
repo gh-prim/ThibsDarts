@@ -17,8 +17,9 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 
-/// Série libre en solo (planche Entraînement) : une cible, un nombre de fléchettes, par volées de 3.
-/// En attendant les caméras, toucher le plateau lance une fléchette à cet endroit.
+/// Entraînement en solo (planche Entraînement), par volées de 3 :
+/// série sur une cible ([GameConfig.training]) ou volées libres où l'on compte les points ([GameConfig.freeVolleys]).
+/// Toucher le plateau lance aussi une fléchette à cet endroit.
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key, required this.config});
 
@@ -29,7 +30,7 @@ class TrainingScreen extends StatefulWidget {
 }
 
 class _TrainingScreenState extends State<TrainingScreen> {
-  late TrainingGame _g = _newGame();
+  late TurnGame _g = _newGame();
   final List<BoardHit> _hits = [];
   DartThrow? _tagDart;
   int _tagKey = 0;
@@ -38,14 +39,24 @@ class _TrainingScreenState extends State<TrainingScreen> {
   bool _showEnd = false;
   bool _saved = false;
 
-  /// Record avant cette série (même joueur, même cible, même longueur), null si aucun.
+  /// Record avant cette série : réussites (cible) ou meilleure volée (volées libres), null si aucun.
   int? _record;
 
   GameConfig get _cfg => widget.config;
   TrainingTarget get _target => _cfg.training!;
+  bool get _volleys => _cfg.training == null;
   String get _name => _cfg.players.isEmpty ? AppState.owner : _cfg.players.first;
 
-  TrainingGame _newGame() => TrainingGame(_name, target: _cfg.training!, darts: _cfg.trainingDarts);
+  TurnGame _newGame() => _volleys
+      ? VolleyGame(_name, volleys: _cfg.freeVolleys ?? 10)
+      : TrainingGame(_name, target: _cfg.training!, darts: _cfg.trainingDarts);
+
+  /// Valeur qui fait un record : réussites de la série, ou meilleure volée.
+  int get _score => switch (_g) {
+    final VolleyGame v => v.best,
+    final TrainingGame t => t.hits,
+    _ => 0,
+  };
 
   @override
   void initState() {
@@ -72,23 +83,30 @@ class _TrainingScreenState extends State<TrainingScreen> {
     super.dispose();
   }
 
-  /// Meilleur nombre de réussites dans l'historique pour cette série.
+  /// Meilleur résultat dans l'historique : réussites sur cette série, ou meilleure volée libre.
   int? _bestSoFar() {
     final id = HistoryStore.playerId(_name);
     int? best;
     for (final m in HistoryStore.instance.all()) {
-      if (m['kind'] != 'training' || m['target'] != _target.key || m['length'] != _cfg.trainingDarts) continue;
+      if (m['kind'] != 'training') continue;
+      if (_volleys ? m['drill'] != 'volleys' : (m['target'] != _target.key || m['length'] != _cfg.trainingDarts)) {
+        continue;
+      }
       for (final p in m['players'] as List) {
         final pm = p as Map;
         if (pm['id'] != id) continue;
-        final h = (pm['score'] as num?)?.toInt();
+        final h = ((_volleys ? pm['best'] : pm['score']) as num?)?.toInt();
         if (h != null && (best == null || h > best)) best = h;
       }
     }
     return best;
   }
 
-  bool get _newRecord => _g.isFinished && _g.hits > 0 && (_record == null || _g.hits > _record!);
+  /// Fin d'entraînement : série finie, ou volées sans fin arrêtées après au moins une volée.
+  bool get _over => _g.isFinished || (_g is VolleyGame && (_g as VolleyGame).volleys == 0 && _stopped);
+  bool _stopped = false;
+
+  bool get _newRecord => _over && _score > 0 && (_record == null || _score > _record!);
 
   void _camDart(DartThrow d, Offset? pos) {
     if (mounted) _throw(d, pos ?? boardPositionFor(d));
@@ -100,7 +118,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   void _throw(DartThrow d, Offset pos) {
-    if (_g.awaitingNextPlayer || _g.isFinished) return;
+    if (_g.awaitingNextPlayer || _over) return;
     setState(() {
       _g.throwDart(d);
       _hits.add(BoardHit(d, pos, _hits.length + 1));
@@ -112,7 +130,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       if (mounted) setState(() => _tagDart = null);
     });
     if (_g.isFinished) {
-      AppState.lastResult = '${_g.hits} sur ${_g.darts} au ${_target.label}.';
+      AppState.lastResult = _result;
       _endTimer?.cancel();
       _endTimer = Timer(const Duration(milliseconds: 1400), () {
         if (mounted) setState(() => _showEnd = true);
@@ -122,8 +140,34 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   void _onBoardTap(Offset p) => _throw(dartAt(p), p);
 
+  /// Phrase de fin : "11 sur 15 au T20." ou "Moyenne 54,3, meilleure volée 100.".
+  String get _result => switch (_g) {
+    final TrainingGame t => '${t.hits} sur ${t.darts} au ${_target.label}.',
+    final VolleyGame v => 'Moyenne ${_fr(v.average)}, meilleure volée ${v.best}.',
+    _ => '',
+  };
+
+  static String _fr(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+
+  /// Volées sans fin : "Terminer" clôt la volée en cours et montre le bilan.
+  void _finishEndless() {
+    final v = _g as VolleyGame;
+    if (v.currentTurn.isNotEmpty) v.nextPlayer();
+    if (v.done == 0) {
+      Navigator.of(context).pop();
+      return;
+    }
+    AppState.lastResult = _result;
+    setState(() {
+      _stopped = true;
+      _hits.clear();
+      _tagDart = null;
+      _showEnd = true;
+    });
+  }
+
   void _nextVolley() {
-    if (_g.isFinished) {
+    if (_over) {
       setState(() => _showEnd = true);
       return;
     }
@@ -139,6 +183,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     _save();
     _saved = false;
     setState(() {
+      _stopped = false;
       _record = _bestSoFar();
       _g = _newGame();
       _hits.clear();
@@ -147,18 +192,44 @@ class _TrainingScreenState extends State<TrainingScreen> {
     });
   }
 
-  /// Enregistre la série finie (une fois, en quittant ou avant de relancer).
+  /// Enregistre l'entraînement fini (une fois, en quittant ou avant de relancer).
   void _save() {
-    final g = _g;
-    if (!g.isFinished || _saved) return;
+    if (!_over || _saved) return;
     _saved = true;
     final record = _record;
-    if (record == null || g.hits > record) _record = g.hits;
+    if (record == null || _score > record) _record = _score;
+    final g = _g;
+    if (g is VolleyGame) {
+      HistoryStore.instance.add({
+        'id': '${DateTime.now().millisecondsSinceEpoch}',
+        'at': DateTime.now().toIso8601String(),
+        'mode': 'Volées libres',
+        'kind': 'training',
+        'drill': 'volleys',
+        'winner': null,
+        'players': [
+          {
+            'id': HistoryStore.playerId(_name),
+            'name': _name,
+            'won': false,
+            'darts': g.dartsThrown,
+            'score': g.total,
+            'value': double.parse(g.average.toStringAsFixed(1)),
+            'valueLabel': 'moy.',
+            'best': g.best,
+            'volleys': g.done,
+          },
+        ],
+      });
+      return;
+    }
+    g as TrainingGame;
     HistoryStore.instance.add({
       'id': '${DateTime.now().millisecondsSinceEpoch}',
       'at': DateTime.now().toIso8601String(),
       'mode': 'Série ${_target.label}',
       'kind': 'training',
+      'drill': 'target',
       'target': _target.key,
       'length': g.darts,
       'winner': null,
@@ -182,19 +253,43 @@ class _TrainingScreenState extends State<TrainingScreen> {
     return [
       for (var i = 0; i < 3; i++)
         if (i < turn.length)
-          _target.matches(turn[i])
+          _volleys
+              ? (turn[i].isMiss
+                    ? const SlotData(SlotState.miss, value: 0)
+                    : SlotData(SlotState.hit, label: turn[i].label, value: turn[i].score))
+              : _target.matches(turn[i])
               ? SlotData(SlotState.hit, label: turn[i].label, value: turn[i].score)
               : SlotData(SlotState.miss, label: turn[i].isMiss ? null : turn[i].label, value: 0)
-        else if (i == turn.length && !_g.awaitingNextPlayer && !_g.isFinished)
+        else if (i == turn.length && !_g.awaitingNextPlayer && !_over)
           const SlotData(SlotState.current)
         else
           const SlotData(SlotState.empty),
     ];
   }
 
+  String get _endCopy {
+    final rec = _newRecord ? ' Nouveau record.' : ' On remet ça ?';
+    return switch (_g) {
+      final TrainingGame t => '${t.hits} sur ${t.darts} au ${_target.label}.$rec',
+      final VolleyGame v => '${v.done} volée${v.done > 1 ? 's' : ''}, ${v.total} points.$rec',
+      _ => '',
+    };
+  }
+
+  List<CelebrationStat> get _endStats => switch (_g) {
+    final TrainingGame t => [
+      CelebrationStat('Réussite', '${t.rate} %'),
+      CelebrationStat('Meilleure suite', '${t.bestStreak}'),
+    ],
+    final VolleyGame v => [
+      CelebrationStat('Moyenne', _fr(v.average)),
+      CelebrationStat('Meilleure volée', '${v.best}'),
+    ],
+    _ => const [],
+  };
+
   @override
   Widget build(BuildContext context) {
-    final g = _g;
     return Scaffold(
       backgroundColor: Td.beton,
       body: Stack(
@@ -214,19 +309,14 @@ class _TrainingScreenState extends State<TrainingScreen> {
               ),
             ),
           ),
-          if (_showEnd && g.isFinished)
+          if (_showEnd && _over)
             Positioned.fill(
               child: Celebration(
                 kind: CelebrationKind.win,
                 winner: _name,
                 tag: _newRecord ? 'RECORD' : 'FINI',
-                copy: _newRecord
-                    ? '${g.hits} sur ${g.darts} au ${_target.label}. Nouveau record.'
-                    : '${g.hits} sur ${g.darts} au ${_target.label}. On remet ça ?',
-                stats: [
-                  CelebrationStat('Réussite', '${g.rate} %'),
-                  CelebrationStat('Meilleure suite', '${g.bestStreak}'),
-                ],
+                copy: _endCopy,
+                stats: _endStats,
                 onAgain: _again,
                 onHome: () => Navigator.of(context).pop(),
               ),
@@ -237,7 +327,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   Widget _left() {
-    final best = _newRecord ? _g.hits : _record;
+    final best = _newRecord ? _score : _record;
+    final g = _g;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: Td.s3,
@@ -253,9 +344,16 @@ class _TrainingScreenState extends State<TrainingScreen> {
           ],
         ),
         PlayerCard(
-          player: PlayerSummary(_name, status: PlayerStatus.active, detail: 'Série ${_target.label}'),
+          player: PlayerSummary(
+            _name,
+            status: PlayerStatus.active,
+            detail: _volleys ? 'Volées libres' : 'Série ${_target.label}',
+          ),
         ),
-        KpiTile(label: 'Record sur ${_target.label}', value: best == null ? '-' : '$best', unit: 'sur ${_g.darts}'),
+        if (g is TrainingGame)
+          KpiTile(label: 'Record sur ${_target.label}', value: best == null ? '-' : '$best', unit: 'sur ${g.darts}')
+        else
+          KpiTile(label: 'Record de volée', value: best == null ? '-' : '$best', unit: 'points'),
         const Spacer(),
         TdButton(
           label: 'Arrêter',
@@ -270,16 +368,17 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   Widget _board() {
     final d = _tagDart;
-    final bull = _target.sector == 25;
+    final aim = _volleys ? null : _target;
+    final bull = aim?.sector == 25;
     return Center(
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Dartboard(
             hits: _hits,
-            aimed: bull ? null : DartThrow(_target.sector, _target.multiplier),
+            aimed: aim == null || bull ? null : DartThrow(aim.sector, aim.multiplier),
             aimSector: bull ? 25 : null,
-            dim: true,
+            dim: aim != null,
             onTapBoard: _onBoardTap,
           ),
           if (d != null)
@@ -299,62 +398,101 @@ class _TrainingScreenState extends State<TrainingScreen> {
     );
   }
 
+  Widget _bar(String label, String value, double fraction, String foot) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: Td.s2,
+    children: [
+      Row(
+        children: [
+          Text(label, style: TdText.inter(13, 18, 600, Td.ink2)),
+          const Spacer(),
+          Text(value, style: TdText.inter(13, 18, 600, Td.ink)),
+        ],
+      ),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          height: 10,
+          color: const Color(0x17FFFFFF),
+          alignment: Alignment.centerLeft,
+          child: AnimatedFractionallySizedBox(
+            duration: Td.base,
+            curve: Td.courbeSortie,
+            widthFactor: fraction.clamp(0.0, 1.0),
+            heightFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: Td.sunset, borderRadius: BorderRadius.circular(5)),
+            ),
+          ),
+        ),
+      ),
+      Text(foot, style: TdText.inter(13, 18, 400, Td.ink3)),
+    ],
+  );
+
   Widget _right() {
     final g = _g;
+    final endless = g is VolleyGame && g.volleys == 0;
+    final children = switch (g) {
+      final TrainingGame t => [
+        ScoreDisplay(
+          value: t.hits,
+          text: '${t.hits}/${t.thrown}',
+          label: '${_target.plural} réussis',
+          sub: 'Série de ${t.darts} fléchettes, ${t.thrown} lancée${t.thrown > 1 ? 's' : ''}',
+        ),
+        _bar('Réussite', '${t.rate} %', t.rate / 100, 'Meilleure suite: ${t.bestStreak} d’affilée'),
+      ],
+      final VolleyGame v => [
+        ScoreDisplay(
+          value: v.current,
+          label: 'Cette volée',
+          sub: v.volleys == 0
+              ? 'Volée ${v.done + (v.awaitingNextPlayer ? 0 : 1)}'
+              : 'Volée ${(v.done + (v.awaitingNextPlayer ? 0 : 1)).clamp(1, v.volleys)} sur ${v.volleys}',
+        ),
+        _bar(
+          'Moyenne',
+          _fr(v.average),
+          v.average / 180,
+          'Meilleure volée: ${v.best} · 100+: ${v.ton + v.ton40 + v.max180} · 180: ${v.max180}',
+        ),
+      ],
+      _ => <Widget>[],
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       spacing: Td.s2,
       children: [
-        ScoreDisplay(
-          value: g.hits,
-          text: '${g.hits}/${g.thrown}',
-          label: '${_target.plural} réussis',
-          sub: 'Série de ${g.darts} fléchettes, ${g.thrown} lancée${g.thrown > 1 ? 's' : ''}',
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: Td.s2,
-          children: [
-            Row(
-              children: [
-                Text('Réussite', style: TdText.inter(13, 18, 600, Td.ink2)),
-                const Spacer(),
-                Text('${g.rate} %', style: TdText.inter(13, 18, 600, Td.ink)),
-              ],
-            ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(5),
-              child: Container(
-                height: 10,
-                color: const Color(0x17FFFFFF),
-                alignment: Alignment.centerLeft,
-                child: AnimatedFractionallySizedBox(
-                  duration: Td.base,
-                  curve: Td.courbeSortie,
-                  widthFactor: g.rate / 100,
-                  heightFactor: 1,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(color: Td.sunset, borderRadius: BorderRadius.circular(5)),
-                  ),
-                ),
-              ),
-            ),
-            Text(
-              'Meilleure suite: ${g.bestStreak} d’affilée',
-              style: TdText.inter(13, 18, 400, Td.ink3),
-            ),
-          ],
-        ),
+        ...children,
         DartSlots(slots: _slots),
-        TdButton(
-          label: g.isFinished ? 'Terminer' : 'Volée suivante',
-          icon: LucideIcons.arrowRight,
-          variant: g.awaitingNextPlayer || g.isFinished ? TdButtonVariant.primary : TdButtonVariant.secondary,
-          height: Td.ciblePi,
-          onPressed: _nextVolley,
-        ),
+        if (endless)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: Td.s2,
+            children: [
+              TdButton(
+                label: 'Terminer',
+                icon: LucideIcons.flag,
+                variant: TdButtonVariant.secondary,
+                height: Td.ciblePi,
+                onPressed: _finishEndless,
+              ),
+              _nextButton(),
+            ],
+          )
+        else
+          _nextButton(),
       ],
     );
   }
+
+  Widget _nextButton() => TdButton(
+    label: _over ? 'Terminer' : 'Volée suivante',
+    icon: LucideIcons.arrowRight,
+    variant: _g.awaitingNextPlayer || _over ? TdButtonVariant.primary : TdButtonVariant.secondary,
+    height: Td.ciblePi,
+    onPressed: _nextVolley,
+  );
 }

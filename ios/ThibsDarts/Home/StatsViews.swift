@@ -42,10 +42,12 @@ struct HistoryMatch: Decodable, Identifiable, Hashable {
     let kind: String
     let winner: String?
     let players: [HistoryPlayer]
+    /// Partie jouée en entraînement solo (301, Cricket...).
+    var training: Bool?
 
     var isX01: Bool { kind == "x01" }
     /// Série d'entraînement en solo : ni gagnée ni perdue, hors des parties jouées.
-    var isTraining: Bool { kind == "training" }
+    var isTraining: Bool { kind == "training" || training == true }
     var isDraw: Bool { winner?.contains(" et ") == true }
 
     var date: Date {

@@ -37,6 +37,9 @@ class CamPairing {
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _tick());
   }
 
+  /// Étape en cours ou résultat de la dernière recherche lancée à la main (Réglages > Système).
+  final ValueNotifier<String?> message = ValueNotifier(null);
+
   Future<void> _tick() async {
     if (_busy) return;
     final now = DateTime.now();
@@ -47,17 +50,60 @@ class CamPairing {
     _offlineSince ??= now;
     if (now.difference(_offlineSince!) < const Duration(minutes: 1)) return;
     if (now.isBefore(_nextTry) || CamLink.instance.playing) return;
+    await _attempt(manual: false);
+  }
+
+  /// Recherche lancée par le bouton : tout de suite, sans attendre, avec chaque étape affichée.
+  Future<void> pairNow() async {
+    if (_busy) return;
+    if (!Platform.isLinux) {
+      message.value = 'Pas de Wi-Fi à piloter sur le Mac.';
+      return;
+    }
+    await _attempt(manual: true);
+  }
+
+  Future<void> _attempt({required bool manual}) async {
     _busy = true;
+    void say(String m) {
+      debugPrint('CamPairing: $m');
+      if (manual) message.value = m;
+    }
+
     try {
+      say('Lecture du Wi-Fi du Pi 4…');
       // Hub en setup (son propre hotspot) ou sur câble : pas de Wi-Fi maison à transmettre.
       final home = await _homeWifi();
-      if (home == null) return;
-      final ap = await _findCamAp();
-      if (ap == null) return;
-      _nextTry = now.add(const Duration(minutes: 3));
-      await _push(ap, home);
+      if (home == null) {
+        say('Le Pi 4 n’est pas sur un Wi-Fi maison : rien à transmettre au Pi 5.');
+        return;
+      }
+      say('Recherche du réseau ThibsDarts-cam…');
+      final ap = await _findCamAp(rescan: manual);
+      if (ap == null) {
+        say('Pi 5 introuvable. Il ouvre son réseau ThibsDarts-cam 45 s après le démarrage s’il n’a pas de Wi-Fi. '
+            'Attends une minute et réessaie.');
+        return;
+      }
+      _nextTry = DateTime.now().add(const Duration(minutes: 3));
+      final error = await _push(ap, home, say);
+      if (error != null) {
+        say(error);
+        return;
+      }
+      say('Wi-Fi ${home.$2} envoyé au Pi 5. Il se connecte, ça prend jusqu’à une minute…');
+      if (!manual) return;
+      final end = DateTime.now().add(const Duration(seconds: 90));
+      while (DateTime.now().isBefore(end)) {
+        if (CamLink.instance.camStatus.value?['state'] == 'online') {
+          say('Pi 5 connecté.');
+          return;
+        }
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+      say('Le Pi 5 a reçu le Wi-Fi mais ne s’est pas encore annoncé. Vérifie qu’il est à portée de la box.');
     } catch (e) {
-      debugPrint('CamPairing: $e');
+      say('Erreur : $e');
     } finally {
       _busy = false;
     }
@@ -97,6 +143,10 @@ class CamPairing {
       final ssid = await _get(name, '802-11-wireless.ssid');
       if (ssid.isEmpty) return null;
       final psk = await _get(name, '802-11-wireless-security.psk', secrets: true);
+      final keyMgmt = await _get(name, '802-11-wireless-security.key-mgmt');
+      if (psk.isEmpty && keyMgmt.isNotEmpty) {
+        throw 'mot de passe du Wi-Fi $ssid illisible sur le Pi 4 ($keyMgmt)';
+      }
       return (name, ssid, psk);
     }
     return null;
@@ -107,8 +157,8 @@ class CamPairing {
     return (r.stdout as String).trim();
   }
 
-  Future<String?> _findCamAp() async {
-    final r = await _nmcli(['-t', '-f', 'SSID', 'dev', 'wifi', 'list', '--rescan', 'auto']);
+  Future<String?> _findCamAp({bool rescan = false}) async {
+    final r = await _nmcli(['-t', '-f', 'SSID', 'dev', 'wifi', 'list', '--rescan', rescan ? 'yes' : 'auto']);
     for (final line in (r.stdout as String).split('\n')) {
       final ssid = splitTerse(line).first.trim();
       if (ssid.startsWith(apPrefix)) return ssid;
@@ -116,9 +166,10 @@ class CamPairing {
     return null;
   }
 
-  Future<void> _push(String ap, (String, String, String) home) async {
+  /// Null si le Pi 5 a accepté le Wi-Fi, sinon le problème en clair.
+  Future<String?> _push(String ap, (String, String, String) home, void Function(String) say) async {
     final (homeCon, ssid, psk) = home;
-    debugPrint('CamPairing: Pi 5 trouvé ($ap), envoi du Wi-Fi $ssid');
+    say('Pi 5 trouvé ($ap). Le Pi 4 s’y connecte quelques secondes…');
     pairing.value = true;
     try {
       await _nmcli(['con', 'delete', _pairCon]);
@@ -128,8 +179,7 @@ class CamPairing {
       ]);
       final up = await _nmcli(['con', 'up', _pairCon]);
       if (up.exitCode != 0) {
-        debugPrint('CamPairing: point d\'accès injoignable : ${(up.stderr as String).trim()}');
-        return;
+        return 'Connexion au réseau $ap impossible : ${(up.stderr as String).trim()}';
       }
       final gw = (await _nmcli(['-g', 'IP4.GATEWAY', 'dev', 'show', _iface])).stdout as String;
       final host = gw.trim().isEmpty ? '10.42.0.1' : gw.trim();
@@ -142,12 +192,13 @@ class CamPairing {
         req.write(jsonEncode({'ssid': ssid, 'password': psk}));
         final res = await req.close().timeout(const Duration(seconds: 10));
         await res.drain<void>();
-        debugPrint('CamPairing: réponse du Pi 5 ${res.statusCode}');
+        if (res.statusCode != 200) return 'Le Pi 5 a refusé le Wi-Fi (code ${res.statusCode}).';
+        return null;
       } finally {
         client.close(force: true);
       }
     } catch (e) {
-      debugPrint('CamPairing: $e');
+      return 'Le Pi 5 ne répond pas sur son réseau : $e';
     } finally {
       await _nmcli(['con', 'down', _pairCon]);
       await _nmcli(['con', 'delete', _pairCon]);

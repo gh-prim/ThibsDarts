@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../cam/cam_link.dart';
+import '../cam/cam_pairing.dart';
 import '../system/release.dart';
 import '../theme/tokens.dart';
 import '../widgets/game_widgets.dart';
@@ -710,13 +711,37 @@ class _SystemScreenState extends State<SystemScreen> {
                   Expanded(child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest)),
                 ],
               ),
-              TdButton(
-                label: _busy ? 'Recherche…' : 'Chercher une mise à jour',
-                icon: LucideIcons.refreshCw,
-                height: Td.ciblePiFort,
-                onPressed: _busy ? null : _checkUpdate,
+              Row(
+                spacing: Td.s4,
+                children: [
+                  Expanded(
+                    child: TdButton(
+                      label: _busy ? 'Recherche…' : 'Chercher une mise à jour',
+                      icon: LucideIcons.refreshCw,
+                      height: Td.ciblePiFort,
+                      onPressed: _busy ? null : _checkUpdate,
+                    ),
+                  ),
+                  Expanded(
+                    child: ValueListenableBuilder(
+                      valueListenable: CamPairing.instance.pairing,
+                      builder: (context, pairing, _) => TdButton(
+                        label: pairing ? 'Appairage…' : 'Appairer le Pi 5',
+                        icon: LucideIcons.wifi,
+                        variant: TdButtonVariant.secondary,
+                        height: Td.ciblePiFort,
+                        onPressed: pairing ? null : CamPairing.instance.pairNow,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               if (_message != null) Text(_message!, style: TdText.body),
+              ValueListenableBuilder(
+                valueListenable: CamPairing.instance.message,
+                builder: (context, m, _) =>
+                    m == null ? const SizedBox.shrink() : Text(m, style: TdText.body.copyWith(color: Td.ink2)),
+              ),
               const Spacer(),
               _Item(
                 icon: LucideIcons.trash2,

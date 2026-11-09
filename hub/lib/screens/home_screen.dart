@@ -5,11 +5,11 @@ import '../game_config.dart';
 import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../tournament/tournament.dart';
+import '../widgets/live_status.dart';
 import '../widgets/logo.dart';
 import '../widgets/music_button.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
-import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
 import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
@@ -104,16 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _open(const SettingsScreen()),
-                    child: const Row(
-                      spacing: Td.s2,
-                      children: [
-                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
-                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
-                        StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
-                        StatusIndicator(kind: StatusKind.wifi, compact: true),
-                        StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
-                      ],
-                    ),
+                    child: const LiveStatusBar(),
                   ),
                   const SizedBox(width: Td.s3),
                   const MusicButton(size: 48),

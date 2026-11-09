@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import '../widgets/live_status.dart';
 import '../widgets/logo.dart';
 import '../widgets/stage.dart';
-import '../widgets/status_indicator.dart';
 import '../game_config.dart';
 import '../lobby/lobby.dart';
 import '../setup/owner_store.dart';
@@ -84,16 +84,7 @@ class _BootScreenState extends State<BootScreen> with SingleTickerProviderStateM
             left: 0,
             right: 0,
             bottom: 40,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              spacing: Td.s2,
-              children: [
-                StatusIndicator(kind: StatusKind.camera, label: 'Caméra 1'),
-                StatusIndicator(kind: StatusKind.camera, label: 'Caméra 2'),
-                StatusIndicator(kind: StatusKind.camera, label: 'Caméra 3'),
-                StatusIndicator(kind: StatusKind.pi, label: 'Pi 5'),
-              ],
-            ),
+            child: Center(child: LiveStatusBar(compact: false, wifi: false)),
           ),
         ],
       ),

@@ -16,11 +16,11 @@ import '../widgets/celebration.dart';
 import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/hit_tag.dart';
+import '../widgets/live_status.dart';
 import '../widgets/logo.dart';
 import '../widgets/music_button.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
-import '../widgets/status_indicator.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
 
@@ -485,17 +485,7 @@ class _GameScreenState extends State<GameScreen> {
                   const SizedBox(height: Td.s3),
                   for (final pl in players) ...[PlayerCard(player: pl), const SizedBox(height: Td.s2)],
                   const Spacer(),
-                  const Wrap(
-                    spacing: Td.s2,
-                    runSpacing: Td.s2,
-                    children: [
-                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 1'),
-                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 2'),
-                      StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
-                      StatusIndicator(kind: StatusKind.wifi, compact: true),
-                      StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
-                    ],
-                  ),
+                  const LiveStatusBar(wrap: true),
                 ],
               ),
             ),

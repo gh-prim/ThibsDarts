@@ -11,6 +11,7 @@ import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -239,6 +240,7 @@ class Registry:
             "version": VERSION,
             "preview": base_url(),
             "cams": {c.id: c.label for c in self.ordered()},
+            "health": health(),
         }, ensure_ascii=False)
 
     def publish_status(self, state):
@@ -248,6 +250,25 @@ class Registry:
     def publish_motion(self):
         if self.client:
             self.client.publish(MOTION_TOPIC, json.dumps({c.id: c.moving for c in self.ordered()}), qos=0)
+
+
+def health():
+    """Température du Pi 5 et alertes d'alimentation (vcgencmd get_throttled)."""
+    out = {}
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            out["temp"] = round(int(f.read()) / 1000, 1)
+    except (OSError, ValueError):
+        pass
+    try:
+        flags = int(subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=2)
+                    .stdout.strip().split("=")[1], 16)
+        out["undervoltage"] = bool(flags & 0x1)
+        out["throttled"] = bool(flags & 0x6)
+        out["undervoltageSinceBoot"] = bool(flags & 0x10000)
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        pass
+    return out
 
 
 def camera_id(path):
@@ -369,8 +390,12 @@ def main():
     registry.client = client
 
     def watch():
+        n = 0
         while True:
             registry.scan()
+            n += 1
+            if n % 10 == 0:
+                registry.publish_status("online")  # température à jour toutes les 30 s
             time.sleep(3)
 
     threading.Thread(target=watch, daemon=True).start()

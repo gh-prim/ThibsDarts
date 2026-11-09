@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag de la release a completer
+        description: Tag a publier (la release est creee si elle n'existe pas)
         required: true
 
 permissions:
@@ -67,6 +67,9 @@ jobs:
         run: |
           cd dist
           sha256sum thibsdarts-*.tar.gz > SHA256SUMS
+          # Lance a la main (workflow_dispatch) sans release : on la cree ici, sur le tag deja pousse.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
           gh release upload "$TAG" thibsdarts-*.tar.gz SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
 
   image:

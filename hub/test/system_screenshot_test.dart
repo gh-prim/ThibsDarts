@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:dartos_hub/cam/cam_link.dart';
+import 'package:dartos_hub/cam/cam_pairing.dart';
 import 'package:dartos_hub/screens/settings_screen.dart';
 import 'package:dartos_hub/theme/tokens.dart';
 import 'package:flutter/material.dart';
@@ -51,5 +52,8 @@ void main() {
 
     await shot(const SettingsScreen(), 'reglages');
     await shot(const SystemScreen(), 'systeme');
+    CamLink.instance.camStatus.value = {'state': 'offline'};
+    CamPairing.instance.message.value = 'Pi 5 trouvé (ThibsDarts-cam-A1B2). Le Pi 4 s’y connecte quelques secondes…';
+    await shot(const SystemScreen(), 'systeme-appairage');
   });
 }

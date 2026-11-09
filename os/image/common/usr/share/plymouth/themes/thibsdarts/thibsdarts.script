@@ -3,7 +3,7 @@
 
 NB_FRAMES = 28;
 FRAME_MS = 70;
-NB_QUOTES = 12;
+NB_QUOTES = 10;
 QUOTE_TICKS = 200;   # 4 s par phrase (le rafraichissement tourne a 50 Hz)
 FADE_TICKS = 20;
 

@@ -1,5 +1,5 @@
 # Theme Plymouth ThibsDarts (genere par os/splash/make-theme.py, ne pas modifier a la main).
-# La tete de Thibs tourne au centre, une barre avance dessous et ses phrases defilent.
+# "DartOS" en haut, la tete de Thibs tourne au centre, une barre avance dessous et ses phrases defilent.
 
 NB_FRAMES = 28;
 FRAME_MS = 70;
@@ -32,8 +32,12 @@ for (i = 0; i < NB_QUOTES; i++)
 
 head = Sprite(frames[0]);
 head.SetX(Math.Int((W - frames[0].GetWidth()) / 2));
-head.SetY(Math.Int(H * 0.43 - frames[0].GetHeight() / 2));
+head.SetY(Math.Int(H * 0.47 - frames[0].GetHeight() / 2));
 head.SetZ(1);
+
+title_img = scaled(Image("title.png"));
+title = Sprite(title_img);
+title.SetPosition(Math.Int((W - title_img.GetWidth()) / 2), Math.Int(H * 0.06), 2);
 
 bar_track = scaled(Image("bar-track.png"));
 bar_fill_src = Image("bar-fill.png");

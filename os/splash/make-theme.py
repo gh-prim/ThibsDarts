@@ -58,6 +58,26 @@ def bar():
     fill.save(OUT / "bar-fill.png")
 
 
+def title():
+    # Mot "DartOS" au-dessus de la tete : "Dart" en blanc casse, "OS" en degrade Sunset vers Crepuscule.
+    font = ImageFont.truetype(str(ROOT / "hub/assets/fonts/Nunito.ttf"), 40)
+    font.set_variation_by_axes([900])
+    dart_w = font.getlength("Dart")
+    x0, y0, x1, y1 = font.getbbox("DartOS")
+    w, h = x1 - x0 + 8, y1 - y0 + 8
+    img = Image.new("RGBA", (w, h))
+    ImageDraw.Draw(img).text((4 - x0, 4 - y0), "Dart", font=font, fill=TEXTE + (255,))
+    mask = Image.new("L", (w, h))
+    ImageDraw.Draw(mask).text((4 - x0 + dart_w, 4 - y0), "OS", font=font, fill=255)
+    grad = Image.new("RGBA", (w, h))
+    for x in range(w):
+        t = min(max((x - dart_w) / max(w - dart_w, 1), 0), 1)
+        c = tuple(round(SUNSET[k] + (CREPUSCULE[k] - SUNSET[k]) * t) for k in range(3))
+        ImageDraw.Draw(grad).line((x, 0, x, h - 1), fill=c + (255,))
+    img.paste(grad, (0, 0), mask)
+    img.save(OUT / "title.png", optimize=True)
+
+
 def quotes():
     font = ImageFont.truetype(str(FONT), 22)
     font.set_variation_by_axes([14, 500])  # Inter : taille optique 14, graisse 500
@@ -79,6 +99,7 @@ def main():
         old.unlink()
     n, ms = frames()
     bar()
+    title()
     q = quotes()
     script = (HERE / "thibsdarts.script.in").read_text(encoding="utf-8")
     script = script.replace("@FRAMES@", str(n)).replace("@FRAME_MS@", str(ms)).replace("@QUOTES@", str(q))

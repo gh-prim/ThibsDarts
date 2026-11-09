@@ -1,6 +1,8 @@
 # Une release publiee sur GitHub = une mise a jour pour les deux Pi.
 # 1. paquets de mise a jour (hub, cam) + SHA256SUMS attaches a la release : les Pi se mettent a jour
-# 2. images .img.xz completes (a flasher une seule fois) attachees ensuite
+# 2. images .img.xz completes (a flasher une seule fois) attachees ensuite, seulement pour une
+#    version en .0 (v0.3.0, v1.0.0) ou si os/image/ a change depuis la release d'avant.
+#    Les petites versions ne changent que l'app : on installe la derniere image puis on met a jour.
 name: Release Dart OS
 
 on:
@@ -11,6 +13,10 @@ on:
       tag:
         description: Tag a publier (la release est creee si elle n'existe pas)
         required: true
+      image:
+        description: Construire aussi les images, meme pour une petite version
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -74,8 +80,40 @@ jobs:
             gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
           gh release upload "$TAG" thibsdarts-*.tar.gz SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
 
-  image:
+  # Faut-il une nouvelle image ? Le systeme (os/image) n'est jamais mis a jour par les paquets.
+  need-image:
     needs: publish
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SRC }}
+          fetch-depth: 0
+      - id: check
+        env:
+          FORCE: ${{ inputs.image }}
+        run: |
+          build=false
+          prev=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
+          if [ "$FORCE" = true ]; then
+            why="demande manuelle"; build=true
+          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.0$ ]]; then
+            why="version $TAG en .0"; build=true
+          elif [ -z "$prev" ]; then
+            why="aucune release avant"; build=true
+          elif ! git diff --quiet "$prev" HEAD -- os/image; then
+            why="os/image a change depuis $prev"; build=true
+          else
+            why="petite version, os/image identique a $prev : paquets seulement"
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Image : $build ($why)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  image:
+    needs: need-image
+    if: needs.need-image.outputs.build == 'true'
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false

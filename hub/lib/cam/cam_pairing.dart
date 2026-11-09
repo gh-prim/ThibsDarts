@@ -186,10 +186,13 @@ class CamPairing {
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
       try {
         final req = await client.post(host, 8090, '/pair');
+        // Longueur annoncée : sans elle, Dart envoie en "chunked" et le Pi 5 (http.server) lit un corps vide.
+        final body = utf8.encode(jsonEncode({'ssid': ssid, 'password': psk}));
         req.headers
           ..contentType = ContentType.json
+          ..contentLength = body.length
           ..set('X-Pair-Key', pairKey);
-        req.write(jsonEncode({'ssid': ssid, 'password': psk}));
+        req.add(body);
         final res = await req.close().timeout(const Duration(seconds: 10));
         await res.drain<void>();
         if (res.statusCode != 200) return 'Le Pi 5 a refusé le Wi-Fi (code ${res.statusCode}).';

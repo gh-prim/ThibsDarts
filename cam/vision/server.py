@@ -60,7 +60,7 @@ class Camera:
 
     def wait_frame(self, after, timeout=3.0):
         with self.cond:
-            self.cond.wait_for(lambda: self.seq != after, timeout)
+            self.cond.wait_for(lambda: self.seq != after and self.jpeg is not None, timeout)
             return self.seq, self.jpeg
 
     def _run(self):
@@ -148,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
         if not cam.plugged:
             return self._send(503, b'{"error": "camera"}')
         cam.touch()
-        _, jpeg = cam.wait_frame(-1 if cam.jpeg is None else cam.seq, timeout=4)
+        _, jpeg = cam.wait_frame(cam.seq, timeout=8)
         if jpeg is None:
             return self._send(503, b'{"error": "camera"}')
         self._send(200, jpeg, "image/jpeg")

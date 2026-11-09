@@ -32,6 +32,9 @@ PREVIEW_FPS = 12
 # Une vue est reprise pour la reconnaissance au branchement, puis toutes les 30 s pendant l'aperçu.
 VIEW_EVERY = 30
 MOTION_TOPIC = "thibsdarts/cam/motion"
+CMD_TOPIC = "thibsdarts/cam/cmd"
+# DARTOS_DRY_POWER=1 : on note la demande d'extinction sans éteindre (tests).
+DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
 PRESET_NAMES = ["Haut", "Bas gauche", "Bas droite", "Gauche", "Droite"]
 
 
@@ -383,7 +386,25 @@ def main():
     registry.refs = identity.RefStore(DATA_DIR)
     client = new_client("dartos-cam-vision")
     client.will_set(STATUS_TOPIC, registry.status("offline"), qos=1, retain=True)
-    client.on_connect = lambda c, *_: registry.publish_status("online")
+    def on_connect(c, *_):
+        c.subscribe(CMD_TOPIC, qos=1)
+        registry.publish_status("online")
+
+    def on_power(c, userdata, msg):
+        # Le hub s'éteint ou redémarre : le Pi 5 fait pareil.
+        try:
+            action = json.loads(msg.payload).get("action")
+        except (ValueError, AttributeError):
+            return
+        if action not in ("poweroff", "reboot") or msg.retain:
+            return
+        print(f"demande du hub : {action}{' (essai, rien ne s’éteint)' if DRY_POWER else ''}", flush=True)
+        registry.publish_status("offline")
+        if not DRY_POWER:
+            subprocess.Popen(["sudo", "-n", "systemctl", action])
+
+    client.on_connect = on_connect
+    client.message_callback_add(CMD_TOPIC, on_power)
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()

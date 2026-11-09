@@ -20,6 +20,7 @@ class CamLink {
   static const takeoutTopic = 'thibsdarts/cam/takeout';
   static const statusTopic = 'thibsdarts/cam/status';
   static const stateTopic = 'thibsdarts/hub/state';
+  static const cmdTopic = 'thibsdarts/cam/cmd';
 
   /// Écran de partie qui reçoit les fléchettes (position en unités plateau, en mm).
   void Function(DartThrow dart, Offset? position)? onDart;
@@ -78,6 +79,15 @@ class CamLink {
     if (_playing == playing) return;
     _playing = playing;
     _publishState();
+  }
+
+  /// Demande au Pi 5 de s'éteindre ("poweroff") ou de redémarrer ("reboot"). Faux si le broker est injoignable.
+  bool sendCommand(String action) {
+    final client = _client;
+    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({'action': action}));
+    client.publishMessage(cmdTopic, MqttQos.atLeastOnce, payload.payload!);
+    return true;
   }
 
   void _publishState() {

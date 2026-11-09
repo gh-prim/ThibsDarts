@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../cam/cam_link.dart';
 import '../theme/tokens.dart';
+import '../widgets/game_widgets.dart';
 import '../widgets/mjpeg_view.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
@@ -40,6 +41,18 @@ class _Header extends StatelessWidget {
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _power(BuildContext context, {required bool reboot}) async {
+    final ok = await confirmAction(
+      context,
+      title: reboot ? 'Redémarrer ThibsDarts ?' : 'Éteindre ThibsDarts ?',
+      body: reboot ? 'Les deux Raspberry Pi vont redémarrer.' : 'Les deux Raspberry Pi vont s’éteindre.',
+      action: reboot ? 'Redémarrer' : 'Éteindre',
+    );
+    if (ok && context.mounted) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PowerScreen(reboot: reboot)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Td.beton,
@@ -57,6 +70,29 @@ class SettingsScreen extends StatelessWidget {
               detail: 'Voir les 3 caméras en direct',
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CamerasScreen())),
             ),
+            const Spacer(),
+            Row(
+              spacing: Td.s4,
+              children: [
+                Expanded(
+                  child: _Item(
+                    icon: LucideIcons.rotateCcw,
+                    title: 'Redémarrer',
+                    detail: 'Les deux Raspberry Pi',
+                    onTap: () => _power(context, reboot: true),
+                  ),
+                ),
+                Expanded(
+                  child: _Item(
+                    icon: LucideIcons.power,
+                    title: 'Éteindre',
+                    detail: 'Les deux Raspberry Pi',
+                    danger: true,
+                    onTap: () => _power(context, reboot: false),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -65,12 +101,21 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class _Item extends StatelessWidget {
-  const _Item({required this.icon, required this.title, required this.detail, required this.onTap});
+  const _Item({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+    this.danger = false,
+  });
 
   final IconData icon;
   final String title;
   final String detail;
   final VoidCallback onTap;
+
+  /// Action qui coupe tout (Éteindre) : en rouge.
+  final bool danger;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -79,20 +124,20 @@ class _Item extends StatelessWidget {
       height: Td.ciblePiFort,
       padding: const EdgeInsets.symmetric(horizontal: Td.s5),
       decoration: BoxDecoration(
-        color: Td.verreLeger,
+        color: danger ? Td.erreurFond : Td.verreLeger,
         borderRadius: BorderRadius.circular(Td.rLg),
-        border: Border.all(color: Td.verreBord),
+        border: Border.all(color: danger ? Td.erreur : Td.verreBord),
       ),
       child: Row(
         spacing: Td.s4,
         children: [
-          Icon(icon, size: 28, color: Td.sunset),
+          Icon(icon, size: 28, color: danger ? Td.erreur : Td.sunset),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TdText.headline),
+                Text(title, style: danger ? TdText.headline.copyWith(color: Td.erreur) : TdText.headline),
                 Text(detail, style: TdText.caption),
               ],
             ),
@@ -483,6 +528,81 @@ class _Chip extends StatelessWidget {
         border: Border.all(color: selected ? Td.sunset : Td.verreBord),
       ),
       child: Text(label, style: TdText.inter(17, 22, 600, selected ? Td.sunset : Td.ink)),
+    ),
+  );
+}
+
+/// Extinction ou redémarrage : le Pi 5 d'abord (MQTT), puis le Pi 4.
+/// DARTOS_DRY_POWER=1 (ou le Mac) : tout le parcours sans rien éteindre.
+class PowerScreen extends StatefulWidget {
+  const PowerScreen({super.key, required this.reboot});
+
+  final bool reboot;
+
+  @override
+  State<PowerScreen> createState() => _PowerScreenState();
+}
+
+class _PowerScreenState extends State<PowerScreen> {
+  static final _dry = !Platform.isLinux || Platform.environment['DARTOS_DRY_POWER'] == '1';
+  String _step = 'Le Pi 5 des caméras s’arrête…';
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    final action = widget.reboot ? 'reboot' : 'poweroff';
+    final cam = CamLink.instance;
+    if (cam.camStatus.value?['state'] == 'online' && cam.sendCommand(action)) {
+      // On attend que le Pi 5 annonce qu'il s'arrête (10 s au plus).
+      final end = DateTime.now().add(const Duration(seconds: 10));
+      while (cam.camStatus.value?['state'] == 'online' && DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+    if (!mounted) return;
+    setState(() => _step = widget.reboot ? 'Le Pi 4 redémarre…' : 'Le Pi 4 s’éteint…');
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (_dry) {
+      debugPrint('PowerScreen: $action demandé (essai, rien ne s’éteint)');
+      if (mounted) setState(() => _done = true);
+      return;
+    }
+    await Process.run('sudo', ['-n', 'systemctl', action]);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Td.betonNuit,
+    body: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: Td.s4,
+        children: [
+          Icon(widget.reboot ? LucideIcons.rotateCcw : LucideIcons.power, size: 56, color: Td.sunset),
+          Text(widget.reboot ? 'Redémarrage…' : 'Extinction…', style: TdText.title),
+          Text(_step, style: TdText.body),
+          if (!widget.reboot)
+            Text('Tu peux débrancher quand la LED verte des Pi ne clignote plus.', style: TdText.caption),
+          if (_done) ...[
+            Text('Essai : rien n’a été éteint.', style: TdText.label.copyWith(color: Td.fluo)),
+            SizedBox(
+              width: 220,
+              child: TdButton(
+                label: 'Retour',
+                icon: LucideIcons.arrowLeft,
+                variant: TdButtonVariant.secondary,
+                height: Td.ciblePi,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ],
+      ),
     ),
   );
 }

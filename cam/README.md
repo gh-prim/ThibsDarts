@@ -14,6 +14,7 @@ QoS 1 partout. Coordonnées en mm, centre de la cible en (0, 0), x vers la droit
 | `thibsdarts/cam/takeout` | cam → hub | `{"ts": ms}` : fléchettes retirées, le hub passe au joueur suivant si le tour est fini |
 | `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Haut" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
 | `thibsdarts/hub/state` | hub → cam | retenu : `{"playing": bool, "ts": ms}` |
+| `thibsdarts/cam/cmd` | hub → cam | `{"action": "poweroff"/"reboot"/"update"/"factory-reset"}` (update : `thibsdarts-update --force`) |
 
 Le hub ignore une fléchette dont l'`id` a déjà été reçu.
 

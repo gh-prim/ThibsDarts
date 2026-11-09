@@ -396,7 +396,19 @@ def main():
             action = json.loads(msg.payload).get("action")
         except (ValueError, AttributeError):
             return
-        if action not in ("poweroff", "reboot") or msg.retain:
+        if msg.retain:
+            return
+        # Mise à jour et reset usine : dans leur propre unité systemd, pour survivre à l'arrêt de ce service.
+        if action in ("update", "factory-reset"):
+            cmd = (["/usr/local/sbin/thibsdarts-update", "--force"] if action == "update"
+                   else ["/usr/local/sbin/thibsdarts-factory-reset"])
+            print(f"demande du hub : {action}{' (essai)' if DRY_POWER else ''}", flush=True)
+            if action == "factory-reset":
+                registry.publish_status("offline")
+            if not DRY_POWER:
+                subprocess.Popen(["sudo", "-n", "systemd-run", "--collect", f"--unit=thibsdarts-{action}-now", *cmd])
+            return
+        if action not in ("poweroff", "reboot"):
             return
         print(f"demande du hub : {action}{' (essai, rien ne s’éteint)' if DRY_POWER else ''}", flush=True)
         registry.publish_status("offline")

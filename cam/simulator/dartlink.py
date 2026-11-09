@@ -8,7 +8,18 @@ import uuid
 
 import paho.mqtt.client as mqtt
 
-VERSION = "0.1.0"
+
+def _release_version():
+    """Tag de la release installée (fichier VERSION à la racine du paquet), "dev" sinon."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "VERSION")
+    try:
+        with open(path) as f:
+            return f.read().strip() or "dev"
+    except OSError:
+        return "dev"
+
+
+VERSION = _release_version()
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "192.168.1.239")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))

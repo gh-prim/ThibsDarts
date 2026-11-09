@@ -15,6 +15,7 @@ import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/hit_tag.dart';
 import '../widgets/logo.dart';
+import '../widgets/music_button.dart';
 import '../widgets/mode_widgets.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
@@ -426,6 +427,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       ),
       const SizedBox(width: Td.s2),
       const StopGameButton(),
+      const SizedBox(width: Td.s2),
+      const MusicButton(),
       const SizedBox(width: Td.s3),
       Expanded(
         child: Text(
@@ -525,6 +528,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                     ),
                     const SizedBox(width: Td.s2),
                     const StopGameButton(size: 40),
+                    const SizedBox(width: Td.s2),
+                    const MusicButton(size: 40),
                     const SizedBox(width: Td.s3),
                     Text(_header, style: TdText.inter(15, 20, 400, Td.ink2)),
                     const Spacer(),

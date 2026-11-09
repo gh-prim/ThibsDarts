@@ -6,6 +6,7 @@ import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
 import '../tournament/tournament.dart';
 import '../widgets/logo.dart';
+import '../widgets/music_button.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
@@ -99,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const Logo(height: 40),
                   const Spacer(),
-                  // Les pastilles et la roue ouvrent les réglages (caméras en direct).
+                  // Les pastilles ouvrent aussi les réglages (caméras en direct).
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _open(const SettingsScreen()),
@@ -111,10 +112,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         StatusIndicator(kind: StatusKind.camera, compact: true, label: 'Caméra 3'),
                         StatusIndicator(kind: StatusKind.wifi, compact: true),
                         StatusIndicator(kind: StatusKind.pi, compact: true, label: 'Pi 5'),
-                        _SettingsPill(),
                       ],
                     ),
                   ),
+                  const SizedBox(width: Td.s3),
+                  const MusicButton(size: 48),
+                  const SizedBox(width: Td.s2),
+                  _SettingsButton(onTap: () => _open(const SettingsScreen())),
                 ],
               ),
               const SizedBox(height: Td.s5),
@@ -189,24 +193,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Pastille "Réglages", à côté des pastilles d'état.
-class _SettingsPill extends StatelessWidget {
-  const _SettingsPill();
+/// Bouton "Réglages" en haut à droite de l'accueil.
+class _SettingsButton extends StatelessWidget {
+  const _SettingsButton({required this.onTap});
+
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: 'Réglages',
-    child: Container(
-      height: 32,
-      width: 32,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Td.verreLeger,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Td.verreBord),
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.only(left: Td.s3, right: Td.s4),
+        decoration: BoxDecoration(
+          color: Td.verreMoyen,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Td.verreBord),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: Td.s2,
+          children: [
+            const Icon(LucideIcons.settings, size: 22, color: Td.ink),
+            Text('Réglages', style: TdText.label.copyWith(color: Td.ink)),
+          ],
+        ),
       ),
-      child: const Icon(LucideIcons.settings, size: 18, color: Td.ink2),
     ),
   );
 }

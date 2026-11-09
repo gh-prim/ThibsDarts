@@ -17,6 +17,7 @@ import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/hit_tag.dart';
 import '../widgets/logo.dart';
+import '../widgets/music_button.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/status_indicator.dart';
@@ -475,6 +476,8 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                       const SizedBox(width: Td.s2),
                       const StopGameButton(),
+                      const SizedBox(width: Td.s2),
+                      const MusicButton(),
                       const Spacer(),
                       Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
                     ],

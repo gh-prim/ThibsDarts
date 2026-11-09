@@ -6,13 +6,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../spotify/spotify_link.dart';
 import '../theme/tokens.dart';
 
-/// Petite note de musique dans le coin de l'écran, visible quand Spotify est relié.
+/// Petite note de musique dans l'en-tête des écrans, visible quand Spotify est relié.
 /// Un appui ouvre le mini lecteur : morceau en cours, précédent, pause, suivant.
 class MusicButton extends StatefulWidget {
-  const MusicButton({super.key, required this.navigator});
+  const MusicButton({super.key, this.size = 44});
 
-  /// Le bouton vit au-dessus du Navigator de l'appli : il lui faut sa clé pour ouvrir la fenêtre.
-  final GlobalKey<NavigatorState> navigator;
+  final double size;
 
   @override
   State<MusicButton> createState() => _MusicButtonState();
@@ -49,12 +48,11 @@ class _MusicButtonState extends State<MusicButton> {
       label: 'Musique',
       child: GestureDetector(
         onTap: () {
-          final ctx = widget.navigator.currentContext;
-          if (ctx != null) showDialog<void>(context: ctx, barrierColor: const Color(0xCC000000), builder: (_) => const MusicSheet());
+          showDialog<void>(context: context, barrierColor: const Color(0xCC000000), builder: (_) => const MusicSheet());
         },
         child: Container(
-          width: 44,
-          height: 44,
+          width: widget.size,
+          height: widget.size,
           decoration: BoxDecoration(
             color: Td.plateauNoir,
             shape: BoxShape.circle,
@@ -133,7 +131,10 @@ class _MusicSheetState extends State<MusicSheet> {
                     child: SizedBox.square(
                       dimension: 96,
                       child: art == null
-                          ? const ColoredBox(color: Td.plateauFil, child: Icon(LucideIcons.music, color: Td.ink3))
+                          ? const ColoredBox(
+                              color: Td.plateauFil,
+                              child: Icon(LucideIcons.music, color: Td.ink3),
+                            )
                           : Image.network(art, fit: BoxFit.cover),
                     ),
                   ),
@@ -213,11 +214,7 @@ class _MusicSheetState extends State<MusicSheet> {
             color: big ? Td.sunset : null,
             border: big ? null : Border.all(color: Td.plateauFil),
           ),
-          child: Icon(
-            icon,
-            size: size * 0.42,
-            color: onTap == null ? Td.ink3 : (big ? Td.onAccent : Td.ink),
-          ),
+          child: Icon(icon, size: size * 0.42, color: onTap == null ? Td.ink3 : (big ? Td.onAccent : Td.ink)),
         ),
       ),
     );

@@ -323,15 +323,21 @@ class Lobby extends ChangeNotifier {
   }
 
   /// Caméras du Pi 5 relayées pour les iPhone (réservé au propriétaire) :
-  /// GET /api/cams pour l'état, GET /api/cams/A.mjpg pour le flux en direct.
+  /// GET /api/cams pour l'état, GET /api/cams/A.mjpg pour le flux en direct,
+  /// POST /api/cams/A/name {"name": "Haut"} pour nommer une caméra.
   Future<void> _camsRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
     if (!_authorized(req, PlayerStore.instance.owner)) return _send(res, {'error': 'cle'}, status: 401);
     final base = CamLink.instance.previewBase;
     if (base == null) return _send(res, {'error': 'camera'}, status: 503);
-    final target = seg.length == 2 ? base.resolve('/status') : base.resolve('/cam/${seg[2]}');
+    final target = base.resolve(seg.length == 2 ? '/status' : '/cam/${seg.skip(2).join('/')}');
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
     try {
-      final up = await (await client.getUrl(target)).close();
+      final out = req.method == 'POST' ? await client.postUrl(target) : await client.getUrl(target);
+      if (req.method == 'POST') {
+        out.headers.contentType = ContentType.json;
+        out.write(jsonEncode(await _body(req)));
+      }
+      final up = await out.close();
       res.statusCode = up.statusCode;
       res.headers.contentType = up.headers.contentType;
       res.headers.set(HttpHeaders.cacheControlHeader, 'no-store');

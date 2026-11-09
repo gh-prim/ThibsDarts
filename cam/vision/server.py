@@ -1,11 +1,15 @@
-"""Service caméras du Pi 5 : possède les 3 caméras, sert l'aperçu en MJPEG sur HTTP (port 8081)
+"""Service caméras du Pi 5 : possède les caméras, sert l'aperçu en MJPEG sur HTTP (port 8081)
 et publie le statut retenu thibsdarts/cam/status. La détection lira plus tard les mêmes images.
 
-Une caméra ne s'ouvre que si quelqu'un la regarde, et se ferme après IDLE secondes sans client.
+Les caméras sont cherchées dans /dev/v4l toutes les quelques secondes : on peut les débrancher
+et les rebrancher sur n'importe quel port. Elles sont reconnues à leur vue (identity.py), pas
+à leur port. Une caméra ne reste ouverte que si quelqu'un la regarde (ou le temps de la reconnaître).
 """
 
+import glob
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -14,31 +18,37 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
 
+import identity
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "simulator"))
 from dartlink import MQTT_HOST, MQTT_PORT, STATUS_TOPIC, VERSION, new_client  # noqa: E402
 
 PORT = int(os.environ.get("CAM_HTTP_PORT", "8081"))
+DATA_DIR = os.environ.get("DARTOS_DATA", "/data/thibsdarts")
 IDLE = 10
 PREVIEW_SIZE = (640, 360)
 PREVIEW_FPS = 12
-
-# Caméras repérées par leur prise USB (elles ont toutes le même numéro de série).
-CAMS = {
-    "A": "/dev/v4l/by-path/platform-xhci-hcd.0-usb-0:2:1.0-video-index0",
-    "B": "/dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0",
-    "C": "/dev/v4l/by-path/platform-xhci-hcd.1-usb-0:1:1.0-video-index0",
-}
+# Une vue est reprise pour la reconnaissance au branchement, puis toutes les 30 s pendant l'aperçu.
+VIEW_EVERY = 30
+MOTION_TOPIC = "thibsdarts/cam/motion"
+PRESET_NAMES = ["Haut", "Bas gauche", "Bas droite", "Gauche", "Droite"]
 
 
 class Camera:
-    def __init__(self, name, path):
-        self.name, self.path = name, path
+    def __init__(self, cid, path):
+        self.id, self.path = cid, path
         self.jpeg = None
         self.seq = 0
         self.fps = 0.0
         self.size = None
         self.error = None
         self.last_use = 0.0
+        self.probe_until = 0.0
+        self.motion = 0.0
+        self.view = None  # (image grise, features) pour la reconnaissance
+        self.view_time = 0.0
+        self.label = None
+        self.match = 0
         self.cond = threading.Condition()
         self.thread = None
 
@@ -50,18 +60,33 @@ class Camera:
     def streaming(self):
         return self.thread is not None and self.thread.is_alive()
 
+    def _start(self):
+        if not self.streaming:
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+
     def touch(self):
         """Un client regarde : démarre la capture si besoin."""
         with self.cond:
             self.last_use = time.monotonic()
-            if not self.streaming:
-                self.thread = threading.Thread(target=self._run, daemon=True)
-                self.thread.start()
+            self._start()
+
+    def probe(self):
+        """Ouvre la caméra quelques secondes, le temps de prendre une vue pour la reconnaître."""
+        with self.cond:
+            self.view_time = 0.0
+            self.probe_until = time.monotonic() + 4
+            self._start()
 
     def wait_frame(self, after, timeout=3.0):
         with self.cond:
             self.cond.wait_for(lambda: self.seq != after and self.jpeg is not None, timeout)
             return self.seq, self.jpeg
+
+    def wait_view(self, timeout=6.0):
+        with self.cond:
+            self.cond.wait_for(lambda: self.view is not None and self.view_time > 0, timeout)
+            return self.view
 
     def _run(self):
         cap = cv2.VideoCapture(self.path, cv2.CAP_V4L2)
@@ -73,15 +98,19 @@ class Camera:
             self.error = "ouverture impossible"
             return
         self.error = None
-        frames, t0, last_preview = 0, time.monotonic(), 0.0
+        frames, opened, t0, last_preview, prev = 0, 0, time.monotonic(), 0.0, None
         try:
-            while time.monotonic() - self.last_use < IDLE:
+            while True:
+                now = time.monotonic()
+                if now - self.last_use >= IDLE and now >= self.probe_until:
+                    break
                 ok, frame = cap.read()
                 if not ok:
                     self.error = "lecture impossible"
                     break
                 now = time.monotonic()
                 frames += 1
+                opened += 1
                 if now - t0 >= 1:
                     self.fps, frames, t0 = frames / (now - t0), 0, now
                 self.size = (frame.shape[1], frame.shape[0])
@@ -89,6 +118,14 @@ class Camera:
                     continue
                 last_preview = now
                 small = cv2.resize(frame, PREVIEW_SIZE, interpolation=cv2.INTER_AREA)
+                prev = self._update_motion(small, prev)
+                # Vue pour la reconnaissance, une fois l'exposition stabilisée.
+                if opened > 20 and now - self.view_time > VIEW_EVERY and not self.moving:
+                    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                    with self.cond:
+                        self.view, self.view_time = (gray, identity.features(gray)), now
+                        self.cond.notify_all()
+                    registry.reassign()
                 ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 70])
                 if ok:
                     with self.cond:
@@ -97,11 +134,35 @@ class Camera:
                         self.cond.notify_all()
         finally:
             cap.release()
-            self.fps = 0.0
+            self.fps, self.size = 0.0, None
+            self._set_motion(0.0)
+
+    def _update_motion(self, small, prev):
+        """Part de l'image qui a bougé depuis l'aperçu précédent (main passée devant, par exemple)."""
+        gray = cv2.GaussianBlur(cv2.cvtColor(cv2.resize(small, (160, 90)), cv2.COLOR_BGR2GRAY), (5, 5), 0)
+        if prev is not None:
+            moved = cv2.threshold(cv2.absdiff(gray, prev), 25, 255, cv2.THRESH_BINARY)[1]
+            self._set_motion(cv2.countNonZero(moved) / moved.size)
+        return gray
+
+    @property
+    def moving(self):
+        return self.motion > 0.03
+
+    def _set_motion(self, value):
+        was = self.moving
+        self.motion = value
+        if was != self.moving:
+            registry.publish_motion()
 
     def status(self):
         return {
-            "name": self.name,
+            "id": self.id,
+            "label": self.label,
+            "recognized": self.label is not None,
+            "match": self.match,
+            "motion": round(self.motion, 3),
+            "moving": self.moving,
             "online": self.plugged and self.error is None,
             "streaming": self.streaming,
             "fps": round(self.fps, 1),
@@ -111,7 +172,91 @@ class Camera:
         }
 
 
-cameras = {k: Camera(k, p) for k, p in CAMS.items()}
+class Registry:
+    """Caméras branchées (par chemin /dev/v4l), noms reconnus, MQTT."""
+
+    def __init__(self):
+        self.cams = {}
+        self.lock = threading.RLock()
+        self.refs = None
+        self.client = None
+
+    def ordered(self):
+        with self.lock:
+            return sorted(self.cams.values(), key=lambda c: c.id)
+
+    def get(self, cid):
+        with self.lock:
+            return self.cams.get(cid)
+
+    def scan(self):
+        """Ajoute les caméras branchées, retire celles qui ont disparu."""
+        # Le noyau crée deux liens par caméra (usb- et usbv2-) : un seul suffit.
+        paths = sorted(p for p in glob.glob("/dev/v4l/by-path/*-usb-*-video-index0"))
+        changed = False
+        with self.lock:
+            for p in paths:
+                cid = camera_id(p)
+                if cid not in self.cams:
+                    cam = Camera(cid, p)
+                    self.cams[cid] = cam
+                    cam.probe()
+                    changed = True
+            for cid, cam in list(self.cams.items()):
+                if not cam.plugged and not cam.streaming:
+                    del self.cams[cid]
+                    changed = True
+        if changed:
+            self.reassign()
+
+    def reassign(self):
+        with self.lock:
+            views = {c.id: c.view[1] for c in self.cams.values() if c.view}
+            result = identity.assign(views, self.refs.features()) if views and self.refs.refs else {}
+            for c in self.cams.values():
+                c.label, c.match = result.get(c.id, (None, 0))
+        self.publish_status("online")
+
+    def rename(self, cam, name):
+        """Nomme la caméra d'après sa vue actuelle. Vide : oublie son nom."""
+        view = cam.view if cam.view_time and time.monotonic() - cam.view_time < 5 else None
+        if view is None:
+            cam.probe()
+            view = cam.wait_view()
+        with self.lock:
+            old = cam.label
+            if old and old != name:
+                self.refs.remove(old)
+            if name and view is not None:
+                self.refs.set(name, view[0])
+        self.reassign()
+        return view is not None or not name
+
+    def status(self, state):
+        return json.dumps({
+            "state": state,
+            "mode": "sim",
+            "version": VERSION,
+            "preview": base_url(),
+            "cams": {c.id: c.label for c in self.ordered()},
+        }, ensure_ascii=False)
+
+    def publish_status(self, state):
+        if self.client:
+            self.client.publish(STATUS_TOPIC, self.status(state), qos=1, retain=True)
+
+    def publish_motion(self):
+        if self.client:
+            self.client.publish(MOTION_TOPIC, json.dumps({c.id: c.moving for c in self.ordered()}), qos=0)
+
+
+def camera_id(path):
+    """Identifiant court de la prise (ex. "0-2"), pour les adresses de flux. Pas un nom de caméra."""
+    m = re.search(r"xhci-hcd\.(\d+)-usb-0:([\d.]+):", path)
+    return f"{m.group(1)}-{m.group(2)}" if m else re.sub(r"\W+", "-", os.path.basename(path))
+
+
+registry = Registry()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -132,17 +277,38 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/status":
-            body = {"version": VERSION, "preview": base_url(), "cams": [c.status() for c in cameras.values()]}
-            return self._send(200, json.dumps(body).encode())
+            body = {
+                "version": VERSION,
+                "preview": base_url(),
+                "presets": PRESET_NAMES,
+                "known": registry.refs.names,
+                "cams": [c.status() for c in registry.ordered()],
+            }
+            return self._send(200, json.dumps(body, ensure_ascii=False).encode())
         parts = path.strip("/").split("/")
         if len(parts) == 2 and parts[0] == "cam":
-            name, _, ext = parts[1].partition(".")
-            cam = cameras.get(name)
+            cid, _, ext = parts[1].partition(".")
+            cam = registry.get(cid)
             if cam and ext == "jpg":
                 return self._snapshot(cam)
             if cam and ext == "mjpg":
                 return self._stream(cam)
         self._send(404, b'{"error": "introuvable"}')
+
+    def do_POST(self):
+        # POST /cam/<id>/name {"name": "Haut"} : la caméra garde ce nom même changée de port.
+        parts = self.path.split("?")[0].strip("/").split("/")
+        cam = registry.get(parts[1]) if len(parts) == 3 and parts[0] == "cam" and parts[2] == "name" else None
+        if cam is None:
+            return self._send(404, b'{"error": "introuvable"}')
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            name = str(json.loads(self.rfile.read(length) or b"{}").get("name") or "").strip()[:24]
+        except ValueError:
+            return self._send(400, b'{"error": "nom"}')
+        if not registry.rename(cam, name):
+            return self._send(503, b'{"error": "camera"}')
+        self._send(200, json.dumps(cam.status(), ensure_ascii=False).encode())
 
     def _snapshot(self, cam):
         if not cam.plugged:
@@ -165,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         seq = -1
         try:
-            while True:
+            while cam.plugged:
                 cam.touch()
                 new, jpeg = cam.wait_frame(seq)
                 if new == seq or jpeg is None:
@@ -192,30 +358,29 @@ def base_url():
     return f"http://{local_ip()}:{PORT}"
 
 
-def status(state):
-    return json.dumps({
-        "state": state,
-        "mode": "sim",
-        "version": VERSION,
-        "preview": base_url(),
-        "cams": {k: c.plugged for k, c in cameras.items()},
-    })
-
-
 def main():
+    registry.refs = identity.RefStore(DATA_DIR)
     client = new_client("dartos-cam-vision")
-    client.will_set(STATUS_TOPIC, status("offline"), qos=1, retain=True)
-    client.on_connect = lambda c, *_: c.publish(STATUS_TOPIC, status("online"), qos=1, retain=True)
+    client.will_set(STATUS_TOPIC, registry.status("offline"), qos=1, retain=True)
+    client.on_connect = lambda c, *_: registry.publish_status("online")
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()
+    registry.client = client
+
+    def watch():
+        while True:
+            registry.scan()
+            time.sleep(3)
+
+    threading.Thread(target=watch, daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     server.daemon_threads = True
     print(f"aperçu caméras sur {base_url()}", flush=True)
     try:
         server.serve_forever()
     finally:
-        client.publish(STATUS_TOPIC, status("offline"), qos=1, retain=True).wait_for_publish(2)
+        registry.publish_status("offline")
         client.loop_stop()
 
 

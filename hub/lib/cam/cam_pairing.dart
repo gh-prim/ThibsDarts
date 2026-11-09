@@ -175,10 +175,23 @@ class CamPairing {
       await _nmcli(['con', 'delete', _pairCon]);
       await _nmcli([
         'con', 'add', 'type', 'wifi', 'ifname', _iface, 'con-name', _pairCon, 'autoconnect', 'no', //
-        'ssid', ap, 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', pairKey, 'ipv6.method', 'ignore',
+        'ssid', ap, 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', pairKey, //
+        // Clé gardée dans le profil (pas demandée à un agent) et sans PMF, que le point d'accès du Pi 5 gère mal.
+        'wifi-sec.psk-flags', '0', 'wifi-sec.pmf', '1', 'ipv6.method', 'ignore',
       ]);
-      final up = await _nmcli(['con', 'up', _pairCon]);
-      if (up.exitCode != 0) {
+      // La clé est aussi donnée à l'activation : si NetworkManager redemande les secrets, il les a.
+      final secrets = File('${Directory.systemTemp.path}/thibsdarts-pair.secrets')
+        ..writeAsStringSync('802-11-wireless-security.psk:$pairKey\n');
+      ProcessResult? up;
+      for (var i = 1; i <= 3; i++) {
+        if (i > 1) say('Nouvel essai de connexion au Pi 5 ($i/3)…');
+        await _nmcli(['dev', 'wifi', 'rescan', 'ifname', _iface]);
+        await Future<void>.delayed(const Duration(seconds: 3));
+        up = await _nmcli(['con', 'up', _pairCon, 'passwd-file', secrets.path]);
+        if (up.exitCode == 0) break;
+        debugPrint('CamPairing: essai $i : ${(up.stderr as String).trim()}');
+      }
+      if (up!.exitCode != 0) {
         return 'Connexion au réseau $ap impossible : ${(up.stderr as String).trim()}';
       }
       final gw = (await _nmcli(['-g', 'IP4.GATEWAY', 'dev', 'show', _iface])).stdout as String;

@@ -40,6 +40,9 @@ class CamLink {
 
   MqttServerClient? _client;
   bool _playing = false;
+
+  /// Vrai pendant une partie (annoncé au Pi 5 sur thibsdarts/hub/state).
+  bool get playing => _playing;
   final _seen = <String>{};
 
   Future<void> start() async {

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../cam/cam_link.dart';
+import '../system/release.dart';
 import '../theme/tokens.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/mjpeg_view.dart';
@@ -69,6 +70,15 @@ class SettingsScreen extends StatelessWidget {
               title: 'Caméras',
               detail: 'Voir les 3 caméras en direct',
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CamerasScreen())),
+            ),
+            ValueListenableBuilder(
+              valueListenable: CamLink.instance.camStatus,
+              builder: (context, _, _) => _Item(
+                icon: LucideIcons.download,
+                title: 'Système',
+                detail: 'Pi 4 ${Release.current} · Pi 5 ${camVersion() ?? 'hors ligne'} · mise à jour, reset usine',
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SystemScreen())),
+              ),
             ),
             const Spacer(),
             Row(
@@ -601,6 +611,217 @@ class _PowerScreenState extends State<PowerScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    ),
+  );
+}
+
+/// Version annoncée par le Pi 5 sur MQTT, null s'il est hors ligne.
+String? camVersion() {
+  final s = CamLink.instance.camStatus.value;
+  final v = s?['version'];
+  return s?['state'] == 'online' && v is String ? v : null;
+}
+
+/// Versions des deux Pi, mise à jour à la demande et reset usine.
+class SystemScreen extends StatefulWidget {
+  const SystemScreen({super.key});
+
+  @override
+  State<SystemScreen> createState() => _SystemScreenState();
+}
+
+class _SystemScreenState extends State<SystemScreen> {
+  String? _latest;
+  String? _message;
+  bool _busy = false;
+
+  Future<void> _checkUpdate() async {
+    setState(() {
+      _busy = true;
+      _message = 'Recherche sur GitHub…';
+    });
+    final latest = await Release.latest();
+    if (!mounted) return;
+    if (latest == null) {
+      setState(() {
+        _busy = false;
+        _message = 'GitHub injoignable. Vérifie le Wi-Fi.';
+      });
+      return;
+    }
+    final hubOld = latest != Release.current;
+    final cam = camVersion();
+    final camOld = cam != null && cam != latest;
+    var msg = 'Tout est à jour ($latest).';
+    if (hubOld || camOld) {
+      if (camOld) CamLink.instance.sendCommand('update');
+      final hubStarted = hubOld && await Release.updateNow();
+      msg = hubOld && !hubStarted && !Release.managed
+          ? '$latest disponible, mais ce Pi 4 est installé à la main : déploie avec os/quick.'
+          : 'Installation de $latest. ThibsDarts redémarre tout seul dans 1 à 2 minutes.';
+    }
+    if (cam == null) msg += ' Pi 5 hors ligne : il se mettra à jour tout seul en revenant.';
+    if (!mounted) return;
+    setState(() {
+      _latest = latest;
+      _busy = false;
+      _message = msg;
+    });
+  }
+
+  Future<void> _reset() async {
+    final first = await confirmAction(
+      context,
+      title: 'Reset usine ?',
+      body: 'Profils, historique, Wi-Fi et noms des caméras seront effacés sur les deux Pi.',
+      action: 'Continuer',
+    );
+    if (!first || !mounted) return;
+    final sure = await confirmAction(
+      context,
+      title: 'Vraiment tout effacer ?',
+      body: 'Impossible de revenir en arrière. ThibsDarts repartira sur l’écran d’installation.',
+      action: 'Tout effacer',
+    );
+    if (sure && mounted) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ResetScreen()));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Td.beton,
+    body: Stage(
+      child: Padding(
+        padding: const EdgeInsets.all(Td.s6),
+        child: ValueListenableBuilder(
+          valueListenable: CamLink.instance.camStatus,
+          builder: (context, _, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: Td.s5,
+            children: [
+              const _Header(title: 'Système'),
+              Row(
+                spacing: Td.s4,
+                children: [
+                  Expanded(child: _VersionCard(label: 'Pi 4 · écran', version: Release.current, latest: _latest)),
+                  Expanded(child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest)),
+                ],
+              ),
+              TdButton(
+                label: _busy ? 'Recherche…' : 'Chercher une mise à jour',
+                icon: LucideIcons.refreshCw,
+                height: Td.ciblePiFort,
+                onPressed: _busy ? null : _checkUpdate,
+              ),
+              if (_message != null) Text(_message!, style: TdText.body),
+              const Spacer(),
+              _Item(
+                icon: LucideIcons.trash2,
+                title: 'Reset usine',
+                detail: 'Efface tout sur les deux Pi, garde les mises à jour',
+                danger: true,
+                onTap: _reset,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _VersionCard extends StatelessWidget {
+  const _VersionCard({required this.label, required this.version, required this.latest});
+
+  final String label;
+  final String? version;
+  final String? latest;
+
+  @override
+  Widget build(BuildContext context) {
+    final upToDate = latest != null && version == latest;
+    return Container(
+      padding: const EdgeInsets.all(Td.s5),
+      decoration: BoxDecoration(
+        color: Td.verreLeger,
+        borderRadius: BorderRadius.circular(Td.rLg),
+        border: Border.all(color: Td.verreBord),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: Td.s1,
+        children: [
+          Text(label, style: TdText.caption),
+          Text(version ?? 'hors ligne', style: TdText.title.copyWith(color: version == null ? Td.ink3 : Td.ink)),
+          if (latest != null && version != null)
+            Text(
+              upToDate ? 'À jour' : '$latest disponible',
+              style: TdText.label.copyWith(color: upToDate ? Td.succes : Td.fluo),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reset usine en cours : le Pi 5 d'abord, puis le Pi 4.
+class ResetScreen extends StatefulWidget {
+  const ResetScreen({super.key});
+
+  @override
+  State<ResetScreen> createState() => _ResetScreenState();
+}
+
+class _ResetScreenState extends State<ResetScreen> {
+  String _step = 'Le Pi 5 des caméras s’efface…';
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    final cam = CamLink.instance;
+    if (cam.camStatus.value?['state'] == 'online' && cam.sendCommand('factory-reset')) {
+      final end = DateTime.now().add(const Duration(seconds: 10));
+      while (cam.camStatus.value?['state'] == 'online' && DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+    if (!mounted) return;
+    setState(() => _step = 'Le Pi 4 s’efface et redémarre…');
+    await Future<void>.delayed(const Duration(seconds: 1));
+    final ok = await Release.factoryReset();
+    if (!ok && mounted) setState(() => _failed = true);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Td.betonNuit,
+    body: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: Td.s4,
+        children: [
+          const Icon(LucideIcons.trash2, size: 56, color: Td.sunset),
+          Text('Reset usine…', style: TdText.title),
+          Text(_failed ? 'Impossible sur ce Pi (installé à la main, sans image Dart OS).' : _step, style: TdText.body),
+          if (_failed)
+            SizedBox(
+              width: 220,
+              child: TdButton(
+                label: 'Retour',
+                icon: LucideIcons.arrowLeft,
+                variant: TdButtonVariant.secondary,
+                height: Td.ciblePi,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
         ],
       ),
     ),

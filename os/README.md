@@ -36,6 +36,9 @@ est noté dans `system/bad-releases` (plus retenté, sauf `sudo thibsdarts-updat
 
 Une pre-release sert à tester sans que les Pi la prennent.
 
+Réglages > Système affiche la version des deux Pi et "Chercher une mise à jour" lance tout de suite
+`thibsdarts-update --force` sur le Pi 4 et, par MQTT, sur le Pi 5.
+
 ## Reset usine
 
 `sudo thibsdarts-factory-reset` efface `/data/thibsdarts` et redémarre. Les versions dans

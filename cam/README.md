@@ -14,6 +14,7 @@ QoS 1 partout. Coordonnées en mm, centre de la cible en (0, 0), x vers la droit
 | `thibsdarts/cam/takeout` | cam → hub | `{"ts": ms}` : fléchettes retirées, le hub passe au joueur suivant si le tour est fini |
 | `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Haut" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
 | `thibsdarts/hub/state` | hub → cam | retenu : `{"playing": bool, "ts": ms}` |
+| `thibsdarts/cam/cmd` | hub → cam | `{"action": "poweroff"/"reboot"/"update"/"factory-reset"}` (update : `thibsdarts-update --force`) |
 
 Le hub ignore une fléchette dont l'`id` a déjà été reçu.
 
@@ -42,5 +43,23 @@ Aperçu HTTP sur le port 8081 : `/status` (liste des caméras avec `id`, `label`
 L'`id` désigne la prise (ex. `0-2`), pas la caméra. `thibsdarts/cam/motion` signale quand une caméra
 voit bouger quelque chose (main passée devant pour la repérer). Le hub relaie tout ça aux iPhone sur
 `/api/cams` (propriétaire).
+
+## Appairage Wi-Fi avec le hub
+
+Le Pi 5 n'a ni écran ni câble : c'est le hub qui lui donne le Wi-Fi de la maison.
+
+1. `pairing/pair.py` (service `thibsdarts-pair`, root) : si le Pi 5 n'est sur aucun réseau depuis 45 s,
+   il ouvre son point d'accès `ThibsDarts-cam-XXXX` (WPA2, clé `thibsdarts-pair`, 10.42.0.1) et écoute
+   `POST :8090/pair {"ssid", "password"}` (en-tête `X-Pair-Key`).
+2. Le hub (`hub/lib/cam/cam_pairing.dart`) : Pi 5 absent de MQTT depuis 1 min, hors partie, hub sur un
+   Wi-Fi maison. Il cherche `ThibsDarts-cam-*`, s'y connecte, envoie son propre Wi-Fi, revient sur la
+   maison (une quinzaine de secondes coupé). La pastille Pi 5 affiche "appairage".
+3. Le Pi 5 enregistre le réseau (`thibsdarts-home` dans `/data/thibsdarts/nm-connections`), s'y connecte
+   et retrouve le hub par `dartos-hub.local`. En cas d'échec, le point d'accès revient et le hub réessaie
+   3 min plus tard.
+
+Wi-Fi de la maison changé ou reset usine du hub : le Pi 5 perd le réseau, rouvre son point d'accès, le hub
+le reconfigure tout seul. Point d'accès ouvert depuis 3 min : le Pi 5 retente ses réseaux enregistrés
+(box redémarrée).
 
 Déployer et lancer les services sur le Pi 5 : `os/quick/deploy-cam.sh`.

@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'cam/cam_link.dart';
+import 'cam/cam_pairing.dart';
 import 'screens/boot_screen.dart';
 import 'theme/tokens.dart';
 
 void main() {
   CamLink.instance.start();
+  CamPairing.instance.start();
   runApp(const DartOsApp());
 }
 

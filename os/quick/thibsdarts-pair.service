@@ -1,0 +1,14 @@
+[Unit]
+Description=ThibsDarts appairage Wi-Fi avec le hub (point d'accès si hors ligne, port 8090)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/opt/thibsdarts-cam/pairing
+ExecStart=/usr/bin/python3 pair.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

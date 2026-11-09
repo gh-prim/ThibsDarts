@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../cam/cam_link.dart';
+import '../cam/cam_pairing.dart';
 import '../theme/tokens.dart';
 import 'status_indicator.dart';
 
@@ -69,7 +70,7 @@ class LiveStatusBar extends StatefulWidget {
 }
 
 class _LiveStatusBarState extends State<LiveStatusBar> {
-  late final _listen = Listenable.merge([CamLink.instance.camStatus, WifiStatus.instance]);
+  late final _listen = Listenable.merge([CamLink.instance.camStatus, WifiStatus.instance, CamPairing.instance.pairing]);
 
   @override
   void initState() {
@@ -132,8 +133,12 @@ class _LiveStatusBarState extends State<LiveStatusBar> {
       kind: StatusKind.pi,
       compact: widget.compact,
       label: 'Pi 5',
-      status: _cam == null ? Status.busy : (!_piOnline || alert ? Status.off : Status.ok),
-      detail: _cam == null
+      status: _cam == null || CamPairing.instance.pairing.value
+          ? Status.busy
+          : (!_piOnline || alert ? Status.off : Status.ok),
+      detail: CamPairing.instance.pairing.value
+          ? 'appairage'
+          : _cam == null
           ? 'recherche'
           : !_piOnline
           ? 'éteint'

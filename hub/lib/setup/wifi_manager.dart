@@ -37,7 +37,7 @@ class NmcliWifi implements WifiManager {
   @override
   bool get simulated => false;
 
-  Future<ProcessResult> _nmcli(List<String> args) => Process.run('nmcli', args);
+  Future<ProcessResult> _nmcli(List<String> args) => Process.run('nmcli', args, environment: const {'LC_ALL': 'C'});
 
   @override
   Future<void> startHotspot(String ssid) async {

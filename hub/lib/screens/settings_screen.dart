@@ -707,8 +707,12 @@ class _SystemScreenState extends State<SystemScreen> {
               Row(
                 spacing: Td.s4,
                 children: [
-                  Expanded(child: _VersionCard(label: 'Pi 4 · écran', version: Release.current, latest: _latest)),
-                  Expanded(child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest)),
+                  Expanded(
+                    child: _VersionCard(label: 'Pi 4 · écran', version: Release.current, latest: _latest),
+                  ),
+                  Expanded(
+                    child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest),
+                  ),
                 ],
               ),
               Row(
@@ -724,23 +728,25 @@ class _SystemScreenState extends State<SystemScreen> {
                   ),
                   Expanded(
                     child: ValueListenableBuilder(
-                      valueListenable: CamPairing.instance.pairing,
-                      builder: (context, pairing, _) => TdButton(
-                        label: pairing ? 'Appairage…' : 'Appairer le Pi 5',
-                        icon: LucideIcons.wifi,
-                        variant: TdButtonVariant.secondary,
-                        height: Td.ciblePiFort,
-                        onPressed: pairing ? null : CamPairing.instance.pairNow,
-                      ),
+                      valueListenable: CamPairing.instance.progress,
+                      builder: (context, p, _) {
+                        final running = p?.state == PairState.running;
+                        return TdButton(
+                          label: running ? 'Appairage…' : 'Appairer le Pi 5',
+                          icon: LucideIcons.wifi,
+                          variant: TdButtonVariant.secondary,
+                          height: Td.ciblePiFort,
+                          onPressed: running ? null : CamPairing.instance.pairNow,
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
               if (_message != null) Text(_message!, style: TdText.body),
               ValueListenableBuilder(
-                valueListenable: CamPairing.instance.message,
-                builder: (context, m, _) =>
-                    m == null ? const SizedBox.shrink() : Text(m, style: TdText.body.copyWith(color: Td.ink2)),
+                valueListenable: CamPairing.instance.progress,
+                builder: (context, p, _) => p == null ? const SizedBox.shrink() : PairProgressPanel(progress: p),
               ),
               const Spacer(),
               _Item(
@@ -851,4 +857,118 @@ class _ResetScreenState extends State<ResetScreen> {
       ),
     ),
   );
+}
+
+/// Appairage du Pi 5 : les étapes, une barre qui avance et bouge tant que ça tourne, la phrase du moment.
+class PairProgressPanel extends StatelessWidget {
+  const PairProgressPanel({super.key, required this.progress});
+
+  final PairProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress;
+    final steps = CamPairing.steps;
+    final failed = p.state == PairState.failed;
+    final done = p.state == PairState.done;
+    final running = p.state == PairState.running;
+    // Étapes finies, plus une demi-étape pour celle en cours.
+    final value = done ? 1.0 : (p.step + (running ? 0.5 : 0)) / steps.length;
+    final color = failed ? Td.erreur : (done ? Td.succes : Td.sunset);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: Td.s2,
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < steps.length; i++)
+              Expanded(
+                child: _PairStep(label: steps[i], index: i, progress: p),
+              ),
+          ],
+        ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 8,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: Td.verreLeger),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(end: value),
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, v, _) => FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: v,
+                    child: ColoredBox(color: color),
+                  ),
+                ),
+                // Reflet qui défile tant que l'étape tourne : on voit que ça bouge.
+                if (running)
+                  const LinearProgressIndicator(
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(Color(0x66FFFFFF)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Text(
+          p.detail,
+          style: TdText.body.copyWith(color: failed ? Td.erreur : (done ? Td.succes : Td.ink2)),
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+class _PairStep extends StatelessWidget {
+  const _PairStep({required this.label, required this.index, required this.progress});
+
+  final String label;
+  final int index;
+  final PairProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress;
+    final passed = index < p.step || (index == p.step && p.state == PairState.done);
+    final current = index == p.step && p.state != PairState.done;
+    final Widget mark;
+    Color tint;
+    if (passed) {
+      tint = Td.succes;
+      mark = const Icon(LucideIcons.circleCheck, size: 20, color: Td.succes);
+    } else if (current && p.state == PairState.failed) {
+      tint = Td.erreur;
+      mark = const Icon(LucideIcons.circleX, size: 20, color: Td.erreur);
+    } else if (current) {
+      tint = Td.sunset;
+      mark = const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2.5, color: Td.sunset),
+      );
+    } else {
+      tint = Td.ink3;
+      mark = const Icon(LucideIcons.circle, size: 20, color: Td.ink3);
+    }
+    return Row(
+      spacing: Td.s2,
+      children: [
+        mark,
+        Flexible(
+          child: Text(
+            label,
+            style: TdText.caption.copyWith(color: tint),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
 }

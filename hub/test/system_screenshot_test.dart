@@ -53,7 +53,19 @@ void main() {
     await shot(const SettingsScreen(), 'reglages');
     await shot(const SystemScreen(), 'systeme');
     CamLink.instance.camStatus.value = {'state': 'offline'};
-    CamPairing.instance.message.value = 'Pi 5 trouvé (ThibsDarts-cam-A1B2). Le Pi 4 s’y connecte quelques secondes…';
+    CamPairing.instance.progress.value = const PairProgress(
+      2,
+      PairState.running,
+      'Le Pi 5 n’a pas répondu, nouvel essai (2 sur 3)…',
+    );
     await shot(const SystemScreen(), 'systeme-appairage');
+    CamPairing.instance.progress.value = const PairProgress(
+      2,
+      PairState.failed,
+      'Connexion au réseau ThibsDarts-cam-CEBC impossible : Secrets were required.',
+    );
+    await shot(const SystemScreen(), 'systeme-appairage-echec');
+    CamPairing.instance.progress.value = const PairProgress(4, PairState.done, 'Pi 5 connecté.');
+    await shot(const SystemScreen(), 'systeme-appairage-ok');
   });
 }

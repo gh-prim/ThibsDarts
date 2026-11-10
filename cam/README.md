@@ -58,7 +58,10 @@ Le Pi 5 n'a ni écran ni câble : c'est le hub qui lui donne le Wi-Fi de la mais
    et retrouve le hub par `dartos-hub.local`. En cas d'échec, le point d'accès revient et le hub réessaie
    3 min plus tard.
 
-Wi-Fi de la maison changé ou reset usine du hub : le Pi 5 perd le réseau, rouvre son point d'accès, le hub
+Changer de Wi-Fi depuis le Pi 4 (Réglages > Wi-Fi, `hub/lib/system/wifi_change.dart`) : le hub envoie
+d'abord le nouveau réseau au Pi 5 sur son adresse actuelle (`POST :8090/pair`), puis bascule lui-même.
+
+Wi-Fi de la maison changé sans passer par là, ou reset usine du hub : le Pi 5 perd le réseau, rouvre son point d'accès, le hub
 le reconfigure tout seul. Point d'accès ouvert depuis 3 min : le Pi 5 retente ses réseaux enregistrés
 (box redémarrée).
 

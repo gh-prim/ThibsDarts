@@ -8,10 +8,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../cam/cam_link.dart';
 import '../cam/cam_pairing.dart';
 import '../system/release.dart';
+import 'wifi_screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/mjpeg_view.dart';
 import '../widgets/stage.dart';
+import '../widgets/steps_progress.dart';
 import '../widgets/td_button.dart';
 
 /// En-tête des écrans de réglages : bouton retour et titre.
@@ -66,11 +68,28 @@ class SettingsScreen extends StatelessWidget {
           spacing: Td.s5,
           children: [
             const _Header(title: 'Réglages'),
-            _Item(
-              icon: LucideIcons.camera,
-              title: 'Caméras',
-              detail: 'Voir les 3 caméras en direct',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CamerasScreen())),
+            Row(
+              spacing: Td.s4,
+              children: [
+                Expanded(
+                  child: _Item(
+                    icon: LucideIcons.camera,
+                    title: 'Caméras',
+                    detail: 'Voir les 3 caméras en direct',
+                    onTap: () =>
+                        Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CamerasScreen())),
+                  ),
+                ),
+                Expanded(
+                  child: _Item(
+                    icon: LucideIcons.wifi,
+                    title: 'Wi-Fi',
+                    detail: 'Changer de réseau, le Pi 5 suit',
+                    onTap: () =>
+                        Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WifiScreen())),
+                  ),
+                ),
+              ],
             ),
             ValueListenableBuilder(
               valueListenable: CamLink.instance.camStatus,
@@ -707,8 +726,12 @@ class _SystemScreenState extends State<SystemScreen> {
               Row(
                 spacing: Td.s4,
                 children: [
-                  Expanded(child: _VersionCard(label: 'Pi 4 · écran', version: Release.current, latest: _latest)),
-                  Expanded(child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest)),
+                  Expanded(
+                    child: _VersionCard(label: 'Pi 4 · écran', version: Release.current, latest: _latest),
+                  ),
+                  Expanded(
+                    child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest),
+                  ),
                 ],
               ),
               Row(
@@ -724,23 +747,26 @@ class _SystemScreenState extends State<SystemScreen> {
                   ),
                   Expanded(
                     child: ValueListenableBuilder(
-                      valueListenable: CamPairing.instance.pairing,
-                      builder: (context, pairing, _) => TdButton(
-                        label: pairing ? 'Appairage…' : 'Appairer le Pi 5',
-                        icon: LucideIcons.wifi,
-                        variant: TdButtonVariant.secondary,
-                        height: Td.ciblePiFort,
-                        onPressed: pairing ? null : CamPairing.instance.pairNow,
-                      ),
+                      valueListenable: CamPairing.instance.progress,
+                      builder: (context, p, _) {
+                        final running = p?.state == PairState.running;
+                        return TdButton(
+                          label: running ? 'Appairage…' : 'Appairer le Pi 5',
+                          icon: LucideIcons.wifi,
+                          variant: TdButtonVariant.secondary,
+                          height: Td.ciblePiFort,
+                          onPressed: running ? null : CamPairing.instance.pairNow,
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
               if (_message != null) Text(_message!, style: TdText.body),
               ValueListenableBuilder(
-                valueListenable: CamPairing.instance.message,
-                builder: (context, m, _) =>
-                    m == null ? const SizedBox.shrink() : Text(m, style: TdText.body.copyWith(color: Td.ink2)),
+                valueListenable: CamPairing.instance.progress,
+                builder: (context, p, _) =>
+                    p == null ? const SizedBox.shrink() : StepsProgress(steps: CamPairing.steps, progress: p),
               ),
               const Spacer(),
               _Item(

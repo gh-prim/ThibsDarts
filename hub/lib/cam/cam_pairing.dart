@@ -37,8 +37,11 @@ class CamPairing {
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _tick());
   }
 
-  /// Étape en cours ou résultat de la dernière recherche lancée à la main (Réglages > Système).
-  final ValueNotifier<String?> message = ValueNotifier(null);
+  /// Étapes affichées par la barre de progression de Réglages > Système.
+  static const steps = ['Wi-Fi du Pi 4', 'Recherche du Pi 5', 'Connexion au Pi 5', 'Envoi du Wi-Fi', 'Pi 5 en ligne'];
+
+  /// Avancement de la dernière recherche lancée à la main, null si aucune.
+  final ValueNotifier<PairProgress?> progress = ValueNotifier(null);
 
   Future<void> _tick() async {
     if (_busy) return;
@@ -57,7 +60,7 @@ class CamPairing {
   Future<void> pairNow() async {
     if (_busy) return;
     if (!Platform.isLinux) {
-      message.value = 'Pas de Wi-Fi à piloter sur le Mac.';
+      progress.value = const PairProgress(0, PairState.failed, 'Pas de Wi-Fi à piloter sur le Mac.');
       return;
     }
     await _attempt(manual: true);
@@ -65,54 +68,60 @@ class CamPairing {
 
   Future<void> _attempt({required bool manual}) async {
     _busy = true;
-    void say(String m) {
+    var step = 0;
+    // Étape en cours (step), puis réussite ou échec : la barre suit.
+    void say(String m, {int? to, PairState state = PairState.running}) {
+      if (to != null) step = to;
       debugPrint('CamPairing: $m');
-      if (manual) message.value = m;
+      if (manual) progress.value = PairProgress(step, state, m);
     }
 
+    void fail(String m) => say(m, state: PairState.failed);
+
     try {
-      say('Lecture du Wi-Fi du Pi 4…');
+      say('Lecture du Wi-Fi du Pi 4…', to: 0);
       // Hub en setup (son propre hotspot) ou sur câble : pas de Wi-Fi maison à transmettre.
       final home = await _homeWifi();
       if (home == null) {
-        say('Le Pi 4 n’est pas sur un Wi-Fi maison : rien à transmettre au Pi 5.');
+        fail('Le Pi 4 n’est pas sur un Wi-Fi maison : rien à transmettre au Pi 5.');
         return;
       }
-      say('Recherche du réseau ThibsDarts-cam…');
+      say('Recherche du réseau ThibsDarts-cam…', to: 1);
       final ap = await _findCamAp(rescan: manual);
       if (ap == null) {
-        say('Pi 5 introuvable. Il ouvre son réseau ThibsDarts-cam 45 s après le démarrage s’il n’a pas de Wi-Fi. '
-            'Attends une minute et réessaie.');
+        fail(
+          'Pi 5 introuvable. Il ouvre son réseau ThibsDarts-cam 45 s après le démarrage s’il n’a pas de Wi-Fi. '
+          'Attends une minute et réessaie.',
+        );
         return;
       }
       _nextTry = DateTime.now().add(const Duration(minutes: 3));
-      final error = await _push(ap, home, say);
+      final error = await _push(ap, home, (m, {int? to}) => say(m, to: to));
       if (error != null) {
-        say(error);
+        fail(error);
         return;
       }
-      say('Wi-Fi ${home.$2} envoyé au Pi 5. Il se connecte, ça prend jusqu’à une minute…');
+      say('Wi-Fi ${home.$2} envoyé. Le Pi 5 rejoint la maison, ça prend jusqu’à une minute…', to: 4);
       if (!manual) return;
       final end = DateTime.now().add(const Duration(seconds: 90));
       while (DateTime.now().isBefore(end)) {
         if (CamLink.instance.camStatus.value?['state'] == 'online') {
-          say('Pi 5 connecté.');
+          say('Pi 5 connecté.', state: PairState.done);
           return;
         }
         await Future<void>.delayed(const Duration(seconds: 1));
       }
-      say('Le Pi 5 a reçu le Wi-Fi mais ne s’est pas encore annoncé. Vérifie qu’il est à portée de la box.');
+      fail('Le Pi 5 a reçu le Wi-Fi mais ne s’est pas encore annoncé. Vérifie qu’il est à portée de la box.');
     } catch (e) {
-      say('Erreur : $e');
+      fail('Erreur : $e');
     } finally {
       _busy = false;
     }
   }
 
-  Future<ProcessResult> _nmcli(List<String> args) => Process.run('nmcli', args);
+  Future<ProcessResult> _nmcli(List<String> args) => Process.run('nmcli', args, environment: const {'LC_ALL': 'C'});
 
   /// Découpe une ligne `nmcli -t` (les ':' des valeurs sont échappés en '\:').
-  @visibleForTesting
   static List<String> splitTerse(String line) {
     final out = <String>[];
     final cur = StringBuffer();
@@ -167,9 +176,9 @@ class CamPairing {
   }
 
   /// Null si le Pi 5 a accepté le Wi-Fi, sinon le problème en clair.
-  Future<String?> _push(String ap, (String, String, String) home, void Function(String) say) async {
+  Future<String?> _push(String ap, (String, String, String) home, void Function(String m, {int? to}) say) async {
     final (homeCon, ssid, psk) = home;
-    say('Pi 5 trouvé ($ap). Le Pi 4 s’y connecte quelques secondes…');
+    say('Pi 5 trouvé ($ap). Le Pi 4 s’y connecte quelques secondes…', to: 2);
     pairing.value = true;
     try {
       await _nmcli(['con', 'delete', _pairCon]);
@@ -184,7 +193,7 @@ class CamPairing {
         ..writeAsStringSync('802-11-wireless-security.psk:$pairKey\n');
       ProcessResult? up;
       for (var i = 1; i <= 3; i++) {
-        if (i > 1) say('Nouvel essai de connexion au Pi 5 ($i/3)…');
+        if (i > 1) say('Le Pi 5 n’a pas répondu, nouvel essai ($i sur 3)…');
         await _nmcli(['dev', 'wifi', 'rescan', 'ifname', _iface]);
         await Future<void>.delayed(const Duration(seconds: 3));
         up = await _nmcli(['con', 'up', _pairCon, 'passwd-file', secrets.path]);
@@ -196,6 +205,7 @@ class CamPairing {
       }
       final gw = (await _nmcli(['-g', 'IP4.GATEWAY', 'dev', 'show', _iface])).stdout as String;
       final host = gw.trim().isEmpty ? '10.42.0.1' : gw.trim();
+      say('Connecté au Pi 5. Envoi du Wi-Fi $ssid…', to: 3);
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
       try {
         final req = await client.post(host, 8090, '/pair');
@@ -225,4 +235,16 @@ class CamPairing {
       pairing.value = false;
     }
   }
+}
+
+enum PairState { running, done, failed }
+
+/// Étape (index dans [CamPairing.steps]), état et phrase affichée.
+@immutable
+class PairProgress {
+  const PairProgress(this.step, this.state, this.detail);
+
+  final int step;
+  final PairState state;
+  final String detail;
 }

@@ -41,7 +41,11 @@ class WifiStatus extends ChangeNotifier {
       ssid = 'Mac';
     } else {
       try {
-        final r = await Process.run('nmcli', ['-t', '-f', 'ACTIVE,SSID,SIGNAL', 'dev', 'wifi']);
+        final r = await Process.run(
+          'nmcli',
+          ['-t', '-f', 'ACTIVE,SSID,SIGNAL', 'dev', 'wifi'],
+          environment: const {'LC_ALL': 'C'},
+        );
         final active = (r.stdout as String).split('\n').where((l) => l.startsWith('yes:')).firstOrNull;
         final parts = active?.split(':');
         ssid = parts == null || parts.length < 3 ? null : parts.sublist(1, parts.length - 1).join(':');

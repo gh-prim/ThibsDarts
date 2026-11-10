@@ -122,7 +122,6 @@ class CamPairing {
   Future<ProcessResult> _nmcli(List<String> args) => Process.run('nmcli', args, environment: const {'LC_ALL': 'C'});
 
   /// Découpe une ligne `nmcli -t` (les ':' des valeurs sont échappés en '\:').
-  @visibleForTesting
   static List<String> splitTerse(String line) {
     final out = <String>[];
     final cur = StringBuffer();

@@ -7,6 +7,8 @@ import 'dart:ui' as ui;
 import 'package:dartos_hub/cam/cam_link.dart';
 import 'package:dartos_hub/cam/cam_pairing.dart';
 import 'package:dartos_hub/screens/settings_screen.dart';
+import 'package:dartos_hub/screens/wifi_screen.dart';
+import 'package:dartos_hub/setup/wifi_manager.dart';
 import 'package:dartos_hub/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -67,5 +69,9 @@ void main() {
     await shot(const SystemScreen(), 'systeme-appairage-echec');
     CamPairing.instance.progress.value = const PairProgress(4, PairState.done, 'Pi 5 connecté.');
     await shot(const SystemScreen(), 'systeme-appairage-ok');
+    await shot(WifiScreen(wifi: SimulatedWifi()), 'wifi-liste');
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 700)));
+    await shot(WifiScreen(wifi: SimulatedWifi()), 'wifi-liste');
+    await shot(const WifiJoinScreen(network: WifiNetwork('Freebox-Thibs')), 'wifi-mdp');
   });
 }

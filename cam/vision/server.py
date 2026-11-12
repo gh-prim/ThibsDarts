@@ -182,6 +182,7 @@ class Camera:
             "id": self.id,
             "label": self.label,
             "calibrated": registry.calibs.get(self.label) is not None,
+            "calib": registry.calibs.get(self.label).to_json() if registry.calibs.get(self.label) else None,
             "recognized": self.label is not None,
             "match": self.match,
             "motion": round(self.motion, 3),
@@ -524,6 +525,7 @@ def detect_status():
         "darts": registry.detector.darts,
         "events": registry.events,
         "points": detector.CALIB_HELP,
+        "board": detector.CALIB_POINTS_MM,
         "cams": [c.status() for c in registry.ordered()],
     }
 

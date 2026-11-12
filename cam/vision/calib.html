@@ -22,8 +22,12 @@
   .cam { background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
   .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
   .wrap { position: relative; }
-  canvas.view { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; cursor: crosshair; touch-action: manipulation; }
-  canvas.loupe { position: absolute; top: 8px; right: 8px; width: 200px; height: 200px; border: 2px solid var(--accent); border-radius: 50%; display: none; pointer-events: none; }
+  canvas.view { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; cursor: crosshair; touch-action: none; }
+  canvas.loupe { position: absolute; width: 220px; height: 220px; border: 2px solid var(--accent); border-radius: 50%; display: none; pointer-events: none; box-shadow: 0 6px 24px #000a; }
+  .pad { display: inline-grid; grid-template-columns: repeat(3, 38px); gap: 4px; vertical-align: middle; }
+  .pad button { padding: 6px 0; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; }
+  .cam:focus { outline: 1px solid var(--line); }
   .step { margin: 8px 0; }
   .step b { color: var(--accent); }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -53,14 +57,36 @@
 </main>
 <script>
 const PRESETS = ["Bas", "Haut gauche", "Haut droite"];
-let HELP = [];
-const state = {};  // id -> {points, img, overlay}
+const SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const RINGS = [6.35, 15.9, 99, 107, 162, 170];
+let HELP = [], BOARD = [];
+const state = {};  // id -> carte
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.status);
   return j;
+}
+
+// Homographie cible (mm) -> image (px) par moindres carrés (DLT, h33 = 1).
+function homography(src, dst) {
+  const A = [], b = [];
+  src.forEach(([x, y], i) => {
+    const [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  });
+  const N = Array.from({ length: 8 }, () => new Array(9).fill(0));
+  A.forEach((row, k) => { for (let i = 0; i < 8; i++) { for (let j = 0; j < 8; j++) N[i][j] += row[i] * row[j]; N[i][8] += row[i] * b[k]; } });
+  for (let c = 0; c < 8; c++) {
+    let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(N[r][c]) > Math.abs(N[p][c])) p = r;
+    [N[c], N[p]] = [N[p], N[c]];
+    if (Math.abs(N[c][c]) < 1e-12) return null;
+    for (let r = 0; r < 8; r++) if (r !== c) { const f = N[r][c] / N[c][c]; for (let j = c; j < 9; j++) N[r][j] -= f * N[c][j]; }
+  }
+  const h = N.map((row, i) => row[8] / row[i]);
+  return ([x, y]) => { const w = h[6] * x + h[7] * y + 1; return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w]; };
 }
 
 function camCard(c) {
@@ -74,83 +100,168 @@ function camCard(c) {
       <select class="rename"><option value="">Nommer...</option>${PRESETS.map(p => `<option>${p}</option>`).join("")}</select>
     </div>
     <div class="step"></div>
-    <div class="wrap"><canvas class="view" width="1280" height="720"></canvas><canvas class="loupe" width="200" height="200"></canvas></div>
+    <div class="wrap"><canvas class="view" width="1280" height="720"></canvas><canvas class="loupe" width="220" height="220"></canvas></div>
     <div class="tools">
+      <label class="chk"><input type="checkbox" class="show" checked> Cible</label>
+      <span class="pad">
+        <span></span><button data-d="0,-1">↑</button><span></span>
+        <button data-d="-1,0">←</button><button class="next">${"•"}</button><button data-d="1,0">→</button>
+        <span></span><button data-d="0,1">↓</button><span></span>
+      </span>
       <button class="undo">Annuler le dernier point</button>
       <button class="reset">Recommencer</button>
       <button class="save main" disabled>Enregistrer</button>
-      <button class="check">Voir la cible calibrée</button>
       <button class="refresh">Nouvelle image</button>
-      <button class="forget">Effacer la calibration</button>
+      <button class="forget">Effacer</button>
       <span class="msg dim"></span>
     </div>`;
-  const s = state[c.id] = { points: [], img: null, overlay: false };
-  const view = el.querySelector(".view"), loupe = el.querySelector(".loupe");
+  const s = state[c.id] = { points: c.calib ? c.calib.points.map(p => p.slice()) : [], img: null, sel: -1, dirty: false };
+  const view = el.querySelector(".view"), loupe = el.querySelector(".loupe"), wrap = el.querySelector(".wrap");
   const msg = t => el.querySelector(".msg").textContent = t;
 
-  s.load = (overlay) => {
-    s.overlay = overlay;
+  s.load = () => {
     const img = new Image();
     img.onload = () => { s.img = img; view.width = img.naturalWidth; view.height = img.naturalHeight; draw(); };
     img.onerror = () => msg("image indisponible");
-    img.src = `/cam/${c.id}/${overlay ? "calib" : "full"}.jpg?t=${Date.now()}`;
+    img.src = `/cam/${c.id}/full.jpg?t=${Date.now()}`;
   };
+
+  const clean = document.createElement("canvas");  // image + cible, sans les marqueurs (pour la loupe)
   function draw() {
-    const g = view.getContext("2d");
-    if (s.img) g.drawImage(s.img, 0, 0);
-    if (!s.overlay) s.points.forEach((p, i) => {
-      g.strokeStyle = "#ff7a3d"; g.lineWidth = 2;
-      g.beginPath(); g.moveTo(p[0] - 12, p[1]); g.lineTo(p[0] + 12, p[1]); g.moveTo(p[0], p[1] - 12); g.lineTo(p[0], p[1] + 12); g.stroke();
-      g.fillStyle = "#ff7a3d"; g.font = "bold 20px sans-serif"; g.fillText(i + 1, p[0] + 8, p[1] - 8);
-    });
+    clean.width = view.width; clean.height = view.height;
+    const g = clean.getContext("2d");
+    if (s.img) g.drawImage(s.img, 0, 0); else { g.fillStyle = "#000"; g.fillRect(0, 0, view.width, view.height); }
     const n = s.points.length;
-    el.querySelector(".step").innerHTML = s.overlay
-      ? "La cible jaune doit tomber pile sur les anneaux et les secteurs. Sinon, recommence."
-      : n < HELP.length ? `Point ${n + 1} sur ${HELP.length} : clique sur le <b>${HELP[n]}</b>.` : "Les 5 points sont placés : enregistre.";
-    el.querySelector(".save").disabled = n !== HELP.length || s.overlay;
+    if (n >= 4 && el.querySelector(".show").checked) {
+      const H = homography(BOARD.slice(0, n), s.points);
+      if (H) {
+        g.strokeStyle = "rgba(216, 242, 58, .9)"; g.lineWidth = 1;
+        for (const r of RINGS) {
+          g.beginPath();
+          for (let k = 0; k <= 180; k++) { const t = k / 180 * 2 * Math.PI, [u, v] = H([r * Math.sin(t), -r * Math.cos(t)]); k ? g.lineTo(u, v) : g.moveTo(u, v); }
+          g.stroke();
+        }
+        g.beginPath();
+        for (let i = 0; i < 20; i++) {
+          const a = (i * 18 + 9) * Math.PI / 180, [u1, v1] = H([15.9 * Math.sin(a), -15.9 * Math.cos(a)]), [u2, v2] = H([170 * Math.sin(a), -170 * Math.cos(a)]);
+          g.moveTo(u1, v1); g.lineTo(u2, v2);
+        }
+        g.stroke();
+        g.fillStyle = "#d8f23a"; g.font = "bold 16px sans-serif";
+        SECTORS.forEach((num, i) => { const a = i * 18 * Math.PI / 180, [u, v] = H([190 * Math.sin(a), -190 * Math.cos(a)]); g.fillText(num, u - 8, v + 6); });
+      }
+    }
+    const gv = view.getContext("2d");
+    gv.drawImage(clean, 0, 0);
+    s.points.forEach((p, i) => {
+      const g = gv;
+      g.strokeStyle = i === s.sel ? "#ff4d6d" : "#ff7a3d"; g.lineWidth = 2;
+      g.beginPath(); g.arc(p[0], p[1], 10, 0, 2 * Math.PI); g.moveTo(p[0] - 4, p[1]); g.lineTo(p[0] + 4, p[1]); g.moveTo(p[0], p[1] - 4); g.lineTo(p[0], p[1] + 4); g.stroke();
+      g.fillStyle = g.strokeStyle; g.font = "bold 18px sans-serif"; g.fillText(i + 1, p[0] + 12, p[1] - 12);
+    });
+    el.querySelector(".step").innerHTML = n < HELP.length
+      ? `Point ${n + 1} sur ${HELP.length} : clique sur le <b>${HELP[n]}</b>.`
+      : `Ajuste : fais glisser un point (ou choisis-le puis flèches, 0,5 px par appui) jusqu'à ce que les anneaux jaunes collent aux bandes double et triple.${s.sel >= 0 ? ` Point choisi : <b>${s.sel + 1}, ${HELP[s.sel]}</b>.` : ""}`;
+    el.querySelector(".save").disabled = n !== HELP.length || !s.dirty;
   }
   s.draw = draw;
+
   function pos(e) {
     const r = view.getBoundingClientRect();
     return [(e.clientX - r.left) * view.width / r.width, (e.clientY - r.top) * view.height / r.height];
   }
-  view.addEventListener("click", e => {
-    if (s.overlay) { s.points = []; s.load(false); return; }
-    if (s.points.length >= HELP.length) return;
-    s.points.push(pos(e).map(v => Math.round(v * 10) / 10));
-    draw();
-  });
-  view.addEventListener("mousemove", e => {
-    if (!s.img) return;
-    const [x, y] = pos(e), z = 4, g = loupe.getContext("2d");
+  function showLoupe(e, at) {
+    const r = view.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), z = 5, g = loupe.getContext("2d");
+    const cx = e.clientX - wr.left, cy = e.clientY - wr.top;
+    // La loupe se place en haut à gauche du doigt, ou de l'autre côté près des bords.
+    loupe.style.left = (cx > 260 ? cx - 250 : cx + 30) + "px";
+    loupe.style.top = (cy > 260 ? cy - 250 : cy + 30) + "px";
     loupe.style.display = "block";
     g.imageSmoothingEnabled = false;
-    g.drawImage(view, x - 100 / z, y - 100 / z, 200 / z, 200 / z, 0, 0, 200, 200);
-    g.strokeStyle = "#d8f23a"; g.beginPath(); g.moveTo(100, 80); g.lineTo(100, 120); g.moveTo(80, 100); g.lineTo(120, 100); g.stroke();
+    g.fillStyle = "#000"; g.fillRect(0, 0, 220, 220);
+    g.drawImage(clean, at[0] - 110 / z, at[1] - 110 / z, 220 / z, 220 / z, 0, 0, 220, 220);
+    g.strokeStyle = "#ff4d6d"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(110, 90); g.lineTo(110, 130); g.moveTo(90, 110); g.lineTo(130, 110); g.stroke();
+  }
+  function nearest(p) {
+    const r = view.getBoundingClientRect(), tol = 28 * view.width / r.width;
+    let best = -1, d = tol;
+    s.points.forEach((q, i) => { const k = Math.hypot(q[0] - p[0], q[1] - p[1]); if (k < d) { d = k; best = i; } });
+    return best;
+  }
+  let drag = null;
+  view.addEventListener("pointerdown", e => {
+    const p = pos(e), i = nearest(p);
+    if (i >= 0) {
+      drag = { i, dx: s.points[i][0] - p[0], dy: s.points[i][1] - p[1] };
+      s.sel = i;
+    } else if (s.points.length < HELP.length) {
+      s.points.push(p.map(v => Math.round(v * 2) / 2));
+      s.sel = s.points.length - 1; s.dirty = true;
+      drag = { i: s.sel, dx: 0, dy: 0 };
+    } else { s.sel = -1; }
+    view.setPointerCapture(e.pointerId);
+    draw();
+    if (drag) showLoupe(e, s.points[drag.i]);
   });
-  view.addEventListener("mouseleave", () => loupe.style.display = "none");
-  el.querySelector(".undo").onclick = () => { if (s.overlay) s.load(false); s.points.pop(); draw(); };
-  el.querySelector(".reset").onclick = () => { s.points = []; s.load(false); };
-  el.querySelector(".refresh").onclick = () => s.load(s.overlay);
-  el.querySelector(".check").onclick = () => s.load(true);
+  view.addEventListener("pointermove", e => {
+    const p = pos(e);
+    if (drag) {
+      // Glisser lentement : le point bouge 4 fois moins vite que le doigt, pour viser au demi-pixel.
+      const k = e.shiftKey ? 1 : 0.25;
+      if (drag.last) {
+        s.points[drag.i][0] += (p[0] - drag.last[0]) * k;
+        s.points[drag.i][1] += (p[1] - drag.last[1]) * k;
+        s.dirty = true;
+      }
+      drag.last = p;
+      draw();
+      showLoupe(e, s.points[drag.i]);
+    } else if (e.pointerType === "mouse") showLoupe(e, p);
+  });
+  const end = () => { drag = null; loupe.style.display = "none"; };
+  view.addEventListener("pointerup", end);
+  view.addEventListener("pointercancel", end);
+  view.addEventListener("pointerleave", () => { if (!drag) loupe.style.display = "none"; });
+
+  function nudge(dx, dy) {
+    if (s.sel < 0) s.sel = 0;
+    if (!s.points[s.sel]) return;
+    s.points[s.sel][0] += dx; s.points[s.sel][1] += dy; s.dirty = true;
+    draw();
+  }
+  el.querySelectorAll(".pad button[data-d]").forEach(b => b.onclick = () => { const [dx, dy] = b.dataset.d.split(",").map(Number); nudge(dx * 0.5, dy * 0.5); });
+  el.querySelector(".next").onclick = () => { s.sel = s.points.length ? (s.sel + 1) % s.points.length : -1; draw(); };
+  el.tabIndex = 0;
+  el.addEventListener("keydown", e => {
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (d && s.sel >= 0) { e.preventDefault(); const k = e.shiftKey ? 2 : 0.5; nudge(d[0] * k, d[1] * k); }
+    if (e.key === "Tab" && s.points.length) { e.preventDefault(); s.sel = (s.sel + 1) % s.points.length; draw(); }
+  });
+  view.addEventListener("pointerdown", () => el.focus({ preventScroll: true }));
+  el.querySelector(".show").onchange = draw;
+  el.querySelector(".undo").onclick = () => { s.points.pop(); s.sel = s.points.length - 1; s.dirty = true; draw(); };
+  el.querySelector(".reset").onclick = () => { s.points = []; s.sel = -1; s.dirty = true; s.load(); };
+  el.querySelector(".refresh").onclick = () => s.load();
   el.querySelector(".save").onclick = async () => {
     try {
       const r = await api(`/cam/${c.id}/calib`, { points: s.points });
+      s.dirty = false;
       msg(`Enregistré (écart ${r.error_px} px).`);
-      s.load(true);
+      draw();
       refresh();
     } catch (e) { msg("Erreur : " + e.message); }
   };
   el.querySelector(".forget").onclick = async () => {
     if (!confirm("Effacer la calibration de cette caméra ?")) return;
-    try { await api(`/cam/${c.id}/calib`, { points: [] }); s.points = []; s.load(false); refresh(); } catch (e) { msg("Erreur : " + e.message); }
+    try { await api(`/cam/${c.id}/calib`, { points: [] }); s.points = []; s.sel = -1; draw(); refresh(); } catch (e) { msg("Erreur : " + e.message); }
   };
   el.querySelector(".rename").onchange = async e => {
     if (!e.target.value) return;
     try { await api(`/cam/${c.id}/name`, { name: e.target.value }); refresh(); } catch (err) { msg("Erreur : " + err.message); }
     e.target.value = "";
   };
-  s.load(!!c.calibrated);
+  s.load();
   return el;
 }
 
@@ -160,12 +271,15 @@ function update(c) {
   const cal = el.querySelector(".cal");
   cal.textContent = !c.label ? "à nommer" : c.calibrated ? "calibrée" : "à calibrer";
   cal.className = "pill cal " + (!c.label ? "warn" : c.calibrated ? "ok" : "warn");
+  const s = state[c.id];
+  // Calibration arrivée d'ailleurs (autre onglet) et rien en cours ici : on la reprend.
+  if (c.calib && !s.dirty && JSON.stringify(c.calib.points) !== JSON.stringify(s.points)) { s.points = c.calib.points.map(p => p.slice()); s.draw(); }
 }
 
 async function refresh() {
   let d;
   try { d = await api("/detect"); } catch (e) { document.getElementById("det").textContent = "Pi 5 injoignable"; return; }
-  HELP = d.points;
+  HELP = d.points; BOARD = d.board;
   document.getElementById("mode").textContent = d.mode === "vision" ? "Vraie détection" : "Simulateur (aucune caméra calibrée)";
   document.getElementById("mode").className = "pill " + (d.mode === "vision" ? "ok" : "warn");
   document.getElementById("det").textContent = d.detecting ? `Détection active, ${d.darts} fléchette(s) en cible` : d.playing ? "Partie en cours" : "Détection en pause (pas de partie)";
@@ -176,7 +290,6 @@ async function refresh() {
   for (const c of d.cams) {
     if (!document.getElementById("cam-" + c.id)) box.appendChild(camCard(c));
     update(c);
-    state[c.id].draw();
   }
   for (const el of [...box.children]) if (!d.cams.some(c => "cam-" + c.id === el.id)) el.remove();
   const ev = document.getElementById("events");

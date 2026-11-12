@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game_config.dart';
 
@@ -26,6 +27,20 @@ class Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Le robot adversaire : pas de photo, un visage de robot.
+    if (name == GameConfig.botName) {
+      return Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: Td.goldenHour,
+          border: Border.all(color: active ? Td.fluo : Td.verreBord, width: active ? 2 : 1),
+        ),
+        child: Icon(LucideIcons.bot, size: size * 0.55, color: Td.onAccent),
+      );
+    }
     // Le propriétaire a une vraie photo, prise à l'installation.
     final photo = AppState.photos[name];
     if (photo != null && File(photo).existsSync()) {

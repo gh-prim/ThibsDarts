@@ -12,8 +12,10 @@ import '../widgets/game_widgets.dart';
 import '../widgets/logo.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
+import '../history/history_store.dart';
 import 'mode_game_screen.dart';
 import 'salon_screen.dart';
+import 'trainer_screen.dart';
 import 'training_screen.dart';
 
 // Planche "Nouvelle partie Pi", version A des trois écrans.
@@ -246,7 +248,6 @@ class _Mode {
     this.rule, {
     this.start,
     this.mode,
-    this.drill,
     this.aimed,
     this.aimSector,
     this.heat = const {},
@@ -264,7 +265,6 @@ class _Mode {
   final String rule;
   final int? start;
   final GameMode? mode;
-  final _Drill? drill;
 
   // Ce que montre le plateau pour ce jeu.
   final DartThrow? aimed;
@@ -339,11 +339,127 @@ const _bobs = _Mode(
   aimed: DartThrow.double(1),
 );
 
-const _partyModes = [..._x01, _cricket, _clock, _shanghai, _killer, _halveIt, _bobs];
+const _bermuda = _Mode(
+  '12>B',
+  'Bermuda',
+  'Bermuda',
+  '12 cibles : 12, 13, 14, un double, 15, 16, 17, un triple, 18, 19, 20 et le bull. Rate tout : ton score est divisé par deux.',
+  mode: GameMode.bermuda,
+  aimSector: 12,
+);
+const _gotcha = _Mode(
+  '=0',
+  'Gotcha',
+  'Gotcha',
+  'Premier à 301 pile. Si tu tombes sur le score d’un pote, il repart à 0.',
+  mode: GameMode.gotcha,
+  aimed: DartThrow.triple(20),
+);
 
-const _volleys = _Mode('3×', 'Volées libres', 'Volées', 'Trois fléchettes, on compte.', drill: _Drill.volleys);
-const _series = _Mode('T20', 'Série sur cible', 'Série', 'Une cible, et on enchaîne.', drill: _Drill.target);
-const _soloGames = [..._x01, _cricket, _clock, _shanghai, _halveIt, _bobs];
+const _partyModes = [..._x01, _cricket, _clock, _shanghai, _killer, _halveIt, _bobs, _bermuda, _gotcha];
+
+/// Variantes du Cricket : nom et règle.
+const _cricketVariants = {
+  CricketVariant.classic: ('Classique', 'Ferme 20 à 15 et le bull. Marque sur ce qui est encore ouvert chez les autres.'),
+  CricketVariant.noScore: ('No Score', 'Fermer, c’est tout. Le premier qui a tout fermé gagne.'),
+  CricketVariant.cutThroat: ('Cut-Throat', 'Tes points vont chez les autres. Le plus petit score gagne.'),
+  CricketVariant.random: ('Random', '6 numéros tirés au hasard, plus le bull. Nouvelle cible à chaque partie.'),
+  CricketVariant.tactic: ('Tactic', 'De 20 à 10, plus le bull. Plus long, plus vicieux.'),
+};
+
+// MARK: Entraînements (planche Choisis ton entraînement)
+
+enum _Kind { trainer, drill, mode, bot }
+
+/// Un entraînement de la planche : tuile, règle, réglage.
+class _Pick {
+  const _Pick(
+    this.glyph,
+    this.title,
+    this.desc,
+    this.rule, {
+    required this.kind,
+    this.mode,
+    this.drill,
+    this.optLabel,
+    this.opts = const [],
+    this.opt,
+    this.recUnit = 'pts',
+  });
+
+  final String glyph;
+  final String title;
+  final String desc;
+  final String rule;
+  final _Kind kind;
+  final GameMode? mode;
+  final _Drill? drill;
+  final String? optLabel;
+  final List<String> opts;
+  final String? opt;
+  final String recUnit;
+}
+
+const _botLevels = ['30', '45', '60', '75', '90', '105'];
+
+const _families = <String, (String, String, List<_Pick>)>{
+  'Finir': (
+    'Finir',
+    'Les sorties. Là où les manches se gagnent.',
+    [
+      _Pick('61+', 'Catch 40', 'Finis 61 à 100, 6 fléchettes max.', 'Chaque score de 61 à 100 à finir sur un double. 3 points si tu sors en 3 fléchettes, 2 en 4 à 6, 0 sinon.', kind: _Kind.trainer, mode: GameMode.catch40, recUnit: 'pts sur 120'),
+      _Pick('121', '9 Darts Double Out', 'Finis 121 en 9 fléchettes.', 'Trois volées pour finir 121, ou 81 si tu veux souffler. Double obligatoire à la fin. 10 tentatives.', kind: _Kind.trainer, mode: GameMode.nineDarts, optLabel: 'Score de départ', opts: ['121', '81'], opt: '121', recUnit: 'réussis sur 10'),
+      _Pick('?', 'Checkout au hasard', 'Un score tiré, 3 volées.', 'Le Pi tire un score, tu as 3 volées pour le finir. 10 scores, on compte les réussites.', kind: _Kind.trainer, mode: GameMode.randomCheckout, optLabel: 'Plage de scores', opts: ['2-60', '61-110', '111-170'], opt: '61-110', recUnit: 'réussis sur 10'),
+      _Pick('170', '170', 'La sortie max, en 9 fléchettes.', 'Pars de 170 et finis en 9 fléchettes max. 10 tentatives à la suite.', kind: _Kind.trainer, mode: GameMode.ton70, recUnit: 'réussis sur 10'),
+      _Pick('41+', '41-60', 'Simple puis double, 3 fléchettes.', 'Chaque score de 41 à 60, 3 fléchettes pour le finir. Le geste de base : simple, puis double.', kind: _Kind.trainer, mode: GameMode.fortyOne, recUnit: 'réussis sur 20'),
+      _Pick('27', 'Bob’s 27', 'D1 à D20 puis bull.', 'Départ à 27, de D1 à D20 puis bull. Un double rapporte sa valeur, un tour à vide la coûte.', kind: _Kind.mode, mode: GameMode.bobs27),
+    ],
+  ),
+  'Viser': (
+    'Viser',
+    'La précision. Un numéro, un geste.',
+    [
+      _Pick('T20', 'Série sur cible', 'X fléchettes sur une cible.', 'Tu choisis la cible et le nombre de fléchettes. On compte ce qui rentre.', kind: _Kind.drill, drill: _Drill.target),
+      _Pick('1>B', 'Tour du monde', 'Une volée par numéro, on compte.', 'Une volée sur le 1, puis le 2, jusqu’au bull. Touché ou pas, on avance. Chaque touche rapporte.', kind: _Kind.trainer, mode: GameMode.roundTheWorld, optLabel: 'Ce qui compte', opts: ['Simple', 'Double', 'Triple'], opt: 'Simple'),
+      _Pick('JDC', 'JDC Challenge', 'Shanghai, doubles, Shanghai.', 'Shanghai du 10 au 15, un double par numéro de 1 au bull, puis Shanghai du 15 au 20. Simple, double, triple en une volée : bonus.', kind: _Kind.trainer, mode: GameMode.jdc),
+      _Pick('99', '99 fléchettes', '33 volées sur une cible.', '33 volées sur la même cible. Total des points, moyenne par volée.', kind: _Kind.trainer, mode: GameMode.darts99, optLabel: 'Cible', opts: ['20', '19', 'Bull'], opt: '20'),
+      _Pick('1>20', 'Around the clock', 'De 1 à 20, dans l’ordre.', 'Touche 1, 2, 3, jusqu’à 20, dans l’ordre. Tant que tu ne touches pas, tu restes dessus.', kind: _Kind.mode, mode: GameMode.clock),
+      _Pick('S·D·T', 'Shanghai', '7 manches, S, D, T.', '7 manches. Manche 1 on vise le 1, puis le 2. Simple, double et triple au même tour : gagné.', kind: _Kind.mode, mode: GameMode.shanghai),
+    ],
+  ),
+  'Scorer': (
+    'Scorer',
+    'Le scoring. Remplir le tableau, sans réfléchir.',
+    [
+      _Pick('3×', 'Volées libres', 'Tire, on compte.', 'Des volées de 3, sans cible imposée. Tu choisis combien.', kind: _Kind.drill, drill: _Drill.volleys, optLabel: 'Volées', opts: ['10', '20', 'Sans fin'], opt: '10', recUnit: 'pts en une volée'),
+      _Pick('+', 'Count Up', 'X volées, tout compte.', 'Tu additionnes tout pendant 8 volées. Simple comme un dimanche.', kind: _Kind.trainer, mode: GameMode.countUp, optLabel: 'Volées', opts: ['8', '10', '20'], opt: '8'),
+      _Pick('15+', 'Cricket Count Up', 'Que des marques.', '15 à 20 et bull. Simple 1 marque, double 2, triple 3. 8 volées pour en faire le plus.', kind: _Kind.trainer, mode: GameMode.cricketCountUp, recUnit: 'marques'),
+      _Pick('501', 'X01 en solo', 'Descends à zéro, seul.', 'Descends à zéro, la dernière fléchette dans un double. Pour bosser ton rythme.', kind: _Kind.mode, optLabel: 'Départ', opts: ['301', '501'], opt: '501'),
+      _Pick('½', 'Halve-it', '9 cibles, départ à 40.', '9 cibles imposées, départ à 40. Rien touché au tour : ton score est divisé par deux.', kind: _Kind.mode, mode: GameMode.halveIt),
+    ],
+  ),
+  'Robot': (
+    'Contre le robot',
+    'Un adversaire qui ne fatigue jamais.',
+    [
+      _Pick('501', '501 contre le robot', 'Choisis son niveau.', 'Un 501 double out contre le robot. Son niveau, c’est sa moyenne sur 3 fléchettes.', kind: _Kind.bot, optLabel: 'Niveau du robot', opts: _botLevels, opt: '60', recUnit: 'niveau battu'),
+      _Pick('15+', 'Cricket contre le robot', 'Il ferme, tu chambres.', 'Un Cricket classique contre le robot. Plus il est fort, plus il ferme vite.', kind: _Kind.bot, mode: GameMode.cricket, optLabel: 'Niveau du robot', opts: _botLevels, opt: '45', recUnit: 'niveau battu'),
+    ],
+  ),
+};
+
+/// Plus haut niveau de robot battu par [name] à ce jeu, null si jamais.
+int? _botBeaten(String name, GameMode? mode) {
+  final id = HistoryStore.playerId(name);
+  int? best;
+  for (final m in HistoryStore.instance.all()) {
+    final bot = (m['bot'] as num?)?.toInt();
+    if (bot == null || m['kind'] != (mode?.name ?? 'x01')) continue;
+    final won = (m['players'] as List).any((p) => (p as Map)['id'] == id && p['won'] == true);
+    if (won && (best == null || bot > best)) best = bot;
+  }
+  return best;
+}
 
 /// "Choisis ton jeu" (Partie) ou "Entraînement" (solo), planche Nouvelle partie Pi, version A.
 class NewGameScreen extends StatefulWidget {
@@ -359,14 +475,35 @@ class NewGameScreen extends StatefulWidget {
 class _NewGameScreenState extends State<NewGameScreen> {
   bool get _practice => widget.practice;
 
-  late _Mode _mode = _practice ? _series : _partyModes[1];
+  late _Mode _mode = _partyModes[1];
+  String _fam = 'Finir';
+  final Map<String, int> _sel = {'Finir': 0, 'Viser': 0, 'Scorer': 0, 'Robot': 0};
+  final Map<String, String> _opts = {};
+  String _botFirst = 'Toi';
+  CricketVariant _variant = CricketVariant.classic;
+  String _goal = '301';
+
+  _Pick get _pick => _families[_fam]!.$3[_sel[_fam]!];
+  String? get _opt => _opts[_pick.title] ?? _pick.opt;
+
+  /// Réglage du jeu choisi, en valeur pour la config.
+  int get _option {
+    final o = _opt;
+    return switch (_pick.mode) {
+      GameMode.nineDarts => int.parse(o ?? '121'),
+      GameMode.randomCheckout => _pick.opts.indexOf(o ?? '61-110').clamp(0, 2),
+      GameMode.darts99 => o == 'Bull' ? 25 : int.parse(o ?? '20'),
+      GameMode.roundTheWorld => _pick.opts.indexOf(o ?? 'Simple') + 1,
+      GameMode.countUp => int.parse(o ?? '8'),
+      _ => 0,
+    };
+  }
   late final List<String> _order = [AppState.owner];
   final List<String> _guests = [];
   String _out = 'Double';
   int _legs = 2;
   TrainingTarget _target = TrainingTarget.presets.first;
   int _darts = 15;
-  String _volleyCount = '10';
 
   String get _shooter => _order.isEmpty ? AppState.owner : _order.first;
 
@@ -392,15 +529,21 @@ class _NewGameScreenState extends State<NewGameScreen> {
   void _launch() {
     if (_practice) {
       // Pas de salon : on tire tout de suite.
+      final p = _pick;
+      final bot = p.kind == _Kind.bot;
       final cfg = GameConfig(
-        players: [_shooter],
+        players: bot
+            ? (_botFirst == 'Toi' ? [_shooter, GameConfig.botName] : [GameConfig.botName, _shooter])
+            : [_shooter],
         practice: true,
-        startScore: _mode.start ?? 501,
-        doubleOut: _out == 'Double',
-        mode: _mode.mode,
-        training: _mode.drill == _Drill.target ? _target : null,
+        startScore: p.mode == null && p.kind == _Kind.mode ? int.parse(_opt ?? '501') : 501,
+        doubleOut: true,
+        mode: p.kind == _Kind.drill ? null : p.mode,
+        training: p.drill == _Drill.target ? _target : null,
         trainingDarts: _darts,
-        freeVolleys: _mode.drill == _Drill.volleys ? (int.tryParse(_volleyCount) ?? 0) : null,
+        freeVolleys: p.drill == _Drill.volleys ? (int.tryParse(_opt ?? '10') ?? 0) : null,
+        botLevel: bot ? int.parse(_opt ?? '60') : null,
+        option: _option,
       );
       Navigator.of(
         context,
@@ -413,10 +556,11 @@ class _NewGameScreenState extends State<NewGameScreen> {
         builder: (_) => SalonScreen(
           config: GameConfig(
             players: List.of(_order),
-            startScore: _mode.start ?? 501,
+            startScore: _mode.mode == GameMode.gotcha ? int.parse(_goal) : (_mode.start ?? 501),
             mode: _mode.mode,
             doubleOut: _out == 'Double',
             legsToWin: _legs,
+            cricketVariant: _mode.mode == GameMode.cricket ? _variant : CricketVariant.classic,
           ),
         ),
       ),
@@ -433,6 +577,8 @@ class _NewGameScreenState extends State<NewGameScreen> {
   /// Règle du jeu choisi ; pour un X01, elle suit la sortie choisie.
   String get _rule {
     final start = _mode.start;
+    if (_mode.mode == GameMode.cricket) return _cricketVariants[_variant]!.$2;
+    if (_mode.mode == GameMode.gotcha) return 'Premier à $_goal pile. Si tu tombes sur le score d’un pote, il repart à 0.';
     if (start == null) return _mode.rule;
     return _out == 'Double'
         ? 'Descends de $start à zéro. La dernière fléchette tombe dans un double.'
@@ -463,11 +609,16 @@ class _NewGameScreenState extends State<NewGameScreen> {
               Column(
                 spacing: Td.s2,
                 children: [
-                  for (var r = 0; r < 2; r++)
+                  for (var r = 0; r < 3; r++)
                     Row(
                       spacing: Td.s2,
                       children: [
-                        for (final m in _partyModes.sublist(r * 4, r * 4 + 4)) Expanded(child: _pill(m)),
+                        for (var c = 0; c < 4; c++)
+                          Expanded(
+                            child: r * 4 + c < _partyModes.length
+                                ? _pill(_partyModes[r * 4 + c])
+                                : const SizedBox.shrink(),
+                          ),
                       ],
                     ),
                 ],
@@ -516,6 +667,30 @@ class _NewGameScreenState extends State<NewGameScreen> {
                   child: TdStepper(value: _legs, min: 1, max: 5, onChanged: (v) => setState(() => _legs = v)),
                 ),
               ],
+              if (_mode.mode == GameMode.cricket) ...[
+                const SizedBox(height: Td.s5),
+                _label('Variante'),
+                const SizedBox(height: Td.s3),
+                Wrap(
+                  spacing: Td.s2,
+                  runSpacing: Td.s2,
+                  children: [
+                    for (final e in _cricketVariants.entries)
+                      TdChip(label: e.value.$1, selected: e.key == _variant, onTap: () => setState(() => _variant = e.key)),
+                  ],
+                ),
+              ],
+              if (_mode.mode == GameMode.gotcha) ...[
+                const SizedBox(height: Td.s5),
+                _label('Score à atteindre'),
+                const SizedBox(height: Td.s3),
+                TdSegmented(
+                  options: const ['201', '301', '501'],
+                  value: _goal,
+                  touch: true,
+                  onChanged: (v) => setState(() => _goal = v),
+                ),
+              ],
               const Spacer(),
               Text("Le salon s'ouvre, les potes rejoignent avec leur iPhone.", style: TdText.inter(13, 18, 400, Td.ink3)),
               const SizedBox(height: Td.s3),
@@ -546,7 +721,9 @@ class _NewGameScreenState extends State<NewGameScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _label(_mode.title),
+              _label(_mode.mode == GameMode.cricket && _variant != CricketVariant.classic
+                  ? 'Cricket ${_cricketVariants[_variant]!.$1}'
+                  : _mode.title),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 380),
                 child: Column(
@@ -572,12 +749,12 @@ class _NewGameScreenState extends State<NewGameScreen> {
     ),
   );
 
-  Widget _board(_Mode m, {DartThrow? aimed}) => Dartboard(
-    aimed: aimed ?? m.aimed,
-    aimSector: m.aimSector,
-    heat: m.heat,
-    dim: m.heat.isEmpty,
-  );
+  Widget _board(_Mode m, {DartThrow? aimed}) {
+    final heat = m.mode == GameMode.cricket && _variant == CricketVariant.tactic
+        ? CricketGame.numbersFor(CricketVariant.tactic).toSet()
+        : m.heat;
+    return Dartboard(aimed: aimed ?? m.aimed, aimSector: m.aimSector, heat: heat, dim: heat.isEmpty);
+  }
 
   /// Petite tuile de jeu (72 px de haut) : glyphe et nom court.
   Widget _pill(_Mode m) {
@@ -596,9 +773,13 @@ class _NewGameScreenState extends State<NewGameScreen> {
         child: Row(
           spacing: 10,
           children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 44),
-              child: Text(m.glyph, style: TdText.rounded(22, 900, on ? Td.sunset : Td.ink)),
+            SizedBox(
+              width: 48,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(m.glyph, style: TdText.rounded(22, 900, on ? Td.sunset : Td.ink)),
+              ),
             ),
             Expanded(
               child: Text(
@@ -614,40 +795,64 @@ class _NewGameScreenState extends State<NewGameScreen> {
     );
   }
 
-  // MARK: Écran 2b, Entraînement (version A, série sur cible)
+  // MARK: Écran 2b, Choisis ton entraînement (familles Finir, Viser, Scorer, Robot)
+
+  /// Record du jeu : (valeur, unité), "-" si jamais joué.
+  (String, String) _recordOf(_Pick p, {String? opt}) {
+    final o = opt ?? _opts[p.title] ?? p.opt;
+    int? r;
+    var unit = p.recUnit;
+    switch (p.kind) {
+      case _Kind.trainer:
+        // Option du jeu demandé, pas forcément celui sélectionné.
+        final option = switch (p.mode) {
+          GameMode.nineDarts => int.parse(o ?? '121'),
+          GameMode.randomCheckout => p.opts.indexOf(o ?? '61-110').clamp(0, 2),
+          GameMode.darts99 => o == 'Bull' ? 25 : int.parse(o ?? '20'),
+          GameMode.roundTheWorld => p.opts.indexOf(o ?? 'Simple') + 1,
+          GameMode.countUp => int.parse(o ?? '8'),
+          _ => 0,
+        };
+        r = trainerRecord(_shooter, p.mode!, option);
+      case _Kind.drill:
+        r = p.drill == _Drill.target ? practiceRecord(_shooter, target: _target, darts: _darts) : practiceRecord(_shooter);
+        if (p.drill == _Drill.target) unit = 'sur $_darts au ${_target.label}';
+      case _Kind.bot:
+        r = _botBeaten(_shooter, p.mode);
+      case _Kind.mode:
+        r = null;
+        unit = 'pas de record';
+    }
+    return (r == null ? '-' : '$r', unit);
+  }
 
   Widget _practiceLayout() {
-    final record = switch (_mode.drill) {
-      _Drill.target => practiceRecord(_shooter, target: _target, darts: _darts),
-      _Drill.volleys => practiceRecord(_shooter),
-      null => null,
-    };
+    final fam = _families[_fam]!;
+    final picks = fam.$3;
     return Padding(
-      padding: const EdgeInsets.all(Td.s3),
+      padding: const EdgeInsets.all(Td.s4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: Td.s3,
+        spacing: Td.s4,
         children: [
-          SizedBox(
-            width: 300,
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: Td.s3,
               children: [
-                _header(context, 'Entraînement', size: 22),
-                const SizedBox(height: 14),
-                _label('Routines'),
-                const SizedBox(height: 10),
-                _routine(_volleys),
-                const SizedBox(height: 10),
-                _routine(_series),
-                const SizedBox(height: 16),
-                _label('Jeux en solo'),
-                const SizedBox(height: 10),
+                _header(context, 'Choisis ton entraînement'),
+                TdSegmented(
+                  options: _families.keys.toList(),
+                  value: _fam,
+                  touch: true,
+                  onChanged: (v) => setState(() => _fam = v),
+                ),
+                Text(fam.$2, style: TdText.inter(13, 18, 400, Td.ink3)),
                 Expanded(
                   child: Column(
                     spacing: Td.s2,
                     children: [
-                      for (var r = 0; r < 3; r++)
+                      for (var r = 0; r < 2; r++)
                         Expanded(
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -655,9 +860,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
                             children: [
                               for (var c = 0; c < 3; c++)
                                 Expanded(
-                                  child: r * 3 + c < _soloGames.length
-                                      ? _soloTile(_soloGames[r * 3 + c])
-                                      : const SizedBox.shrink(),
+                                  child: r * 3 + c < picks.length ? _tile(r * 3 + c, picks[r * 3 + c]) : const SizedBox.shrink(),
                                 ),
                             ],
                           ),
@@ -668,215 +871,108 @@ class _NewGameScreenState extends State<NewGameScreen> {
               ],
             ),
           ),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              spacing: Td.s2,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 380, maxHeight: 380),
-                  child: _board(
-                    _mode,
-                    aimed: _mode.drill == _Drill.target
-                        ? (_target.sector == 25 ? null : DartThrow(_target.sector, _target.multiplier))
-                        : null,
-                  ),
-                ),
-                _caption(),
-              ],
-            ),
-          ),
           Container(
-            width: 300,
+            width: 320,
             padding: const EdgeInsets.all(Td.s4),
             decoration: _glass(),
+            child: _practicePanel(fam.$1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(int i, _Pick p) {
+    final (v, u) = _recordOf(p);
+    final rec = p.kind == _Kind.mode || v == '-' ? '' : (p.kind == _Kind.bot ? ' Battu au $v.' : ' Record $v.');
+    return ModeTile(
+      glyph: p.glyph,
+      title: p.title,
+      desc: '${p.desc}$rec',
+      selected: _sel[_fam] == i,
+      onTap: () => setState(() => _sel[_fam] = i),
+    );
+  }
+
+  Widget _practicePanel(String famName) {
+    final p = _pick;
+    final (rv, ru) = _recordOf(p);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: Td.s3,
+      children: [
+        _label(famName),
+        Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TdText.inter(22, 28, 700, Td.ink)),
+        Expanded(
+          child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: Td.s3,
               children: [
-                _label('Qui tire'),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: Td.s2,
-                  runSpacing: Td.s2,
-                  children: [
-                    for (final n in _everyone)
-                      TdChip(label: n, icon: LucideIcons.user, selected: n == _shooter, onTap: () => _toggle(n)),
-                  ],
-                ),
-                ..._practiceOptions(),
-                if (record != null || _mode.drill != null) ...[
-                  const SizedBox(height: Td.s4),
-                  _mode.drill == _Drill.target
-                      ? KpiTile(
-                          label: 'Ton record sur ${_target.label}',
-                          value: record == null ? '-' : '$record',
-                          unit: 'sur $_darts',
-                        )
-                      : KpiTile(label: 'Ta meilleure volée', value: record == null ? '-' : '$record', unit: 'points'),
+                Text(p.rule, style: TdText.inter(15, 20, 400, Td.ink2)),
+                if (p.kind == _Kind.bot)
+                  Text(
+                    rv == '-' ? 'Pas encore battu.' : 'Ton record : battu au $rv.',
+                    style: TdText.inter(13, 18, 400, Td.ink3),
+                  )
+                else if (p.kind != _Kind.mode)
+                  KpiTile(label: 'Ton record', value: rv, unit: ru),
+                if (p.drill == _Drill.target) ...[
+                  _label('Cible'),
+                  Wrap(
+                    spacing: Td.s2,
+                    runSpacing: Td.s2,
+                    children: [
+                      for (final t in TrainingTarget.presets)
+                        TdChip(label: t.label, selected: t == _target, onTap: () => setState(() => _target = t)),
+                    ],
+                  ),
+                  _label('Fléchettes'),
+                  TdSegmented(
+                    options: const ['9', '15', '30'],
+                    value: '$_darts',
+                    touch: true,
+                    height: 52,
+                    onChanged: (v) => setState(() => _darts = int.parse(v)),
+                  ),
                 ],
-                const Spacer(),
-                TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _launch),
+                if (p.optLabel != null) ...[
+                  _label(p.kind == _Kind.bot ? '${p.optLabel!} · ${BotLevel.of(int.parse(_opt ?? '60')).name}' : p.optLabel!),
+                  TdSegmented(
+                    options: p.opts,
+                    value: _opt ?? p.opts.first,
+                    touch: true,
+                    height: 52,
+                    onChanged: (v) => setState(() => _opts[p.title] = v),
+                  ),
+                ],
+                if (p.kind == _Kind.bot) ...[
+                  _label('Qui commence'),
+                  TdSegmented(
+                    options: const ['Toi', 'Le robot'],
+                    value: _botFirst,
+                    touch: true,
+                    height: 52,
+                    onChanged: (v) => setState(() => _botFirst = v),
+                  ),
+                ],
+                if (_everyone.length > 1) ...[
+                  _label('Qui tire'),
+                  Wrap(
+                    spacing: Td.s2,
+                    runSpacing: Td.s2,
+                    children: [
+                      for (final n in _everyone)
+                        TdChip(label: n, icon: LucideIcons.user, selected: n == _shooter, onTap: () => _toggle(n)),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _caption() {
-    final text = switch (_mode.drill) {
-      _Drill.target => null,
-      _Drill.volleys =>
-        _volleyCount == 'Sans fin' ? 'Des volées de 3, tant que tu veux.' : '$_volleyCount volées de 3. On compte tout.',
-      null => _rule,
-    };
-    if (text != null) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: Text(text, textAlign: TextAlign.center, style: TdText.inter(15, 20, 400, Td.ink2)),
-      );
-    }
-    return Text.rich(
-      TextSpan(
-        style: TdText.inter(15, 20, 400, Td.ink2),
-        children: [
-          TextSpan(text: '$_darts fléchettes, toutes au '),
-          TextSpan(text: _target.label, style: TdText.inter(15, 20, 700, Td.ciel)),
-          const TextSpan(text: '.'),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _practiceOptions() {
-    switch (_mode.drill) {
-      case _Drill.volleys:
-        return [
-          const SizedBox(height: 14),
-          _label('Volées'),
-          const SizedBox(height: 10),
-          TdSegmented(
-            options: const ['10', '20', 'Sans fin'],
-            value: _volleyCount,
-            touch: true,
-            onChanged: (v) => setState(() => _volleyCount = v),
-          ),
-        ];
-      case _Drill.target:
-        return [
-          const SizedBox(height: 14),
-          _label('Cible'),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: Td.s2,
-            runSpacing: Td.s2,
-            children: [
-              for (final t in TrainingTarget.presets)
-                TdChip(label: t.label, selected: t == _target, onTap: () => setState(() => _target = t)),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _label('Fléchettes'),
-          const SizedBox(height: 10),
-          TdSegmented(
-            options: const ['9', '15', '30'],
-            value: '$_darts',
-            touch: true,
-            onChanged: (v) => setState(() => _darts = int.parse(v)),
-          ),
-        ];
-      case null:
-        if (_mode.start == null) return const [];
-        return [
-          const SizedBox(height: 14),
-          _label('Sortie'),
-          const SizedBox(height: 10),
-          TdSegmented(
-            options: const ['Double', 'Simple'],
-            value: _out,
-            touch: true,
-            onChanged: (v) => setState(() => _out = v),
-          ),
-        ];
-    }
-  }
-
-  /// Routine (72 px) : glyphe, nom et une ligne.
-  Widget _routine(_Mode m) {
-    final on = m == _mode;
-    return Pressable(
-      onTap: () => setState(() => _mode = m),
-      child: AnimatedContainer(
-        duration: Td.rapide,
-        height: Td.ciblePi,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: on ? Td.sunsetFond : Td.verreLeger,
-          borderRadius: BorderRadius.circular(Td.rLg),
-          border: Border.all(color: on ? Td.sunset : Td.verreBord),
         ),
-        child: Row(
-          spacing: Td.s3,
-          children: [
-            SizedBox(
-              width: 52,
-              child: Text(m.glyph, style: TdText.rounded(26, 900, on ? Td.sunset : Td.ink2)),
-            ),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(m.title, style: TdText.inter(17, 22, 600, Td.ink)),
-                  Text(
-                    m.rule,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TdText.inter(13, 18, 400, Td.ink2),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Jeu en solo : petite tuile, glyphe et nom court.
-  Widget _soloTile(_Mode m) {
-    final on = m == _mode;
-    return Pressable(
-      onTap: () => setState(() => _mode = m),
-      child: AnimatedContainer(
-        duration: Td.rapide,
-        constraints: const BoxConstraints(minHeight: Td.ciblePi),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: Td.s2),
-        decoration: BoxDecoration(
-          color: on ? Td.sunsetFond : Td.verreLeger,
-          borderRadius: BorderRadius.circular(Td.rMd),
-          border: Border.all(color: on ? Td.sunset : Td.verreBord),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 2,
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(m.glyph, style: TdText.rounded(20, 900, on ? Td.sunset : Td.ink2, height: 22)),
-            ),
-            Text(
-              m.short,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TdText.inter(12, 16, 600, Td.ink),
-            ),
-          ],
-        ),
-      ),
+        TdButton(label: 'Lancer', icon: LucideIcons.play, onPressed: _launch),
+      ],
     );
   }
 }

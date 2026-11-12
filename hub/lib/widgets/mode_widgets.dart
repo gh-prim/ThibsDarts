@@ -8,26 +8,36 @@ class CricketColumn {
   const CricketColumn(this.name, this.marks, this.score);
   final String name;
 
-  /// 7 valeurs : 20, 19, 18, 17, 16, 15, bull.
+  /// Une valeur par numéro du tableau (7 au Cricket classique : 20 à 15, bull).
   final List<int> marks;
   final int score;
 }
 
 /// Tableau Cricket (composant CricketBoard) : marques par joueur, numéros au milieu, points en bas.
 class CricketBoard extends StatelessWidget {
-  const CricketBoard({super.key, required this.players, required this.active});
+  const CricketBoard({
+    super.key,
+    required this.players,
+    required this.active,
+    this.numbers = const [20, 19, 18, 17, 16, 15, 25],
+  });
 
   final List<CricketColumn> players;
   final int active;
 
-  static const _rows = ['20', '19', '18', '17', '16', '15', 'Bull'];
+  /// Numéros du tableau, bull en 25.
+  final List<int> numbers;
+
+  List<String> get _rows => [for (final n in numbers) n == 25 ? 'Bull' : '$n'];
 
   @override
   Widget build(BuildContext context) {
     final mid = (players.length / 2).ceil();
+    final rows = _rows;
+    final h = rows.length > 7 ? 24.0 : 40.0;
     Widget cell(int i, Widget child, {bool on = false, BorderRadius? r}) => Expanded(
       child: Container(
-        height: 40,
+        height: h,
         alignment: Alignment.center,
         decoration: BoxDecoration(color: on ? Td.verreMoyen : Td.verreLeger, borderRadius: r),
         child: child,
@@ -40,7 +50,7 @@ class CricketBoard extends StatelessWidget {
     }
 
     return Column(
-      spacing: Td.s1,
+      spacing: rows.length > 7 ? 2 : Td.s1,
       children: [
         Row(
           children: row([
@@ -56,7 +66,7 @@ class CricketBoard extends StatelessWidget {
               ),
           ], const SizedBox(width: 72)),
         ),
-        for (var r = 0; r < _rows.length; r++)
+        for (var r = 0; r < rows.length; r++)
           Opacity(
             opacity: players.every((p) => p.marks[r] >= 3) ? 0.38 : 1,
             child: Row(
@@ -65,7 +75,7 @@ class CricketBoard extends StatelessWidget {
                   for (var i = 0; i < players.length; i++)
                     cell(
                       i,
-                      CustomPaint(size: const Size(30, 30), painter: _MarkPainter(players[i].marks[r])),
+                      CustomPaint(size: Size(h - (h < 40 ? 4 : 10), h - (h < 40 ? 4 : 10)), painter: _MarkPainter(players[i].marks[r])),
                       on: i == active,
                       r: BorderRadius.horizontal(
                         left: Radius.circular(i == 0 ? 6 : 0),
@@ -75,13 +85,13 @@ class CricketBoard extends StatelessWidget {
                 ],
                 Container(
                   width: 72,
-                  height: 40,
+                  height: h,
                   alignment: Alignment.center,
                   color: Td.verreMoyen,
                   child: Text(
-                    _rows[r],
+                    rows[r],
                     style: TdText.rounded(
-                      _rows[r] == 'Bull' ? 20 : 26,
+                      rows[r] == 'Bull' ? (h < 40 ? 16 : 20) : (h < 40 ? 20 : 26),
                       900,
                       Td.ink,
                     ).copyWith(decoration: players.every((p) => p.marks[r] >= 3) ? TextDecoration.lineThrough : null),

@@ -253,7 +253,7 @@ class ModeTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TdText.inter(17, 22, 600, Td.ink)),
-                Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: TdText.inter(13, 18, 400, Td.ink2)),
+                Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis, style: TdText.inter(13, 18, 400, Td.ink2)),
               ],
             ),
           ],

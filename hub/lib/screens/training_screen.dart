@@ -8,6 +8,7 @@ import '../cam/cam_link.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../theme/tokens.dart';
+import 'correction_screen.dart';
 import '../widgets/celebration.dart';
 import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
@@ -144,6 +145,46 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   void _onBoardTap(Offset p) => _throw(dartAt(p), p);
+
+  /// Fléchette tombée ou plantée hors de la cible : compte zéro.
+  void _outOfBoard() => _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
+
+  /// Corrige une fléchette de la volée en cours (même écran que dans les parties).
+  Future<void> _correct() async {
+    // Possible jusqu'au bilan : la dernière volée finit la série dès sa 3e fléchette.
+    if (_showEnd || _stopped) return;
+    final before = _g.currentTurn.length;
+    final c = await Navigator.of(context).push<Correction>(
+      MaterialPageRoute(builder: (_) => CorrectionScreen(turn: _g.currentTurn, hits: List.of(_hits))),
+    );
+    if (c == null || !mounted) return;
+    setState(() {
+      _g.correctDart(c.index, c.dart);
+      final turn = _g.currentTurn;
+      final kept = <BoardHit>[];
+      for (var i = 0; i < turn.length; i++) {
+        final d = turn[i];
+        final old = i < _hits.length ? _hits[i] : null;
+        kept.add(old != null && old.dart == d ? old : BoardHit(d, boardPositionFor(d), i + 1));
+      }
+      _hits
+        ..clear()
+        ..addAll(kept);
+      // Les fléchettes de la volée sont les dernières de la série : on les remplace.
+      _throws.removeRange(_throws.length - before.clamp(0, _throws.length), _throws.length);
+      for (final h in kept) {
+        _throws.add({'d': h.dart.label, 'x': (h.position.dx * 10).round() / 10, 'y': (h.position.dy * 10).round() / 10});
+      }
+      _tagDart = null;
+    });
+    if (_g.isFinished) {
+      AppState.lastResult = _result;
+      _endTimer?.cancel();
+      _endTimer = Timer(const Duration(milliseconds: 1400), () {
+        if (mounted) setState(() => _showEnd = true);
+      });
+    }
+  }
 
   /// Phrase de fin : "11 sur 15 au T20." ou "Moyenne 54,3, meilleure volée 100.".
   String get _result => switch (_g) {
@@ -365,6 +406,20 @@ class _TrainingScreenState extends State<TrainingScreen> {
         else
           KpiTile(label: 'Record de volée', value: best == null ? '-' : '$best', unit: 'points'),
         const Spacer(),
+        TdButton(
+          label: 'Corriger',
+          icon: LucideIcons.pencil,
+          variant: TdButtonVariant.secondary,
+          height: Td.ciblePi,
+          onPressed: _correct,
+        ),
+        TdButton(
+          label: 'Hors cible',
+          icon: LucideIcons.target,
+          variant: TdButtonVariant.secondary,
+          height: Td.ciblePi,
+          onPressed: _outOfBoard,
+        ),
         TdButton(
           label: 'Arrêter',
           icon: LucideIcons.x,

@@ -37,6 +37,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Version figee : flutterpi_tool ne s'installe plus avec Flutter 3.50 (flutter_tools_core).
+          flutter-version: 3.47.9
           cache: true
       - name: Compiler le hub pour le Pi 4
         run: |

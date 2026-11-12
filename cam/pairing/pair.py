@@ -140,6 +140,20 @@ def join_home(ssid, password):
             state["busy"] = False
 
 
+
+def read_body(handler):
+    """Corps d'une requête, avec Content-Length ou en "chunked" (le HttpClient de Dart, par défaut)."""
+    if "chunked" in handler.headers.get("Transfer-Encoding", "").lower():
+        data = b""
+        while True:
+            size = int(handler.rfile.readline().split(b";")[0].strip() or b"0", 16)
+            if size == 0:
+                handler.rfile.readline()
+                return data
+            data += handler.rfile.read(size)
+            handler.rfile.readline()
+    return handler.rfile.read(int(handler.headers.get("Content-Length", 0) or 0))
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body):
         data = json.dumps(body).encode()
@@ -160,7 +174,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("X-Pair-Key") != PAIR_KEY:
             return self._send(403, {"error": "clé"})
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            body = json.loads(read_body(self))
             ssid, password = str(body["ssid"]), str(body.get("password", ""))
         except (ValueError, KeyError, TypeError):
             return self._send(400, {"error": "ssid manquant"})

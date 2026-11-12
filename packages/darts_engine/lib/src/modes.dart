@@ -3,7 +3,29 @@ import 'dart:math' as math;
 import 'dart_throw.dart';
 
 /// Modes de jeu autres que le X01.
-enum GameMode { cricket, clock, shanghai, killer, halveIt, bobs27 }
+enum GameMode {
+  cricket,
+  clock,
+  shanghai,
+  killer,
+  halveIt,
+  bobs27,
+  bermuda,
+  gotcha,
+  catch40,
+  nineDarts,
+  randomCheckout,
+  ton70,
+  fortyOne,
+  jdc,
+  darts99,
+  roundTheWorld,
+  countUp,
+  cricketCountUp;
+
+  /// Entraînement solo (un seul joueur, écran d'entraînement).
+  bool get solo => index >= GameMode.catch40.index;
+}
 
 /// Base commune : tours de 3 fléchettes, joueur suivant, correction par rejeu.
 ///
@@ -18,6 +40,7 @@ abstract class TurnGame {
   final List<DartThrow> _turn = [];
   int _current = 0;
   bool _closed = false;
+  bool _endEarly = false;
 
   /// Nombre de tours joués par le joueur actif avant celui-ci (0 au premier tour).
   int _round = 0;
@@ -72,6 +95,9 @@ abstract class TurnGame {
   /// Appelé quand tout le monde a joué la manche.
   void onRoundEnd() {}
 
+  /// Le mode ferme le tour avant 3 fléchettes (sortie, bust) : les suivantes sont ignorées.
+  void endTurn() => _endEarly = true;
+
   /// Le mode peut fermer le tour avant 3 fléchettes (victoire).
   void finish(int player) {
     winnerIndex = player;
@@ -83,12 +109,13 @@ abstract class TurnGame {
     if (_closed) throw StateError('Tour fini, appelle nextPlayer()');
     _turn.add(d);
     onDart(_current, d);
-    if (isFinished || _turn.length == 3 || isOut(_current)) _closeTurn();
+    if (isFinished || _turn.length == 3 || isOut(_current) || _endEarly) _closeTurn();
   }
 
   void _closeTurn() {
     if (_closed) return;
     _closed = true;
+    _endEarly = false;
     _history.add((_current, List.of(_turn)));
     if (!isFinished) onTurnEnd(_current, List.of(_turn));
   }
@@ -125,6 +152,7 @@ abstract class TurnGame {
     _turn.clear();
     _current = 0;
     _closed = false;
+    _endEarly = false;
     _round = 0;
     winnerIndex = null;
     winners = const [];
@@ -160,17 +188,54 @@ abstract class TurnGame {
 
 // MARK: Cricket
 
+/// Variantes du Cricket.
+enum CricketVariant {
+  /// 20 à 15 et bull, on marque sur ce qui reste ouvert chez les autres.
+  classic,
+
+  /// Fermer seulement : pas de points, le premier qui ferme tout gagne.
+  noScore,
+
+  /// Les points vont aux adversaires qui n'ont pas fermé. Le moins de points gagne.
+  cutThroat,
+
+  /// 6 numéros tirés au hasard et le bull.
+  random,
+
+  /// 20 à 10 et le bull.
+  tactic,
+}
+
 /// Cricket : fermer 20 à 15 et le bull (3 marques), marquer sur ce qui reste ouvert chez les autres.
 class CricketGame extends TurnGame {
-  CricketGame(super.names) {
+  CricketGame(super.names, {this.variant = CricketVariant.classic, List<int>? numbers})
+    : numbers = numbers ?? numbersFor(variant) {
     resetState();
   }
 
-  /// Ordre d'affichage : 20, 19, 18, 17, 16, 15, bull.
-  static const numbers = [20, 19, 18, 17, 16, 15, 25];
+  /// Ordre d'affichage du Cricket classique : 20, 19, 18, 17, 16, 15, bull.
+  static const standard = [20, 19, 18, 17, 16, 15, 25];
+
+  /// Numéros de la variante (tirés au hasard pour Random).
+  static List<int> numbersFor(CricketVariant v, [math.Random? random]) => switch (v) {
+    CricketVariant.tactic => const [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 25],
+    CricketVariant.random => [
+      ...((List.generate(20, (i) => i + 1)..shuffle(random)).take(6).toList()..sort((a, b) => b - a)),
+      25,
+    ],
+    _ => standard,
+  };
+
+  final CricketVariant variant;
+
+  /// Numéros en jeu, du plus grand au plus petit, bull à la fin.
+  final List<int> numbers;
 
   late List<List<int>> marks;
   late List<int> points;
+
+  /// Le moins de points gagne (Cut-Throat).
+  bool get lowWins => variant == CricketVariant.cutThroat;
 
   @override
   void resetState() {
@@ -200,22 +265,47 @@ class CricketGame extends TurnGame {
     m[i] += close;
     hits -= close;
     if (hits > 0) {
-      final othersOpen = [
+      final open = [
         for (var p = 0; p < names.length; p++)
-          if (p != player) marks[p][i] < 3,
-      ].any((x) => x);
-      if (othersOpen) points[player] += hits * d.sector;
+          if (p != player && marks[p][i] < 3) p,
+      ];
+      if (open.isNotEmpty) {
+        switch (variant) {
+          case CricketVariant.noScore:
+            break;
+          case CricketVariant.cutThroat:
+            for (final p in open) {
+              points[p] += hits * d.sector;
+            }
+          default:
+            points[player] += hits * d.sector;
+        }
+      }
       m[i] += hits;
     }
     if (m.every((x) => x >= 3)) {
-      final best = [
+      final others = [
         for (var p = 0; p < names.length; p++)
           if (p != player) points[p],
-      ].fold<int>(0, math.max);
-      if (points[player] >= best) finish(player);
+      ];
+      final ahead = lowWins
+          ? points[player] <= others.fold<int>(1 << 30, math.min)
+          : points[player] >= others.fold<int>(0, math.max);
+      if (variant == CricketVariant.noScore || ahead) finish(player);
     }
     // Tout est fermé chez tout le monde : plus personne ne marque, le meilleur score gagne.
     if (!isFinished && Iterable<int>.generate(numbers.length).every(closedByAll)) finishOnBestScore();
+  }
+
+  @override
+  void finishOnBestScore() {
+    if (!lowWins) return super.finishOnBestScore();
+    final best = points.fold<int>(1 << 30, math.min);
+    winners = [
+      for (var i = 0; i < names.length; i++)
+        if (points[i] == best) i,
+    ];
+    winnerIndex = winners.first;
   }
 }
 
@@ -361,16 +451,29 @@ class HalveTarget {
     HalveTarget('20', (d) => d.sector == 20),
     HalveTarget('Bull', (d) => d.sector == 25),
   ];
+
+  /// Bermuda : 12 manches, de 12 à 20 avec un double, un triple et le bull.
+  static final bermuda = [
+    for (final n in [12, 13, 14]) HalveTarget('$n', (d) => d.sector == n),
+    HalveTarget('Double', (d) => d.isDouble),
+    for (final n in [15, 16, 17]) HalveTarget('$n', (d) => d.sector == n),
+    HalveTarget('Triple', (d) => d.multiplier == 3),
+    for (final n in [18, 19, 20]) HalveTarget('$n', (d) => d.sector == n),
+    HalveTarget('Bull', (d) => d.sector == 25),
+  ];
 }
 
 /// Halve-it : 9 manches avec une cible imposée. Rien touché au tour : ton score est divisé par deux.
 class HalveItGame extends TurnGame {
-  HalveItGame(super.names, {this.start = 40}) {
+  HalveItGame(super.names, {this.start = 40, List<HalveTarget>? targets}) : targets = targets ?? HalveTarget.standard {
     resetState();
   }
 
+  /// Bermuda : mêmes règles, 12 manches, départ à 0.
+  HalveItGame.bermuda(List<String> names) : this(names, start: 0, targets: HalveTarget.bermuda);
+
   final int start;
-  final targets = HalveTarget.standard;
+  final List<HalveTarget> targets;
   late List<int> points;
   late List<int> halves;
 
@@ -458,5 +561,68 @@ class Bobs27Game extends TurnGame {
   @override
   void onRoundEnd() {
     if (round > rounds) finishOnBestScore();
+  }
+}
+
+// MARK: Gotcha
+
+/// Gotcha : premier à 301 pile. Tomber sur le score d'un adversaire le renvoie à 0.
+/// Dépasser 301 : bust, retour au score du début du tour.
+class GotchaGame extends TurnGame {
+  GotchaGame(super.names, {this.goal = 301}) {
+    resetState();
+  }
+
+  final int goal;
+  late List<int> points;
+  int _turnStart = 0;
+
+  /// Dernier Gotcha, pour l'alerte ("Gotcha. Max retourne à 0.").
+  String? lastEvent;
+
+  /// Nombre de Gotcha réussis par joueur.
+  late List<int> gotchas;
+
+  /// Le dernier tour a busté.
+  bool busted = false;
+
+  @override
+  void resetState() {
+    points = List.filled(names.length, 0);
+    gotchas = List.filled(names.length, 0);
+    _turnStart = 0;
+    lastEvent = null;
+    busted = false;
+  }
+
+  @override
+  int scoreOf(int player) => points[player];
+
+  /// Reste à faire pour finir.
+  int left(int player) => goal - points[player];
+
+  @override
+  void onDart(int player, DartThrow d) {
+    if (currentTurn.length == 1) {
+      _turnStart = points[player];
+      busted = false;
+    }
+    final next = points[player] + d.score;
+    if (next > goal) {
+      points[player] = _turnStart;
+      busted = true;
+      endTurn();
+      return;
+    }
+    points[player] = next;
+    if (next == goal) return finish(player);
+    if (d.isMiss || d.score == 0) return;
+    for (var p = 0; p < names.length; p++) {
+      if (p != player && points[p] == next && next > 0) {
+        points[p] = 0;
+        gotchas[player]++;
+        lastEvent = 'Gotcha. ${names[p]} retourne à 0.';
+      }
+    }
   }
 }

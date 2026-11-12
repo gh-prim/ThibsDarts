@@ -6,3 +6,5 @@ export 'src/checkout.dart';
 export 'src/x01.dart';
 export 'src/modes.dart';
 export 'src/training.dart';
+export 'src/trainers.dart';
+export 'src/bot.dart';

@@ -1,5 +1,6 @@
 """Service caméras du Pi 5 : possède les caméras, sert l'aperçu en MJPEG sur HTTP (port 8081)
-et publie le statut retenu thibsdarts/cam/status. La détection lira plus tard les mêmes images.
+et publie le statut retenu thibsdarts/cam/status. Pendant une partie, les caméras calibrées restent
+ouvertes et detector.py y cherche les fléchettes (publiées sur thibsdarts/cam/dart).
 
 Les caméras sont cherchées dans /dev/v4l toutes les quelques secondes : on peut les débrancher
 et les rebrancher sur n'importe quel port. Elles sont reconnues à leur vue (identity.py), pas
@@ -19,10 +20,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
 
+import detector
 import identity
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "simulator"))
-from dartlink import MQTT_HOST, MQTT_PORT, STATUS_TOPIC, VERSION, new_client  # noqa: E402
+from dartlink import (  # noqa: E402
+    DART_TOPIC, MQTT_HOST, MQTT_PORT, STATE_TOPIC, STATUS_TOPIC, TAKEOUT_TOPIC, VERSION,
+    dart_at, dart_message, new_client, segment_name,
+)
 
 PORT = int(os.environ.get("CAM_HTTP_PORT", "8081"))
 DATA_DIR = os.environ.get("DARTOS_DATA", "/data/thibsdarts")
@@ -37,6 +42,9 @@ CMD_TOPIC = "thibsdarts/cam/cmd"
 DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
 # Une caméra en bas (6 h), les deux autres à un tiers du tour de chaque côté (10 h et 2 h).
 PRESET_NAMES = ["Bas", "Haut gauche", "Haut droite"]
+DETECT_FPS = 10
+# Mode test de la page /calib : détection active sans partie, pendant 10 min.
+TEST_DURATION = 600
 
 
 class Camera:
@@ -54,6 +62,9 @@ class Camera:
         self.view_time = 0.0
         self.label = None
         self.match = 0
+        self.frame = None  # dernière image pleine résolution (BGR)
+        self.frame_seq = 0
+        self.opened = 0
         self.cond = threading.Condition()
         self.thread = None
 
@@ -116,6 +127,7 @@ class Camera:
                 now = time.monotonic()
                 frames += 1
                 opened += 1
+                self.frame, self.frame_seq, self.opened = frame, self.frame_seq + 1, opened
                 if now - t0 >= 1:
                     self.fps, frames, t0 = frames / (now - t0), 0, now
                 self.size = (frame.shape[1], frame.shape[0])
@@ -139,7 +151,7 @@ class Camera:
                         self.cond.notify_all()
         finally:
             cap.release()
-            self.fps, self.size = 0.0, None
+            self.fps, self.size, self.frame, self.opened = 0.0, None, None, 0
             self._set_motion(0.0)
 
     def _update_motion(self, small, prev):
@@ -160,10 +172,16 @@ class Camera:
         if was != self.moving:
             registry.publish_motion()
 
+    @property
+    def ready(self):
+        """Image pleine résolution disponible, exposition stabilisée."""
+        return self.frame is not None and self.opened > 30
+
     def status(self):
         return {
             "id": self.id,
             "label": self.label,
+            "calibrated": registry.calibs.get(self.label) is not None,
             "recognized": self.label is not None,
             "match": self.match,
             "motion": round(self.motion, 3),
@@ -184,7 +202,69 @@ class Registry:
         self.cams = {}
         self.lock = threading.RLock()
         self.refs = None
+        self.calibs = None
         self.client = None
+        self.playing = False
+        self.test_until = 0.0
+        self.events = []  # dernières fléchettes et retraits, pour la page /calib
+        self.detector = detector.Detector(self.on_dart, self.on_takeout, log=lambda m: print(m, flush=True))
+
+    @property
+    def mode(self):
+        return "vision" if self.calibs and self.calibs.cals else "sim"
+
+    @property
+    def detecting(self):
+        return self.mode == "vision" and (self.playing or time.monotonic() < self.test_until)
+
+    def on_dart(self, x, y, info):
+        n, m = dart_at(x, y)
+        print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}", flush=True)
+        self._event({"type": "dart", "segment": segment_name(n, m), "x": round(x, 1), "y": round(y, 1),
+                     "cams": info["cams"]})
+        if self.client:
+            self.client.publish(DART_TOPIC, dart_message(n, m, x, y, source="vision"), qos=1)
+
+    def on_takeout(self):
+        self._event({"type": "takeout"})
+        if self.client:
+            self.client.publish(TAKEOUT_TOPIC, json.dumps({"ts": int(time.time() * 1000)}), qos=1)
+
+    def _event(self, e):
+        e["ts"] = int(time.time() * 1000)
+        self.events = (self.events + [e])[-20:]
+
+    def detect_loop(self):
+        """Lit les caméras calibrées à DETECT_FPS images/s et les passe au détecteur."""
+        was = False
+        while True:
+            time.sleep(1 / DETECT_FPS)
+            if not self.detecting:
+                if was:
+                    self.detector.reset()
+                was = False
+                continue
+            if not was:
+                self.detector.reset()
+                was = True
+            frames, cals = {}, {}
+            for cam in self.ordered():
+                cal = self.calibs.get(cam.label)
+                if cal is None or not cam.plugged:
+                    continue
+                cam.touch()
+                frame = cam.frame
+                if not cam.ready or frame is None:
+                    continue
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                if (gray.shape[1], gray.shape[0]) != cal.size:
+                    gray = cv2.resize(gray, cal.size)
+                frames[cam.label], cals[cam.label] = gray, cal
+            if frames:
+                try:
+                    self.detector.step(frames, cals)
+                except cv2.error as e:
+                    print(f"détection : {e}", flush=True)
 
     def ordered(self):
         with self.lock:
@@ -240,7 +320,8 @@ class Registry:
     def status(self, state):
         return json.dumps({
             "state": state,
-            "mode": "sim",
+            "mode": self.mode,
+            "detecting": self.detecting,
             "version": VERSION,
             "preview": base_url(),
             "cams": {c.id: c.label for c in self.ordered()},
@@ -301,6 +382,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path in ("/", "/calib"):
+            with open(os.path.join(os.path.dirname(__file__), "calib.html"), "rb") as f:
+                return self._send(200, f.read(), "text/html; charset=utf-8")
+        if path == "/detect":
+            return self._send(200, json.dumps(detect_status(), ensure_ascii=False).encode())
         if path == "/status":
             body = {
                 "version": VERSION,
@@ -318,21 +404,81 @@ class Handler(BaseHTTPRequestHandler):
                 return self._snapshot(cam)
             if cam and ext == "mjpg":
                 return self._stream(cam)
+        if len(parts) == 3 and parts[0] == "cam" and parts[2] in ("full.jpg", "calib.jpg"):
+            cam = registry.get(parts[1])
+            if cam:
+                return self._full(cam, overlay=parts[2] == "calib.jpg")
         self._send(404, b'{"error": "introuvable"}')
 
+    def _body(self):
+        body = json.loads(read_body(self) or b"{}")
+        if not isinstance(body, dict):
+            raise ValueError
+        return body
+
     def do_POST(self):
-        # POST /cam/<id>/name {"name": "Haut"} : la caméra garde ce nom même changée de port.
         parts = self.path.split("?")[0].strip("/").split("/")
-        cam = registry.get(parts[1]) if len(parts) == 3 and parts[0] == "cam" and parts[2] == "name" else None
-        if cam is None:
+        # POST /detect {"test": true} : détection active 10 min sans partie (page /calib).
+        if parts == ["detect"]:
+            try:
+                on = bool(self._body().get("test"))
+            except ValueError:
+                return self._send(400, b'{"error": "json"}')
+            registry.test_until = time.monotonic() + TEST_DURATION if on else 0.0
+            registry.publish_status("online")
+            return self._send(200, json.dumps(detect_status(), ensure_ascii=False).encode())
+        cam = registry.get(parts[1]) if len(parts) == 3 and parts[0] == "cam" else None
+        # POST /cam/<id>/calib {"points": [[x, y] x 5]} (pleine résolution), [] : oublie la calibration.
+        if cam is not None and parts[2] == "calib":
+            return self._calib(cam)
+        # POST /cam/<id>/name {"name": "Haut"} : la caméra garde ce nom même changée de port.
+        if cam is None or parts[2] != "name":
             return self._send(404, b'{"error": "introuvable"}')
         try:
-            name = str(json.loads(read_body(self) or b"{}").get("name") or "").strip()[:24]
+            name = str(self._body().get("name") or "").strip()[:24]
         except ValueError:
             return self._send(400, b'{"error": "nom"}')
         if not registry.rename(cam, name):
             return self._send(503, b'{"error": "camera"}')
         self._send(200, json.dumps(cam.status(), ensure_ascii=False).encode())
+
+    def _calib(self, cam):
+        if not cam.label:
+            return self._send(409, json.dumps({"error": "nomme d'abord la caméra"}, ensure_ascii=False).encode())
+        try:
+            points = self._body().get("points") or []
+            size = cam.size or (1280, 720)
+            cal = detector.Calibration(points, size) if points else None
+            if cal is not None and len(points) != len(detector.CALIB_POINTS_MM):
+                raise ValueError
+        except (ValueError, TypeError, cv2.error):
+            return self._send(400, json.dumps({"error": "il faut les 5 points"}, ensure_ascii=False).encode())
+        registry.calibs.set(cam.label, cal)
+        registry.detector.forget(cam.label)
+        registry.publish_status("online")
+        body = cam.status()
+        body["error_px"] = round(cal.error(), 1) if cal else None
+        self._send(200, json.dumps(body, ensure_ascii=False).encode())
+
+    def _full(self, cam, overlay):
+        """Image pleine résolution, avec la cible calibrée dessinée par-dessus si overlay."""
+        if not cam.plugged:
+            return self._send(503, b'{"error": "camera"}')
+        cam.touch()
+        deadline = time.monotonic() + 8
+        while not cam.ready and time.monotonic() < deadline:
+            time.sleep(0.1)
+        frame = cam.frame
+        if frame is None:
+            return self._send(503, b'{"error": "camera"}')
+        img = frame.copy()
+        cal = registry.calibs.get(cam.label)
+        if overlay and cal is not None:
+            detector.draw_board(img, cal)
+        ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 88])
+        if not ok:
+            return self._send(503, b'{"error": "camera"}')
+        self._send(200, buf.tobytes(), "image/jpeg")
 
     def _snapshot(self, cam):
         if not cam.plugged:
@@ -369,6 +515,18 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
+def detect_status():
+    return {
+        "mode": registry.mode,
+        "detecting": registry.detecting,
+        "playing": registry.playing,
+        "test": max(0, int(registry.test_until - time.monotonic())),
+        "darts": registry.detector.darts,
+        "events": registry.events,
+        "points": detector.CALIB_HELP,
+        "cams": [c.status() for c in registry.ordered()],
+    }
+
 
 def read_body(handler):
     """Corps d'une requête, avec Content-Length ou en "chunked" (le HttpClient de Dart, par défaut)."""
@@ -382,6 +540,7 @@ def read_body(handler):
             data += handler.rfile.read(size)
             handler.rfile.readline()
     return handler.rfile.read(int(handler.headers.get("Content-Length", 0) or 0))
+
 
 def local_ip():
     try:
@@ -398,11 +557,23 @@ def base_url():
 
 def main():
     registry.refs = identity.RefStore(DATA_DIR)
+    registry.calibs = detector.CalibStore(DATA_DIR)
     client = new_client("dartos-cam-vision")
     client.will_set(STATUS_TOPIC, registry.status("offline"), qos=1, retain=True)
     def on_connect(c, *_):
         c.subscribe(CMD_TOPIC, qos=1)
+        c.subscribe(STATE_TOPIC, qos=1)
         registry.publish_status("online")
+
+    def on_state(c, userdata, msg):
+        try:
+            on = bool(json.loads(msg.payload).get("playing"))
+        except (ValueError, AttributeError):
+            on = False
+        if on != registry.playing:
+            print(f"hub : partie {'en cours' if on else 'arrêtée'}", flush=True)
+            registry.playing = on
+            registry.publish_status("online")
 
     def on_power(c, userdata, msg):
         # Le hub s'éteint ou redémarre : le Pi 5 fait pareil.
@@ -431,6 +602,7 @@ def main():
 
     client.on_connect = on_connect
     client.message_callback_add(CMD_TOPIC, on_power)
+    client.message_callback_add(STATE_TOPIC, on_state)
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()
@@ -446,6 +618,7 @@ def main():
             time.sleep(3)
 
     threading.Thread(target=watch, daemon=True).start()
+    threading.Thread(target=registry.detect_loop, daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     server.daemon_threads = True
     print(f"aperçu caméras sur {base_url()}", flush=True)

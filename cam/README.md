@@ -2,7 +2,7 @@
 
 Détection des fléchettes sur le Pi 5 `dartos-cam` (Python + OpenCV, 3 caméras OV9732).
 Publie chaque fléchette sur MQTT vers le broker du hub (`dartos-hub`, port 1883).
-En attendant la vision, `simulator/` joue le rôle des caméras.
+Tant qu'aucune caméra n'est calibrée, `simulator/` joue le rôle des caméras.
 
 ## Contrat MQTT
 
@@ -12,7 +12,7 @@ QoS 1 partout. Coordonnées en mm, centre de la cible en (0, 0), x vers la droit
 | --- | --- | --- |
 | `thibsdarts/cam/dart` | cam → hub | `{"id": uuid, "ts": ms, "segment": "T20"/"D16"/"S5"/"SB"/"DB"/"MISS", "number": 0-20 ou 25, "multiplier": 0-3, "score": int, "x": mm, "y": mm, "source": "sim"/"vision"/"manual"}` (x, y optionnels) |
 | `thibsdarts/cam/takeout` | cam → hub | `{"ts": ms}` : fléchettes retirées, le hub passe au joueur suivant si le tour est fini |
-| `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Bas" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
+| `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "detecting": bool, "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Bas" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
 | `thibsdarts/hub/state` | hub → cam | retenu : `{"playing": bool, "ts": ms}` |
 | `thibsdarts/cam/cmd` | hub → cam | `{"action": "poweroff"/"reboot"/"update"/"factory-reset"}` (update : `thibsdarts-update --force`) |
 
@@ -43,6 +43,26 @@ Aperçu HTTP sur le port 8081 : `/status` (liste des caméras avec `id`, `label`
 L'`id` désigne la prise (ex. `0-2`), pas la caméra. `thibsdarts/cam/motion` signale quand une caméra
 voit bouger quelque chose (main passée devant pour la repérer). Le hub relaie tout ça aux iPhone sur
 `/api/cams` (propriétaire).
+
+## Détection des fléchettes
+
+`vision/detector.py`, lancé par le service caméras.
+
+1. **Calibration** (une fois, et à refaire si une caméra bouge) : page `http://<ip du Pi 5>:8081/calib`
+   depuis le Mac ou l'iPhone. Pour chaque caméra nommée, cliquer 5 points : le centre, puis le bord
+   extérieur du double entre 20 et 1, 6 et 10, 3 et 19, 11 et 14 (une loupe aide). "Voir la cible calibrée"
+   dessine les anneaux par-dessus l'image pour vérifier. Rangé par nom de caméra dans
+   `/data/thibsdarts/calibration.json` : la calibration suit la caméra même changée de port.
+2. **Détection** : active pendant une partie (`thibsdarts/hub/state` playing) ou 10 min avec "Tester la
+   détection". Chaque caméra calibrée garde une image de fond. Quand ça a bougé puis que tout est immobile,
+   une tache allongée par rapport au fond est une fléchette : sa pointe et sa droite sont ramenées sur la
+   cible (homographie), et les droites des caméras se croisent à la pointe. Publiée sur `thibsdarts/cam/dart`
+   avec `"source": "vision"`.
+3. **Retrait** : la cible redevient comme au début du tour, `thibsdarts/cam/takeout`.
+
+Dès qu'une caméra est calibrée, le statut passe en `"mode": "vision"` et le simulateur se tait.
+`GET /detect` donne l'état et les 20 derniers événements, `POST /detect {"test": true}` lance le test.
+Test sans caméra (cible et fléchettes de synthèse) : `python3 cam/vision/tests/test_detector.py`.
 
 ## Appairage Wi-Fi avec le hub
 

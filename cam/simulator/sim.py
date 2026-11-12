@@ -1,5 +1,6 @@
 """Simulateur de lancers : vise le T20 avec une dispersion gaussienne, 3 fléchettes par tour,
-puis retire les fléchettes. Ne lance que quand le hub annonce une partie en cours.
+puis retire les fléchettes. Ne lance que quand le hub annonce une partie en cours, et se tait dès
+qu'une caméra est calibrée (le service caméras annonce alors "mode": "vision").
 Le statut thibsdarts/cam/status est publié par le service caméras (vision/server.py)."""
 
 import json
@@ -9,7 +10,7 @@ import threading
 import time
 
 from dartlink import (
-    DART_TOPIC, MQTT_HOST, MQTT_PORT, STATE_TOPIC, TAKEOUT_TOPIC,
+    DART_TOPIC, MQTT_HOST, MQTT_PORT, STATE_TOPIC, STATUS_TOPIC, TAKEOUT_TOPIC,
     dart_at, dart_message, new_client, segment_name, target_point,
 )
 
@@ -17,14 +18,26 @@ from dartlink import (
 SPREAD = float(os.environ.get("SIM_SPREAD", "20"))
 
 playing = threading.Event()
+vision = threading.Event()
 
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print(f"connecté à {MQTT_HOST} ({reason_code})", flush=True)
     client.subscribe(STATE_TOPIC, qos=1)
+    client.subscribe(STATUS_TOPIC, qos=1)
 
 
 def on_message(client, userdata, msg):
+    if msg.topic == STATUS_TOPIC:
+        try:
+            on = json.loads(msg.payload).get("mode") == "vision"
+        except (ValueError, AttributeError):
+            return
+        if on != vision.is_set():
+            print("vraie détection active : simulateur en pause" if on else "pas de caméra calibrée : simulateur actif",
+                  flush=True)
+        (vision.set if on else vision.clear)()
+        return
     try:
         on = bool(json.loads(msg.payload).get("playing"))
     except (ValueError, AttributeError):
@@ -51,8 +64,10 @@ def main():
     while True:
         playing.wait()
         time.sleep(3)
+        if vision.is_set():
+            continue
         darts = 0
-        while darts < 3 and playing.is_set():
+        while darts < 3 and playing.is_set() and not vision.is_set():
             throw(client)
             darts += 1
             if darts < 3:

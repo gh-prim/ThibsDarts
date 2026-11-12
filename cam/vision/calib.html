@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThibsDarts caméras</title>
+<style>
+  :root { --bg: #16171a; --card: #22242a; --line: #34373f; --text: #ecebe8; --dim: #9a9ca3; --accent: #ff7a3d; --ok: #d8f23a; --bad: #ff4d6d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width: 1320px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0; }
+  .dim { color: var(--dim); }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 18px; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: var(--line); font-size: 13px; }
+  .pill.ok { background: var(--ok); color: #111; }
+  .pill.warn { background: var(--accent); color: #111; }
+  button, select { font: inherit; color: var(--text); background: var(--line); border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  button.main { background: var(--accent); color: #111; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: default; }
+  .cam { background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+  .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .wrap { position: relative; }
+  canvas.view { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; cursor: crosshair; touch-action: manipulation; }
+  canvas.loupe { position: absolute; top: 8px; right: 8px; width: 200px; height: 200px; border: 2px solid var(--accent); border-radius: 50%; display: none; pointer-events: none; }
+  .step { margin: 8px 0; }
+  .step b { color: var(--accent); }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  #events { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  #events li { background: var(--card); border-radius: 8px; padding: 6px 10px; }
+  #events li.big { font-size: 22px; font-weight: 700; color: var(--ok); }
+  .err { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Caméras ThibsDarts</h1>
+  <div class="dim">Calibration et test de la détection des fléchettes.</div>
+  <div class="bar">
+    <span class="pill" id="mode">...</span>
+    <span class="pill" id="det">...</span>
+    <button id="test" class="main">Tester la détection</button>
+    <span class="dim" id="testinfo"></span>
+  </div>
+  <section>
+    <h2>Dernières fléchettes</h2>
+    <p class="dim" id="noev">Rien pour l'instant. Lance une fléchette pendant une partie ou en mode test.</p>
+    <ul id="events"></ul>
+  </section>
+  <p></p>
+  <div id="cams"></div>
+</main>
+<script>
+const PRESETS = ["Bas", "Haut gauche", "Haut droite"];
+let HELP = [];
+const state = {};  // id -> {points, img, overlay}
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+function camCard(c) {
+  const el = document.createElement("div");
+  el.className = "cam";
+  el.id = "cam-" + c.id;
+  el.innerHTML = `
+    <div class="head">
+      <h2 class="name"></h2>
+      <span class="pill cal"></span>
+      <select class="rename"><option value="">Nommer...</option>${PRESETS.map(p => `<option>${p}</option>`).join("")}</select>
+    </div>
+    <div class="step"></div>
+    <div class="wrap"><canvas class="view" width="1280" height="720"></canvas><canvas class="loupe" width="200" height="200"></canvas></div>
+    <div class="tools">
+      <button class="undo">Annuler le dernier point</button>
+      <button class="reset">Recommencer</button>
+      <button class="save main" disabled>Enregistrer</button>
+      <button class="check">Voir la cible calibrée</button>
+      <button class="refresh">Nouvelle image</button>
+      <button class="forget">Effacer la calibration</button>
+      <span class="msg dim"></span>
+    </div>`;
+  const s = state[c.id] = { points: [], img: null, overlay: false };
+  const view = el.querySelector(".view"), loupe = el.querySelector(".loupe");
+  const msg = t => el.querySelector(".msg").textContent = t;
+
+  s.load = (overlay) => {
+    s.overlay = overlay;
+    const img = new Image();
+    img.onload = () => { s.img = img; view.width = img.naturalWidth; view.height = img.naturalHeight; draw(); };
+    img.onerror = () => msg("image indisponible");
+    img.src = `/cam/${c.id}/${overlay ? "calib" : "full"}.jpg?t=${Date.now()}`;
+  };
+  function draw() {
+    const g = view.getContext("2d");
+    if (s.img) g.drawImage(s.img, 0, 0);
+    if (!s.overlay) s.points.forEach((p, i) => {
+      g.strokeStyle = "#ff7a3d"; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(p[0] - 12, p[1]); g.lineTo(p[0] + 12, p[1]); g.moveTo(p[0], p[1] - 12); g.lineTo(p[0], p[1] + 12); g.stroke();
+      g.fillStyle = "#ff7a3d"; g.font = "bold 20px sans-serif"; g.fillText(i + 1, p[0] + 8, p[1] - 8);
+    });
+    const n = s.points.length;
+    el.querySelector(".step").innerHTML = s.overlay
+      ? "La cible jaune doit tomber pile sur les anneaux et les secteurs. Sinon, recommence."
+      : n < HELP.length ? `Point ${n + 1} sur ${HELP.length} : clique sur le <b>${HELP[n]}</b>.` : "Les 5 points sont placés : enregistre.";
+    el.querySelector(".save").disabled = n !== HELP.length || s.overlay;
+  }
+  s.draw = draw;
+  function pos(e) {
+    const r = view.getBoundingClientRect();
+    return [(e.clientX - r.left) * view.width / r.width, (e.clientY - r.top) * view.height / r.height];
+  }
+  view.addEventListener("click", e => {
+    if (s.overlay) { s.points = []; s.load(false); return; }
+    if (s.points.length >= HELP.length) return;
+    s.points.push(pos(e).map(v => Math.round(v * 10) / 10));
+    draw();
+  });
+  view.addEventListener("mousemove", e => {
+    if (!s.img) return;
+    const [x, y] = pos(e), z = 4, g = loupe.getContext("2d");
+    loupe.style.display = "block";
+    g.imageSmoothingEnabled = false;
+    g.drawImage(view, x - 100 / z, y - 100 / z, 200 / z, 200 / z, 0, 0, 200, 200);
+    g.strokeStyle = "#d8f23a"; g.beginPath(); g.moveTo(100, 80); g.lineTo(100, 120); g.moveTo(80, 100); g.lineTo(120, 100); g.stroke();
+  });
+  view.addEventListener("mouseleave", () => loupe.style.display = "none");
+  el.querySelector(".undo").onclick = () => { if (s.overlay) s.load(false); s.points.pop(); draw(); };
+  el.querySelector(".reset").onclick = () => { s.points = []; s.load(false); };
+  el.querySelector(".refresh").onclick = () => s.load(s.overlay);
+  el.querySelector(".check").onclick = () => s.load(true);
+  el.querySelector(".save").onclick = async () => {
+    try {
+      const r = await api(`/cam/${c.id}/calib`, { points: s.points });
+      msg(`Enregistré (écart ${r.error_px} px).`);
+      s.load(true);
+      refresh();
+    } catch (e) { msg("Erreur : " + e.message); }
+  };
+  el.querySelector(".forget").onclick = async () => {
+    if (!confirm("Effacer la calibration de cette caméra ?")) return;
+    try { await api(`/cam/${c.id}/calib`, { points: [] }); s.points = []; s.load(false); refresh(); } catch (e) { msg("Erreur : " + e.message); }
+  };
+  el.querySelector(".rename").onchange = async e => {
+    if (!e.target.value) return;
+    try { await api(`/cam/${c.id}/name`, { name: e.target.value }); refresh(); } catch (err) { msg("Erreur : " + err.message); }
+    e.target.value = "";
+  };
+  s.load(!!c.calibrated);
+  return el;
+}
+
+function update(c) {
+  const el = document.getElementById("cam-" + c.id);
+  el.querySelector(".name").textContent = c.label || "Caméra non reconnue (" + c.id + ")";
+  const cal = el.querySelector(".cal");
+  cal.textContent = !c.label ? "à nommer" : c.calibrated ? "calibrée" : "à calibrer";
+  cal.className = "pill cal " + (!c.label ? "warn" : c.calibrated ? "ok" : "warn");
+}
+
+async function refresh() {
+  let d;
+  try { d = await api("/detect"); } catch (e) { document.getElementById("det").textContent = "Pi 5 injoignable"; return; }
+  HELP = d.points;
+  document.getElementById("mode").textContent = d.mode === "vision" ? "Vraie détection" : "Simulateur (aucune caméra calibrée)";
+  document.getElementById("mode").className = "pill " + (d.mode === "vision" ? "ok" : "warn");
+  document.getElementById("det").textContent = d.detecting ? `Détection active, ${d.darts} fléchette(s) en cible` : d.playing ? "Partie en cours" : "Détection en pause (pas de partie)";
+  document.getElementById("test").textContent = d.test ? "Arrêter le test" : "Tester la détection";
+  document.getElementById("test").dataset.on = d.test ? "1" : "";
+  document.getElementById("testinfo").textContent = d.test ? `test encore ${Math.ceil(d.test / 60)} min` : "";
+  const box = document.getElementById("cams");
+  for (const c of d.cams) {
+    if (!document.getElementById("cam-" + c.id)) box.appendChild(camCard(c));
+    update(c);
+    state[c.id].draw();
+  }
+  for (const el of [...box.children]) if (!d.cams.some(c => "cam-" + c.id === el.id)) el.remove();
+  const ev = document.getElementById("events");
+  document.getElementById("noev").style.display = d.events.length ? "none" : "";
+  ev.innerHTML = d.events.slice().reverse().map((e, i) => e.type === "dart"
+    ? `<li class="${i === 0 ? "big" : ""}">${e.segment} <span class="dim">(${e.x}, ${e.y}) ${Object.keys(e.cams).length} cam.</span></li>`
+    : `<li class="dim">retrait</li>`).join("");
+}
+
+document.getElementById("test").onclick = async e => {
+  await api("/detect", { test: !e.target.dataset.on }).catch(() => {});
+  refresh();
+};
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

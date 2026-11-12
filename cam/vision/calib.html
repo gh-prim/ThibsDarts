@@ -58,8 +58,41 @@
 <script>
 const PRESETS = ["Bas", "Haut gauche", "Haut droite"];
 const SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
-const RINGS = [6.35, 15.9, 99, 107, 162, 170];
-let HELP = [], BOARD = [];
+let HELP = [], SPEC = [], STD = {}, LEGACY = 5;
+
+function specPoint([key, angle], rings) {
+  const r = key === "center" ? 0 : key === "double_out" ? 170 : rings[key], a = angle * Math.PI / 180;
+  return [r * Math.sin(a), -r * Math.cos(a)];
+}
+
+// Même calcul que detector.Calibration : homographie + rayons des bandes mesurés (moyenne pondérée).
+function fit(points) {
+  const n = points.length, spec = SPEC.slice(0, n), rings = { ...STD };
+  if (n < 4) return null;
+  if (n < LEGACY) {
+    const H = homography(spec.map(s => specPoint(s, rings)), points);
+    return H && { H, rings };
+  }
+  let board;
+  for (let it = 0; it < 6; it++) {
+    const idx = spec.map((s, j) => j).filter(j => it > 0 || ["center", "double_out"].includes(spec[j][0]));
+    board = spec.map(s => specPoint(s, rings));
+    const back = homography(idx.map(j => points[j]), idx.map(j => board[j]));
+    if (!back) return null;
+    const acc = {};
+    spec.forEach(([key], j) => {
+      const p = points[j], b = back(p), b1 = back([p[0], p[1] + 1]);
+      const w = 1 / (Math.hypot(b1[0] - b[0], b1[1] - b[1]) + 1e-6) ** 2;
+      const a = acc[key] = acc[key] || [0, 0];
+      a[0] += Math.hypot(b[0], b[1]) * w; a[1] += w;
+    });
+    const scale = 170 / (acc.double_out[0] / acc.double_out[1]);
+    for (const k in STD) if (acc[k]) rings[k] = acc[k][0] / acc[k][1] * scale;
+  }
+  board = spec.map(s => specPoint(s, rings));
+  const H = homography(board, points);
+  return H && { H, rings };
+}
 const state = {};  // id -> carte
 
 async function api(path, body) {
@@ -132,11 +165,13 @@ function camCard(c) {
     const g = clean.getContext("2d");
     if (s.img) g.drawImage(s.img, 0, 0); else { g.fillStyle = "#000"; g.fillRect(0, 0, view.width, view.height); }
     const n = s.points.length;
-    if (n >= 4 && el.querySelector(".show").checked) {
-      const H = homography(BOARD.slice(0, n), s.points);
-      if (H) {
+    const base = LEGACY, f = fit(s.points);
+    s.rings = f && f.rings;
+    if (f && el.querySelector(".show").checked) {
+      const H = f.H, rings = [6.35, 15.9, f.rings.triple_in, f.rings.triple_out, f.rings.double_in, 170];
+      {
         g.strokeStyle = "rgba(216, 242, 58, .9)"; g.lineWidth = 1;
-        for (const r of RINGS) {
+        for (const r of rings) {
           g.beginPath();
           for (let k = 0; k <= 180; k++) { const t = k / 180 * 2 * Math.PI, [u, v] = H([r * Math.sin(t), -r * Math.cos(t)]); k ? g.lineTo(u, v) : g.moveTo(u, v); }
           g.stroke();
@@ -156,13 +191,16 @@ function camCard(c) {
     s.points.forEach((p, i) => {
       const g = gv;
       g.strokeStyle = i === s.sel ? "#ff4d6d" : "#ff7a3d"; g.lineWidth = 2;
-      g.beginPath(); g.arc(p[0], p[1], 10, 0, 2 * Math.PI); g.moveTo(p[0] - 4, p[1]); g.lineTo(p[0] + 4, p[1]); g.moveTo(p[0], p[1] - 4); g.lineTo(p[0], p[1] + 4); g.stroke();
-      g.fillStyle = g.strokeStyle; g.font = "bold 18px sans-serif"; g.fillText(i + 1, p[0] + 12, p[1] - 12);
+      // Petits marqueurs : les bords des bandes sont à quelques pixels les uns des autres.
+      g.lineWidth = 1.5;
+      g.beginPath(); g.arc(p[0], p[1], 5, 0, 2 * Math.PI); g.stroke();
+      if (i === s.sel) { g.fillStyle = g.strokeStyle; g.font = "bold 16px sans-serif"; g.fillText(i + 1, p[0] + 8, p[1] - 8); }
     });
+    const ringInfo = s.rings && n > base ? ` Bandes mesurées : triple ${s.rings.triple_in.toFixed(1)} à ${s.rings.triple_out.toFixed(1)} mm, double ${s.rings.double_in.toFixed(1)} à 170 mm.` : "";
     el.querySelector(".step").innerHTML = n < HELP.length
-      ? `Point ${n + 1} sur ${HELP.length} : clique sur le <b>${HELP[n]}</b>.`
-      : `Ajuste : fais glisser un point (ou choisis-le puis flèches, 0,5 px par appui) jusqu'à ce que les anneaux jaunes collent aux bandes double et triple.${s.sel >= 0 ? ` Point choisi : <b>${s.sel + 1}, ${HELP[s.sel]}</b>.` : ""}`;
-    el.querySelector(".save").disabled = n !== HELP.length || !s.dirty;
+      ? `Point ${n + 1} sur ${HELP.length} : clique sur le <b>${HELP[n]}</b>.${n >= base ? " Ces points règlent l'épaisseur des bandes : vise pile le bord, avec la loupe." : ""}${ringInfo}`
+      : `Ajuste : fais glisser un point (ou choisis-le puis flèches, 0,5 px par appui) jusqu'à ce que les anneaux jaunes collent aux bandes double et triple.${ringInfo}${s.sel >= 0 ? ` Point choisi : <b>${s.sel + 1}, ${HELP[s.sel]}</b>.` : ""}`;
+    el.querySelector(".save").disabled = (n !== HELP.length && n !== base) || !s.dirty;
   }
   s.draw = draw;
 
@@ -191,7 +229,9 @@ function camCard(c) {
   }
   let drag = null;
   view.addEventListener("pointerdown", e => {
-    const p = pos(e), i = nearest(p);
+    // Tant que tous les points ne sont pas placés, un clic pose le point suivant (les bords des bandes
+    // sont trop proches pour deviner qu'on voulait reprendre un point). Ensuite, un clic reprend le plus proche.
+    const p = pos(e), i = s.points.length < HELP.length ? -1 : nearest(p);
     if (i >= 0) {
       drag = { i, dx: s.points[i][0] - p[0], dy: s.points[i][1] - p[1] };
       s.sel = i;
@@ -279,7 +319,7 @@ function update(c) {
 async function refresh() {
   let d;
   try { d = await api("/detect"); } catch (e) { document.getElementById("det").textContent = "Pi 5 injoignable"; return; }
-  HELP = d.points; BOARD = d.board;
+  HELP = d.points; SPEC = d.spec; STD = d.rings_standard; LEGACY = d.legacy.length;
   document.getElementById("mode").textContent = d.mode === "vision" ? "Vraie détection" : "Simulateur (aucune caméra calibrée)";
   document.getElementById("mode").className = "pill " + (d.mode === "vision" ? "ok" : "warn");
   document.getElementById("det").textContent = d.detecting ? `Détection active, ${d.darts} fléchette(s) en cible` : d.playing ? "Partie en cours" : "Détection en pause (pas de partie)";

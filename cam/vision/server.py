@@ -219,7 +219,7 @@ class Registry:
         return self.mode == "vision" and (self.playing or time.monotonic() < self.test_until)
 
     def on_dart(self, x, y, info):
-        n, m = dart_at(x, y)
+        n, m = dart_at(x, y, self.calibs.rings())
         print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}", flush=True)
         self._event({"type": "dart", "segment": segment_name(n, m), "x": round(x, 1), "y": round(y, 1),
                      "cams": info["cams"]})
@@ -450,10 +450,9 @@ class Handler(BaseHTTPRequestHandler):
             points = self._body().get("points") or []
             size = cam.size or (1280, 720)
             cal = detector.Calibration(points, size) if points else None
-            if cal is not None and len(points) != len(detector.CALIB_POINTS_MM):
-                raise ValueError
         except (ValueError, TypeError, cv2.error):
-            return self._send(400, json.dumps({"error": "il faut les 5 points"}, ensure_ascii=False).encode())
+            return self._send(400, json.dumps({"error": "points incohérents (5 ou 8 points, sur les bonnes bandes)"},
+                                              ensure_ascii=False).encode())
         registry.calibs.set(cam.label, cal)
         registry.detector.forget(cam.label)
         registry.publish_status("online")
@@ -525,7 +524,10 @@ def detect_status():
         "darts": registry.detector.darts,
         "events": registry.events,
         "points": detector.CALIB_HELP,
-        "board": detector.CALIB_POINTS_MM,
+        "spec": detector.CALIB_SPEC,
+        "legacy": detector.LEGACY_SPEC,
+        "rings": registry.calibs.rings(),
+        "rings_standard": detector.STANDARD_RINGS,
         "cams": [c.status() for c in registry.ordered()],
     }
 

@@ -19,15 +19,27 @@ import time
 import cv2
 import numpy as np
 
-# Rayon du bord extérieur du double, en mm (dartlink.R_DOUBLE_OUT).
+# Rayon du bord extérieur du double, en mm (dartlink.R_DOUBLE_OUT) : il fixe l'échelle.
 R_EDGE = 170.0
-# Points à cliquer, dans l'ordre : centre puis bord extérieur du double entre 20/1, 6/10, 3/19, 11/14.
-CALIB_ANGLES = [9, 99, 189, 279]
-CALIB_POINTS_MM = [(0.0, 0.0)] + [
-    (R_EDGE * math.sin(math.radians(a)), -R_EDGE * math.cos(math.radians(a))) for a in CALIB_ANGLES
-]
-CALIB_HELP = ["centre (bull)", "double entre 20 et 1", "double entre 6 et 10", "double entre 3 et 19",
-              "double entre 11 et 14"]
+# Rayons officiels des bords des bandes. La cible de la maison peut différer : la calibration les mesure.
+STANDARD_RINGS = {"double_in": 162.0, "triple_out": 107.0, "triple_in": 99.0}
+RING_LABELS = [("double_out", "extérieur du double"), ("double_in", "intérieur du double"),
+               ("triple_out", "extérieur du triple"), ("triple_in", "intérieur du triple")]
+# Repères : les fils entre 20/1, 6/10, 3/19 et 11/14 (angle depuis le haut, sens horaire).
+CALIB_ANGLES = [(9, "20 et 1"), (99, "6 et 10"), (189, "3 et 19"), (279, "11 et 14")]
+# Points à cliquer, dans l'ordre : le centre et l'extérieur du double aux 4 repères (la cible se place),
+# puis à chaque repère l'intérieur du double et les 2 bords du triple (l'épaisseur des bandes).
+LEGACY_SPEC = [("center", 0)] + [("double_out", a) for a, _ in CALIB_ANGLES]
+CALIB_SPEC = LEGACY_SPEC + [(key, a) for a, _ in CALIB_ANGLES for key, _ in RING_LABELS[1:]]
+_LABELS, _WIRES = dict(RING_LABELS), dict(CALIB_ANGLES)
+CALIB_HELP = ["centre (bull)"] + [f"{_LABELS[k]} entre {_WIRES[a]}" for k, a in CALIB_SPEC[1:]]
+
+
+def spec_point(key, angle, rings):
+    r = 0.0 if key == "center" else R_EDGE if key == "double_out" else rings[key]
+    a = math.radians(angle)
+    return (r * math.sin(a), -r * math.cos(a))
+
 
 # Direction de chaque caméra vue du centre de la cible (x vers la droite, y vers le bas).
 PRESET_DIRS = {
@@ -52,11 +64,36 @@ class Calibration:
     def __init__(self, points, size=(1280, 720)):
         self.points = [tuple(map(float, p)) for p in points]
         self.size = tuple(int(v) for v in size)
+        spec = {len(CALIB_SPEC): CALIB_SPEC, len(LEGACY_SPEC): LEGACY_SPEC}.get(len(self.points))
+        if spec is None:
+            raise ValueError("nombre de points")
+        self.spec = spec
         img = np.float32(self.points)
-        board = np.float32(CALIB_POINTS_MM[:len(img)])
-        self.H, _ = cv2.findHomography(img, board, 0)
-        if self.H is None:
-            raise ValueError("points de calibration incohérents")
+        # Homographie et rayons des bandes ajustés ensemble. D'abord le centre et l'extérieur du double
+        # (rayon connu) ; on mesure chaque bande (moyenne des repères), puis on refait l'homographie avec
+        # tous les points et ces rayons, quelques fois.
+        self.rings = dict(STANDARD_RINGS)
+        sure = np.array([k in ("center", "double_out") for k, _ in spec])
+        for i in range(6):
+            board = np.float32([spec_point(k, a, self.rings) for k, a in spec])
+            use = sure if i == 0 else np.ones(len(spec), bool)
+            self.H, _ = cv2.findHomography(img[use], board[use], 0)
+            if self.H is None:
+                raise ValueError("points de calibration incohérents")
+            # Moyenne pondérée : un repère loin de la caméra (beaucoup de mm par pixel) compte moins.
+            radii = {}
+            for (key, _), p in zip(spec, self.points):
+                mm_per_px = np.linalg.norm(self.to_board((p[0], p[1] + 1)) - self.to_board(p)) + 1e-6
+                radii.setdefault(key, []).append((float(np.linalg.norm(self.to_board(p))), 1 / mm_per_px ** 2))
+            mean = {k: sum(r * w for r, w in v) / sum(w for _, w in v) for k, v in radii.items()}
+            scale = R_EDGE / mean["double_out"]
+            for key in STANDARD_RINGS:
+                if key in mean:
+                    self.rings[key] = float(mean[key] * scale)
+        for key, std in STANDARD_RINGS.items():
+            if abs(self.rings[key] - std) > 25:
+                raise ValueError(f"bande {key} mal placée")
+        self.board = board
         self.Hinv = np.linalg.inv(self.H)
         w, h = self.size
         f = math.hypot(w, h) / 2 / math.tan(math.radians(50))  # objectif 100° en diagonale
@@ -68,6 +105,9 @@ class Calibration:
         if ok:
             R, _ = cv2.Rodrigues(rvec)
             self.cam_pos = (-R.T @ tvec).ravel()
+
+    def ring_radii(self):
+        return (6.35, 15.9, self.rings["triple_in"], self.rings["triple_out"], self.rings["double_in"], R_EDGE)
 
     def to_board(self, pt):
         p = self.H @ np.float64([pt[0], pt[1], 1.0])
@@ -92,10 +132,11 @@ class Calibration:
     def error(self):
         """Écart moyen (px) entre les points cliqués et la cible reprojetée."""
         return float(np.mean([np.linalg.norm(self.to_image(b) - np.float64(p))
-                              for p, b in zip(self.points, CALIB_POINTS_MM)]))
+                              for p, b in zip(self.points, self.board)]))
 
     def to_json(self):
-        return {"points": [list(p) for p in self.points], "size": list(self.size)}
+        return {"points": [list(p) for p in self.points], "size": list(self.size),
+                "rings": {k: round(v, 1) for k, v in self.rings.items()}}
 
 
 class CalibStore:
@@ -117,6 +158,13 @@ class CalibStore:
     def get(self, name):
         return self.cals.get(name) if name else None
 
+    def rings(self):
+        """Rayons des bandes de la cible : moyenne des caméras qui les ont mesurés."""
+        measured = [c.rings for c in self.cals.values() if c.spec is CALIB_SPEC]
+        if not measured:
+            return dict(STANDARD_RINGS)
+        return {k: float(np.mean([m[k] for m in measured])) for k in STANDARD_RINGS}
+
     def set(self, name, cal):
         if cal is None:
             self.cals.pop(name, None)
@@ -132,7 +180,7 @@ class CalibStore:
 def draw_board(img, cal, color=(0, 255, 255)):
     """Dessine les anneaux et les secteurs de la cible vus par la caméra (pour vérifier la calibration)."""
     sectors = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
-    for r in (6.35, 15.9, 99.0, 107.0, 162.0, 170.0):
+    for r in cal.ring_radii():
         pts = [cal.to_image((r * math.sin(t), -r * math.cos(t))) for t in np.linspace(0, 2 * math.pi, 120)]
         cv2.polylines(img, [np.int32(pts)], True, color, 1, cv2.LINE_AA)
     for i in range(20):

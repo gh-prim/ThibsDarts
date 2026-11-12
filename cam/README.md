@@ -12,7 +12,7 @@ QoS 1 partout. Coordonnées en mm, centre de la cible en (0, 0), x vers la droit
 | --- | --- | --- |
 | `thibsdarts/cam/dart` | cam → hub | `{"id": uuid, "ts": ms, "segment": "T20"/"D16"/"S5"/"SB"/"DB"/"MISS", "number": 0-20 ou 25, "multiplier": 0-3, "score": int, "x": mm, "y": mm, "source": "sim"/"vision"/"manual"}` (x, y optionnels) |
 | `thibsdarts/cam/takeout` | cam → hub | `{"ts": ms}` : fléchettes retirées, le hub passe au joueur suivant si le tour est fini |
-| `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Haut" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
+| `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Bas" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
 | `thibsdarts/hub/state` | hub → cam | retenu : `{"playing": bool, "ts": ms}` |
 | `thibsdarts/cam/cmd` | hub → cam | `{"action": "poweroff"/"reboot"/"update"/"factory-reset"}` (update : `thibsdarts-update --force`) |
 
@@ -33,13 +33,13 @@ Python 3 + `python3-paho-mqtt` (paquets apt). Hôte du broker : `MQTT_HOST` (dé
 
 Les 3 caméras (Realtek 0bda:5844) sont identiques jusqu'au numéro de série et aux descripteurs USB :
 rien dans le matériel ne les distingue. `vision/identity.py` les reconnaît donc à leur vue : quand le
-propriétaire nomme une caméra ("Haut"), une image de référence est gardée dans `/data/thibsdarts/cameras/`
+propriétaire nomme une caméra ("Bas"), une image de référence est gardée dans `/data/thibsdarts/cameras/`
 (liste dans `cameras.json`). Chaque caméra branchée est comparée aux références (points ORB, homographie
 RANSAC, meilleure répartition des noms) et prend le nom qui lui correspond. Une caméra qui ne ressemble à
 aucune référence est "non reconnue". Ça ne marche bien qu'une fois les caméras fixées autour de la cible.
 
 Aperçu HTTP sur le port 8081 : `/status` (liste des caméras avec `id`, `label`, `moving`...),
-`/cam/<id>.mjpg` (flux 640x360, ~12 i/s), `/cam/<id>.jpg`, `POST /cam/<id>/name {"name": "Haut"}`.
+`/cam/<id>.mjpg` (flux 640x360, ~12 i/s), `/cam/<id>.jpg`, `POST /cam/<id>/name {"name": "Bas"}`.
 L'`id` désigne la prise (ex. `0-2`), pas la caméra. `thibsdarts/cam/motion` signale quand une caméra
 voit bouger quelque chose (main passée devant pour la repérer). Le hub relaie tout ça aux iPhone sur
 `/api/cams` (propriétaire).

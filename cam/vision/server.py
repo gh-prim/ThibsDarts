@@ -35,7 +35,8 @@ MOTION_TOPIC = "thibsdarts/cam/motion"
 CMD_TOPIC = "thibsdarts/cam/cmd"
 # DARTOS_DRY_POWER=1 : on note la demande d'extinction sans éteindre (tests).
 DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
-PRESET_NAMES = ["Haut", "Bas gauche", "Bas droite", "Gauche", "Droite"]
+# Une caméra en bas (6 h), les deux autres à un tiers du tour de chaque côté (10 h et 2 h).
+PRESET_NAMES = ["Bas", "Haut gauche", "Haut droite"]
 
 
 class Camera:

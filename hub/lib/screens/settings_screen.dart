@@ -275,8 +275,12 @@ mixin _CamPolling<T extends StatefulWidget> on State<T> {
     if (base == null) return;
     try {
       final req = await _http.postUrl(base.resolve('/cam/$cam/name'));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({'name': name}));
+      // Longueur annoncée : sans elle, Dart envoie en "chunked" et le Pi 5 lit un nom vide.
+      final body = utf8.encode(jsonEncode({'name': name}));
+      req.headers
+        ..contentType = ContentType.json
+        ..contentLength = body.length;
+      req.add(body);
       await (await req.close()).drain<void>();
     } catch (_) {}
     await _poll();

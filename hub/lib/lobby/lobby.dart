@@ -334,8 +334,12 @@ class Lobby extends ChangeNotifier {
     try {
       final out = req.method == 'POST' ? await client.postUrl(target) : await client.getUrl(target);
       if (req.method == 'POST') {
-        out.headers.contentType = ContentType.json;
-        out.write(jsonEncode(await _body(req)));
+        // Longueur annoncée : sans elle, Dart envoie en "chunked" et le Pi 5 (http.server) lit un corps vide.
+        final body = utf8.encode(jsonEncode(await _body(req)));
+        out.headers
+          ..contentType = ContentType.json
+          ..contentLength = body.length;
+        out.add(body);
       }
       final up = await out.close();
       res.statusCode = up.statusCode;

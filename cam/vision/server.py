@@ -411,8 +411,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b'{"error": "introuvable"}')
 
     def _body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        body = json.loads(self.rfile.read(length) or b"{}")
+        body = json.loads(read_body(self) or b"{}")
         if not isinstance(body, dict):
             raise ValueError
         return body
@@ -527,6 +526,20 @@ def detect_status():
         "points": detector.CALIB_HELP,
         "cams": [c.status() for c in registry.ordered()],
     }
+
+
+def read_body(handler):
+    """Corps d'une requête, avec Content-Length ou en "chunked" (le HttpClient de Dart, par défaut)."""
+    if "chunked" in handler.headers.get("Transfer-Encoding", "").lower():
+        data = b""
+        while True:
+            size = int(handler.rfile.readline().split(b";")[0].strip() or b"0", 16)
+            if size == 0:
+                handler.rfile.readline()
+                return data
+            data += handler.rfile.read(size)
+            handler.rfile.readline()
+    return handler.rfile.read(int(handler.headers.get("Content-Length", 0) or 0))
 
 
 def local_ip():

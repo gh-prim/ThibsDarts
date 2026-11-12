@@ -1,7 +1,7 @@
 """Reconnaître une caméra à ce qu'elle voit.
 
 Les 3 caméras sont identiques jusqu'au numéro de série : rien dans le matériel ne les distingue.
-Quand le propriétaire nomme une caméra ("Haut"), on garde une image de référence de sa vue.
+Quand le propriétaire nomme une caméra ("Bas"), on garde une image de référence de sa vue.
 Ensuite chaque caméra branchée est comparée aux références (points ORB + homographie) et
 reçoit le nom de celle qui lui ressemble le plus, quel que soit le port USB.
 Ça ne marche bien qu'avec des caméras fixées autour de la cible.

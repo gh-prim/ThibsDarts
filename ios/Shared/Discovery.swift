@@ -21,6 +21,9 @@ enum Discovery {
                 hosts += (1...254).map { "\(prefix).\($0)" }.filter { $0 != ip }
             }
         }
+        // Le hub se nomme dartos-hub sur le réseau : on le tente en premier (mDNS),
+        // le balayage /24 reste pour les autres cibles ou un nom changé.
+        hosts.insert("dartos-hub.local", at: 0)
         let urls = hosts.compactMap { URL(string: "http://\($0):8420") }
         return await withTaskGroup(of: FoundPi?.self) { group in
             var out: [FoundPi] = []

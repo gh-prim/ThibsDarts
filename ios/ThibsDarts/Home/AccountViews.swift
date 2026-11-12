@@ -323,7 +323,13 @@ struct CibleFinder: View {
 
     private func search() async {
         searching = true
-        found = await Discovery.scan()
+        // Au premier lancement, iOS demande l'accès au réseau local : tant que la
+        // question est affichée, tout échoue. On réessaie donc quelques fois.
+        for attempt in 0..<4 {
+            found = await Discovery.scan()
+            if !found.isEmpty || Task.isCancelled { break }
+            if attempt < 3 { try? await Task.sleep(for: .seconds(2)) }
+        }
         searching = false
         if found.count == 1 { onFound(found[0].base) }
     }

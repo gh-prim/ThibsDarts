@@ -93,7 +93,7 @@ void main() {
     test('au hasard : scores possibles dans la plage', () {
       final g = CheckoutDrill.random('Thibs', range: CheckoutRange.big, random: math.Random(3));
       for (final n in g.targets) {
-        expect(n, inInclusiveRange(121, 170));
+        expect(n, inInclusiveRange(111, 170));
         expect(suggestCheckout(n), isNotNull);
       }
     });

@@ -205,23 +205,7 @@ class Lobby extends ChangeNotifier {
     return started;
   }
 
-  String get label {
-    final c = config;
-    if (c == null) return '';
-    if (c.mode != null) {
-      return switch (c.mode!) {
-        GameMode.cricket => 'Cricket · 20 à 15 et bull',
-        GameMode.clock => 'Around the clock · De 1 à 20',
-        GameMode.shanghai => 'Shanghai · 7 manches',
-        GameMode.killer => 'Killer · 3 vies',
-        GameMode.halveIt => 'Halve-it · 9 manches',
-        GameMode.bobs27 => "Bob's 27 · D1 à D20 puis bull",
-      };
-    }
-    final out = c.doubleOut ? 'Double sortie' : 'Sortie simple';
-    final legs = c.legsToWin == 1 ? '1 manche' : '${c.legsToWin} manches gagnantes';
-    return '${c.startScore} · $out · $legs';
-  }
+  String get label => config?.subtitle ?? '';
 
   Map<String, Object?> _json() => {
     'state': state.name,

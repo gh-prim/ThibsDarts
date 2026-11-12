@@ -24,6 +24,9 @@ class Celebration extends StatefulWidget {
     this.copy,
     this.stats = const [],
     this.onAgain,
+    this.againLabel = 'Rejouer',
+    this.extraLabel,
+    this.onExtra,
     this.homeLabel = 'Accueil',
     this.onHome,
     this.onTap,
@@ -39,6 +42,11 @@ class Celebration extends StatefulWidget {
   final String? copy;
   final List<CelebrationStat> stats;
   final VoidCallback? onAgain;
+  final String againLabel;
+
+  /// Bouton en plus entre Rejouer et la sortie (robot : "Rester au 60").
+  final String? extraLabel;
+  final VoidCallback? onExtra;
 
   /// Texte du bouton de sortie ("Suite du tournoi").
   final String homeLabel;
@@ -78,6 +86,8 @@ class _CelebrationState extends State<Celebration> with SingleTickerProviderStat
       child: child,
     );
   }
+
+  double get _w => widget.onExtra != null ? 220 : 240;
 
   @override
   Widget build(BuildContext context) {
@@ -144,16 +154,26 @@ class _CelebrationState extends State<Celebration> with SingleTickerProviderStat
                       children: [
                         if (widget.onAgain != null)
                           SizedBox(
-                            width: 240,
+                            width: _w,
                             child: TdButton(
-                              label: 'Rejouer',
+                              label: widget.againLabel,
                               icon: LucideIcons.refreshCw,
                               height: Td.ciblePi,
                               onPressed: widget.onAgain,
                             ),
                           ),
+                        if (widget.onExtra != null)
+                          SizedBox(
+                            width: _w,
+                            child: TdButton(
+                              label: widget.extraLabel ?? 'Rejouer',
+                              variant: TdButtonVariant.secondary,
+                              height: Td.ciblePi,
+                              onPressed: widget.onExtra,
+                            ),
+                          ),
                         SizedBox(
-                          width: 240,
+                          width: _w,
                           child: TdButton(
                             label: widget.homeLabel,
                             icon: LucideIcons.house,

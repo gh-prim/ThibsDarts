@@ -22,6 +22,7 @@ import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
 import 'game_screen.dart';
+import 'trainer_screen.dart';
 import 'training_screen.dart';
 
 /// Écran de jeu pour un X01 ou un autre mode, selon la config.
@@ -29,9 +30,12 @@ Widget gameScreenFor(GameConfig cfg) => cfg.drill
     ? TrainingScreen(config: cfg)
     : cfg.mode == null
     ? GameScreen(config: cfg)
+    : cfg.mode!.solo
+    ? TrainerScreen(config: cfg)
     : ModeGameScreen(config: cfg);
 
-/// Cricket, Around the clock, Shanghai, Killer, Halve-it, Bob's 27 (planches du même nom).
+/// Cricket (et ses variantes), Around the clock, Shanghai, Killer, Halve-it, Bob's 27, Bermuda, Gotcha.
+/// Au Cricket, un robot peut jouer contre le joueur ([GameConfig.botLevel]).
 /// En attendant le Pi 5, toucher le plateau lance une fléchette à cet endroit.
 class ModeGameScreen extends StatefulWidget {
   const ModeGameScreen({super.key, required this.config, this.game});
@@ -53,23 +57,50 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   Timer? _tagTimer;
   Timer? _winTimer;
   bool _showWin = false;
+  Timer? _botTimer;
+  late final DartBot? _bot = _cfg.hasBot ? DartBot(BotLevel.of(_cfg.botLevel!)) : null;
 
   GameConfig get _cfg => widget.config;
   GameMode get _mode => _cfg.mode!;
 
   TurnGame _newGame() => switch (_cfg.mode!) {
-    GameMode.cricket => CricketGame(_cfg.players),
+    GameMode.cricket => CricketGame(_cfg.players, variant: _cfg.cricketVariant),
     GameMode.clock => ClockGame(_cfg.players),
     GameMode.shanghai => ShanghaiGame(_cfg.players),
     GameMode.killer => KillerGame(_cfg.players),
     GameMode.halveIt => HalveItGame(_cfg.players),
     GameMode.bobs27 => Bobs27Game(_cfg.players),
+    GameMode.bermuda => HalveItGame.bermuda(_cfg.players),
+    GameMode.gotcha => GotchaGame(_cfg.players),
+    final m => throw ArgumentError('$m se joue sur l’écran d’entraînement'),
   };
+
+  // MARK: Robot
+
+  bool get _botTurn => _bot != null && _g.currentName == GameConfig.botName && !_g.isFinished;
+
+  /// Le robot lance ses fléchettes une par une, puis retire ses fléchettes tout seul.
+  void _botPlay() {
+    _botTimer?.cancel();
+    if (!_botTurn || !mounted) return;
+    _botTimer = Timer(const Duration(milliseconds: 900), () {
+      if (!mounted || !_botTurn) return;
+      final g = _g;
+      if (g.awaitingNextPlayer) {
+        _endTurn();
+        return;
+      }
+      final aim = g is CricketGame ? DartBot.aimCricket(g, g.currentIndex) : const DartThrow.triple(20);
+      final d = _bot!.throwAt(aim);
+      _throw(d, boardPositionFor(d), bot: true);
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     AppState.lastGame = widget.config;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _botPlay());
     Lobby.instance.stopGame = _stopFromPhone;
     CamLink.instance
       ..onDart = _camDart
@@ -96,6 +127,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   void dispose() {
     _tagTimer?.cancel();
     _winTimer?.cancel();
+    _botTimer?.cancel();
     _save();
     final match = _cfg.tournamentMatch;
     if (match != null) {
@@ -118,8 +150,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     super.dispose();
   }
 
-  void _throw(DartThrow d, Offset pos) {
-    if (_g.awaitingNextPlayer || _g.isFinished) return;
+  void _throw(DartThrow d, Offset pos, {bool bot = false}) {
+    if (_g.awaitingNextPlayer || _g.isFinished || (_botTurn && !bot)) return;
     setState(() {
       _g.throwDart(d);
       _hits.add(BoardHit(d, pos, _hits.length + 1));
@@ -131,6 +163,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       if (mounted) setState(() => _tagDart = null);
     });
     _scheduleWin();
+    _botPlay();
   }
 
   void _scheduleWin() {
@@ -152,7 +185,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   void _outOfBoard() => _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
 
   Future<void> _correct() async {
-    if (_g.isFinished) return;
+    if (_g.isFinished || _botTurn) return;
     final c = await Navigator.of(context).push<Correction>(
       MaterialPageRoute(
         builder: (_) => CorrectionScreen(turn: _g.currentTurn, hits: List.of(_hits)),
@@ -186,6 +219,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       _tagDart = null;
     });
     _scheduleWin();
+    _botPlay();
   }
 
   void _rematch() {
@@ -198,7 +232,17 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       _tagDart = null;
       _showWin = false;
     });
+    _botPlay();
   }
+
+  /// Fin contre le robot : nouvelle partie au niveau choisi.
+  void _botLevel(BotLevel l) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => ModeGameScreen(config: _cfg.withBot(l.average))),
+    );
+  }
+
+  bool get _beatBot => _g.winner != null && _g.winner != GameConfig.botName && !_g.isDraw;
 
   // MARK: Textes par mode
 
@@ -209,6 +253,14 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
 
   String? get _endCopy {
     final g = _g;
+    if (_bot != null && !g.isDraw) {
+      final l = _bot.level;
+      final up = l.up;
+      final down = l.down;
+      return _beatBot
+          ? (up == null ? 'Tu as battu le robot ${l.name}. Le niveau max.' : 'Robot ${l.name} battu. On monte au ${up.name} (${up.average}) ?')
+          : (down == null ? 'Le robot ${l.name} gagne. On remet ça ?' : 'Le robot ${l.name} gagne. On descend au ${down.name} (${down.average}) ?');
+    }
     if (g.isDraw) {
       final who = [for (final i in g.winners) g.names[i]];
       return '${who.sublist(0, who.length - 1).join(', ')} et ${who.last} à égalité, ${g.scoreOf(g.winners.first)} points.';
@@ -222,7 +274,9 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   }
 
   String get _header => switch (_g) {
-    final CricketGame g => 'Cricket · Tour ${g.round}',
+    final CricketGame g => '${_cfg.title} · Tour ${g.round}',
+    final HalveItGame g when _mode == GameMode.bermuda => 'Bermuda · ${g.round.clamp(1, g.targets.length)} sur ${g.targets.length}',
+    final GotchaGame g => 'Gotcha · Tour ${g.round}',
     final ShanghaiGame g => 'Shanghai · Manche ${g.target}',
     final HalveItGame g => 'Halve-it · ${g.round.clamp(1, g.targets.length)} sur ${g.targets.length}',
     final Bobs27Game g => "Bob's 27 · ${_doubleLabel(g.target)}",
@@ -241,14 +295,16 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       'at': DateTime.now().toIso8601String(),
       'mode': _cfg.title,
       'kind': _mode.name,
-      if (_cfg.practice) 'training': true,
+      if (_cfg.cricketVariant != CricketVariant.classic) 'variant': _cfg.cricketVariant.name,
+      if (_bot != null) 'bot': _bot.level.average,
+      if (_cfg.practice || _bot != null) 'training': true,
       'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,
       'players': [
         for (var i = 0; i < g.names.length; i++)
           () {
             final turns = g.turnsOf(i);
             final (value, label) = switch (g) {
-              CricketGame() => (_marks(turns) / (turns.isEmpty ? 1 : turns.length), 'moy.'),
+              final CricketGame c => (_marks(c, turns) / (turns.isEmpty ? 1 : turns.length), 'moy.'),
               final ClockGame c => (c.done(i).toDouble(), 'cibles'),
               KillerGame() => (g.scoreOf(i).toDouble(), 'vies'),
               _ => (g.scoreOf(i).toDouble(), 'pts'),
@@ -267,11 +323,11 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     });
   }
 
-  /// Marques Cricket (20 à 15 et bull) dans une liste de tours.
-  static int _marks(List<List<DartThrow>> turns) => [
+  /// Marques Cricket (numéros de la partie) dans une liste de tours.
+  static int _marks(CricketGame g, List<List<DartThrow>> turns) => [
     for (final t in turns)
       for (final d in t)
-        if (!d.isMiss && CricketGame.numbers.contains(d.sector)) d.multiplier,
+        if (!d.isMiss && g.numbers.contains(d.sector)) d.multiplier,
   ].fold(0, (a, b) => a + b);
 
   List<CelebrationStat> get _winStats => [
@@ -290,6 +346,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       final n => '$n demis',
     },
     final Bobs27Game g => g.isOut(i) ? 'Éliminé' : _doubleLabel(g.target),
+    final GotchaGame g => 'reste ${g.left(i)}',
     final ShanghaiGame g => 'moy. ${_perRound(g.points[i], g.round)}',
     _ => null,
   };
@@ -319,6 +376,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
         b.points[g.currentIndex],
         'Ton score, cible ${_doubleLabel(b.target)}',
       ),
+      final GotchaGame q => ('Reste à $me', q.left(g.currentIndex), 'Il te reste'),
       _ => ('Score de $me', g.scoreOf(g.currentIndex), 'Ton score'),
     };
     lobby.publishGame({
@@ -384,7 +442,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
 
   /// La fléchette compte pour ce mode.
   bool _counts(DartThrow d) => switch (_g) {
-    final CricketGame _ => CricketGame.numbers.contains(d.sector),
+    final CricketGame g => g.numbers.contains(d.sector),
     final ClockGame _ => true,
     final ShanghaiGame g => d.sector == g.target,
     final KillerGame _ => d.isDouble,
@@ -415,8 +473,15 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                 tag: _endTag,
                 copy: _endCopy,
                 stats: _winStats,
-                onAgain: _cfg.tournamentMatch == null ? _rematch : null,
-                homeLabel: _cfg.tournamentMatch == null ? 'Accueil' : 'Suite du tournoi',
+                onAgain: _cfg.tournamentMatch != null
+                    ? null
+                    : _botNext != null
+                    ? () => _botLevel(_botNext!)
+                    : _rematch,
+                againLabel: _botNext == null ? 'Rejouer' : '${_beatBot ? 'Monter' : 'Descendre'} au ${_botNext!.average}',
+                extraLabel: _bot == null ? null : 'Rester au ${_bot.level.average}',
+                onExtra: _bot == null || _botNext == null ? null : _rematch,
+                homeLabel: _cfg.tournamentMatch == null ? (_bot == null ? 'Accueil' : 'Terminer') : 'Suite du tournoi',
                 onHome: () => Navigator.of(context).pop(),
               ),
             ),
@@ -424,6 +489,9 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       ),
     );
   }
+
+  /// Niveau proposé en fin de partie contre le robot.
+  BotLevel? get _botNext => _bot == null || _g.isDraw ? null : (_beatBot ? _bot.level.up : _bot.level.down);
 
   Widget _top() => Row(
     children: [
@@ -514,7 +582,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
 
   Widget _cricket(CricketGame g) {
     final open = {
-      for (final n in CricketGame.numbers)
+      for (final n in g.numbers)
         if (g.isOpen(n)) n,
     };
     return Row(
@@ -537,7 +605,14 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                     const SizedBox(width: Td.s2),
                     const MusicButton(size: 40),
                     const SizedBox(width: Td.s3),
-                    Text(_header, style: TdText.inter(15, 20, 400, Td.ink2)),
+                    Flexible(
+                      child: Text(
+                        _header,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TdText.inter(15, 20, 400, Td.ink2),
+                      ),
+                    ),
                     const Spacer(),
                     Container(
                       width: 12,
@@ -592,6 +667,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                 ),
                 child: CricketBoard(
                   active: g.currentIndex,
+                  numbers: g.numbers,
                   players: [
                     for (var i = 0; i < g.names.length; i++)
                       CricketColumn(g.names[i], [for (final m in g.marks[i]) m.clamp(0, 3)], g.points[i]),
@@ -599,12 +675,22 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                 ),
               ),
               const Spacer(),
+              if (_botTurn) _botBanner(),
               DartSlots(slots: _slots),
               _endTurnButton(),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _botBanner() {
+    final g = _g;
+    final aim = g is CricketGame ? DartBot.aimCricket(g, g.currentIndex) : null;
+    return TdBanner(
+      text: aim == null ? 'Le robot joue.' : 'Le robot vise le ${aim.sector == 25 ? 'bull' : aim.label}.',
+      error: false,
     );
   }
 
@@ -673,6 +759,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   DartThrow? get _aimed => switch (_g) {
     final ShanghaiGame g => _shanghaiNext(g),
     final Bobs27Game g => DartThrow(g.target, 2),
+    final GotchaGame g => _gotchaAim(g),
     final KillerGame g => _killerAim(g),
     _ => null,
   };
@@ -682,6 +769,15 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     final HalveItGame g => int.tryParse(g.target.label) ?? (g.target.label == 'Bull' ? 25 : null),
     _ => null,
   };
+
+  /// Gotcha : la sortie si elle est possible en simple, sinon rien.
+  DartThrow? _gotchaAim(GotchaGame g) {
+    final left = g.left(g.currentIndex);
+    if (left <= 20) return DartThrow(left, 1);
+    if (left <= 60 && left % 3 == 0) return DartThrow(left ~/ 3, 3);
+    if (left <= 40 && left.isEven) return DartThrow(left ~/ 2, 2);
+    return null;
+  }
 
   DartThrow? _shanghaiNext(ShanghaiGame g) {
     final got = g.currentTurn.where((d) => d.sector == g.target).map((d) => d.multiplier).toSet();
@@ -846,6 +942,34 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
               ],
             ),
           ),
+        ];
+      case final GotchaGame q:
+        return [
+          ScoreDisplay(
+            value: q.left(i),
+            size: 88,
+            label: '$me, il te reste',
+            sub: q.busted ? 'Trop haut, retour à ${q.points[i]}' : 'Score ${q.points[i]} sur ${q.goal}',
+            state: q.busted ? ScoreState.bust : ScoreState.normal,
+          ),
+          if (q.lastEvent != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: Td.s4, vertical: Td.s3),
+              decoration: BoxDecoration(
+                gradient: Td.goldenHour,
+                borderRadius: BorderRadius.circular(Td.rLg),
+                boxShadow: const [BoxShadow(color: Color(0x80FF4D8D), blurRadius: 40)],
+              ),
+              child: Row(
+                spacing: Td.s3,
+                children: [
+                  const Icon(LucideIcons.zap, size: 24, color: Td.onAccent),
+                  Expanded(child: Text(q.lastEvent!, style: TdText.inter(17, 22, 700, Td.onAccent))),
+                ],
+              ),
+            )
+          else
+            const TdBanner(text: 'Tombe pile sur le score d’un adversaire : il retourne à 0.', alert: true),
         ];
       default:
         return [];

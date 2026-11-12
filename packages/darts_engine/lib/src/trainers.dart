@@ -110,8 +110,8 @@ class LadderGame extends TurnGame {
 /// Plage de scores du Checkout au hasard.
 enum CheckoutRange {
   small(2, 60, 'Petits'),
-  medium(61, 120, 'Moyens'),
-  big(121, 170, 'Gros'),
+  medium(61, 110, 'Moyens'),
+  big(111, 170, 'Gros'),
   all(2, 170, 'Tous');
 
   const CheckoutRange(this.from, this.to, this.label);
@@ -135,7 +135,12 @@ class CheckoutDrill extends TurnGame {
   CheckoutDrill.ton70(String name, {int attempts = 10}) : this(name, targets: List.filled(attempts, 170));
 
   /// Checkout au hasard : un score tiré dans [range], 3 volées pour finir.
-  factory CheckoutDrill.random(String name, {CheckoutRange range = CheckoutRange.all, int attempts = 10, math.Random? random}) {
+  factory CheckoutDrill.random(
+    String name, {
+    CheckoutRange range = CheckoutRange.all,
+    int attempts = 10,
+    math.Random? random,
+  }) {
     final r = random ?? math.Random();
     final ok = [
       for (var n = range.from; n <= range.to; n++)
@@ -249,17 +254,35 @@ class JdcGame extends TurnGame {
   int shanghais = 0;
   int doubles = 0;
   bool _doublesTurn = false;
+  int _turnStep = 0;
+
+  /// La fléchette [i] du tour en cours a touché sa cible.
+  bool dartCounts(int i, DartThrow d) {
+    final doublesTurn = _turnStep >= 6 && _turnStep < 27;
+    if (doublesTurn) return d.isDouble && d.sector == targetAt(_turnStep + i);
+    return d.sector == targetAt(_turnStep);
+  }
 
   /// Points par phase.
   final List<int> phasePoints = [0, 0, 0];
 
   /// Phase en cours : 1, 2 ou 3.
-  int get phase => step < 6 ? 1 : step < 27 ? 2 : 3;
+  int get phase => step < 6
+      ? 1
+      : step < 27
+      ? 2
+      : 3;
 
   /// Secteur visé (25 pour le bull).
   int get target => targetAt(step);
 
-  static int targetAt(int s) => s < 6 ? 10 + s : s < 26 ? s - 5 : s == 26 ? 25 : 15 + (s - 27);
+  static int targetAt(int s) => s < 6
+      ? 10 + s
+      : s < 26
+      ? s - 5
+      : s == 26
+      ? 25
+      : 15 + (s - 27);
 
   @override
   int scoreOf(int player) => total;
@@ -269,6 +292,7 @@ class JdcGame extends TurnGame {
     step = 0;
     total = 0;
     _doublesTurn = false;
+    _turnStep = 0;
     shanghais = 0;
     doubles = 0;
     phasePoints.setAll(0, [0, 0, 0]);
@@ -281,7 +305,10 @@ class JdcGame extends TurnGame {
 
   @override
   void onDart(int player, DartThrow d) {
-    if (currentTurn.length == 1) _doublesTurn = phase == 2;
+    if (currentTurn.length == 1) {
+      _doublesTurn = phase == 2;
+      _turnStep = step;
+    }
     if (phase == 2) {
       if (d.isDouble && d.sector == target) {
         _add(50);

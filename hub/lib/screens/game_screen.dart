@@ -26,6 +26,7 @@ import 'correction_screen.dart';
 
 /// Partie 501 (planches J501*). Les fléchettes arrivent du Pi 5 (CamLink) ;
 /// toucher le plateau lance aussi une fléchette à cet endroit.
+/// Avec [GameConfig.botLevel], le robot joue son tour tout seul (planche BotTour).
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key, required this.config});
 
@@ -51,8 +52,46 @@ class _GameScreenState extends State<GameScreen> {
   final Map<String, List<List<List<DartThrow>>>> _pastLegs = {};
   bool _show180 = false;
   bool _showWin = false;
+  Timer? _botTimer;
+  late final DartBot? _bot = _cfg.hasBot ? DartBot(BotLevel.of(_cfg.botLevel!)) : null;
 
   GameConfig get _cfg => widget.config;
+
+  // MARK: Robot
+
+  bool get _botTurn => _bot != null && _game.currentPlayer.name == GameConfig.botName && !_matchOver;
+
+  /// Le robot lance ses fléchettes une par une, retire ses fléchettes et enchaîne la manche s'il la gagne.
+  void _botPlay() {
+    _botTimer?.cancel();
+    if (!_botTurn || !mounted) return;
+    _botTimer = Timer(Duration(milliseconds: _game.awaitingNextPlayer || _game.isFinished ? 1600 : 900), () {
+      if (!mounted || !_botTurn) return;
+      final g = _game;
+      if (g.awaitingNextPlayer || g.isFinished) {
+        _endTurn();
+        return;
+      }
+      final aim = DartBot.aimX01(g.currentPlayer.remaining, dartsLeft: g.dartsLeft, doubleOut: _cfg.doubleOut);
+      final d = _bot!.throwAt(aim);
+      _throw(d, boardPositionFor(d), bot: true);
+    });
+  }
+
+  /// Ce que vise le robot, pour la bannière.
+  String get _botAim {
+    final a = DartBot.aimX01(_game.currentPlayer.remaining, dartsLeft: _game.dartsLeft, doubleOut: _cfg.doubleOut);
+    return a.sector == 25 ? (a.multiplier == 2 ? 'le bull' : 'le 25') : 'le ${a.label}';
+  }
+
+  bool get _beatBot => _matchOver && _game.winner!.name != GameConfig.botName;
+
+  /// Niveau proposé en fin de partie contre le robot.
+  BotLevel? get _botNext => _bot == null ? null : (_beatBot ? _bot.level.up : _bot.level.down);
+
+  void _botLevel(BotLevel l) {
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => GameScreen(config: _cfg.withBot(l.average))));
+  }
 
   /// Chaque manche, le joueur suivant commence.
   X01Game _newGame() {
@@ -65,6 +104,7 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     AppState.lastGame = widget.config;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _botPlay());
     Lobby.instance.stopGame = _stopFromPhone;
     CamLink.instance
       ..onDart = _camDart
@@ -101,6 +141,7 @@ class _GameScreenState extends State<GameScreen> {
   void dispose() {
     _tagTimer?.cancel();
     _winTimer?.cancel();
+    _botTimer?.cancel();
     _save();
     _reportTournament();
     if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
@@ -114,8 +155,8 @@ class _GameScreenState extends State<GameScreen> {
     super.dispose();
   }
 
-  void _throw(DartThrow d, Offset pos) {
-    if (_game.awaitingNextPlayer || _game.isFinished) return;
+  void _throw(DartThrow d, Offset pos, {bool bot = false}) {
+    if (_game.awaitingNextPlayer || _game.isFinished || (_botTurn && !bot)) return;
     setState(() {
       _last = _game.throwDart(d);
       if (_last == ThrowOutcome.checkout) {
@@ -135,6 +176,7 @@ class _GameScreenState extends State<GameScreen> {
       if (mounted && _last != ThrowOutcome.bust) setState(() => _tagDart = null);
     });
     _scheduleWin();
+    _botPlay();
   }
 
   /// La victoire s'affiche après le tag CHECKOUT.
@@ -166,6 +208,7 @@ class _GameScreenState extends State<GameScreen> {
       _showWin = false;
       _show180 = false;
     });
+    _botPlay();
   }
 
   /// Chiffres d'un joueur sur toutes les manches : fléchettes, points, meilleur tour, essais et sorties
@@ -247,7 +290,8 @@ class _GameScreenState extends State<GameScreen> {
       'at': DateTime.now().toIso8601String(),
       'mode': '${_cfg.startScore}',
       'kind': 'x01',
-      if (_cfg.practice) 'training': true,
+      if (_bot != null) 'bot': _bot.level.average,
+      if (_cfg.practice || _bot != null) 'training': true,
       'doubleOut': _cfg.doubleOut,
       'legsToWin': _cfg.legsToWin,
       'winner': winner,
@@ -282,7 +326,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _correct() async {
-    if (_matchOver) return;
+    if (_matchOver || _botTurn) return;
     final c = await Navigator.of(context).push<Correction>(
       MaterialPageRoute(
         builder: (_) => CorrectionScreen(turn: _game.currentTurn, hits: List.of(_hits)),
@@ -330,6 +374,7 @@ class _GameScreenState extends State<GameScreen> {
         _last = null;
         _tagDart = null;
       });
+      _botPlay();
       return;
     }
     setState(() {
@@ -338,6 +383,7 @@ class _GameScreenState extends State<GameScreen> {
       _last = null;
       _tagDart = null;
     });
+    _botPlay();
   }
 
   /// Envoie l'état de la partie au salon, pour les iPhone qui suivent.
@@ -381,7 +427,7 @@ class _GameScreenState extends State<GameScreen> {
     final p = g.currentPlayer;
     final turn = g.currentTurn;
     final bust = _last == ThrowOutcome.bust;
-    final over = g.awaitingNextPlayer && !bust && !g.isFinished;
+    final over = g.awaitingNextPlayer && !bust && !g.isFinished && !_botTurn;
     final hint = g.checkoutHint;
     final turnScore = turn.fold<int>(0, (n, d) => n + d.score);
 
@@ -428,6 +474,11 @@ class _GameScreenState extends State<GameScreen> {
       );
     } else if (bust) {
       info = TdBanner(text: 'Bust. On reprend à ${g.turnStartScore}.');
+    } else if (_botTurn) {
+      info = TdBanner(
+        text: g.awaitingNextPlayer ? 'Le robot a fini son tour.' : 'Le robot vise $_botAim.',
+        error: false,
+      );
     } else if (over) {
       info = Text('Le tour passe tout seul dès que la cible est vide.', style: TdText.inter(15, 20, 400, Td.ink2));
     } else if (turn.isNotEmpty && turn.last.isMiss) {
@@ -627,9 +678,18 @@ class _GameScreenState extends State<GameScreen> {
                 kind: CelebrationKind.win,
                 winner: g.winner!.name,
                 stats: _winStats(g.winner!.name),
+                tag: _bot == null ? null : (_beatBot ? 'GAGNÉ' : 'PERDU'),
+                copy: _bot == null ? null : _botCopy,
                 // Pas de revanche en tournoi : on revient au tableau.
-                onAgain: _cfg.tournamentMatch == null ? _rematch : null,
-                homeLabel: _cfg.tournamentMatch == null ? 'Accueil' : 'Suite du tournoi',
+                onAgain: _cfg.tournamentMatch != null
+                    ? null
+                    : _botNext != null
+                    ? () => _botLevel(_botNext!)
+                    : _rematch,
+                againLabel: _botNext == null ? 'Rejouer' : '${_beatBot ? 'Monter' : 'Descendre'} au ${_botNext!.average}',
+                extraLabel: _bot == null ? null : 'Rester au ${_bot.level.average}',
+                onExtra: _botNext == null ? null : _rematch,
+                homeLabel: _cfg.tournamentMatch == null ? (_bot == null ? 'Accueil' : 'Terminer') : 'Suite du tournoi',
                 onHome: () => Navigator.of(context).pop(),
               ),
             )
@@ -648,6 +708,14 @@ class _GameScreenState extends State<GameScreen> {
 }
 
 extension on _GameScreenState {
+  String get _botCopy {
+    final l = _bot!.level;
+    final up = l.up, down = l.down;
+    return _beatBot
+        ? (up == null ? 'Tu as battu le robot ${l.name}. Le niveau max.' : 'Robot ${l.name} battu. On monte au ${up.name} (${up.average}) ?')
+        : (down == null ? 'Le robot ${l.name} gagne. On remet ça ?' : 'Le robot ${l.name} gagne. On descend au ${down.name} (${down.average}) ?');
+  }
+
   int _bestOther() {
     final w = _game.winner?.name;
     return _legsWon.entries.where((e) => e.key != w).fold<int>(0, (m, e) => e.value > m ? e.value : m);

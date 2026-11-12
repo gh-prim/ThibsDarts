@@ -38,8 +38,12 @@ R_TRIPLE_IN, R_TRIPLE_OUT = 99.0, 107.0
 R_DOUBLE_IN, R_DOUBLE_OUT = 162.0, 170.0
 
 
-def dart_at(x, y):
-    """(number, multiplier) touché en (x, y) mm, centre de la cible, x vers la droite, y vers le bas."""
+def dart_at(x, y, rings=None):
+    """(number, multiplier) touché en (x, y) mm, centre de la cible, x vers la droite, y vers le bas.
+    rings : rayons mesurés de la cible {"triple_in", "triple_out", "double_in"} (sinon les officiels)."""
+    rings = rings or {}
+    t_in, t_out = rings.get("triple_in", R_TRIPLE_IN), rings.get("triple_out", R_TRIPLE_OUT)
+    d_in = rings.get("double_in", R_DOUBLE_IN)
     r = math.hypot(x, y)
     if r <= R_BULL:
         return 25, 2
@@ -49,9 +53,9 @@ def dart_at(x, y):
         return 0, 0
     a = math.degrees(math.atan2(x, -y)) % 360
     number = SECTORS[int((a + 9) // 18) % 20]
-    if R_TRIPLE_IN <= r <= R_TRIPLE_OUT:
+    if t_in <= r <= t_out:
         return number, 3
-    if r >= R_DOUBLE_IN:
+    if r >= d_in:
         return number, 2
     return number, 1
 

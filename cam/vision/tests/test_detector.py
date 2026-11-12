@@ -78,8 +78,9 @@ def render(R, t, tex, darts=()):
 
 def calib_for(R, t):
     rvec, _ = cv2.Rodrigues(R)
-    pts, _ = cv2.projectPoints(np.float64([(x, y, 0) for x, y in detector.CALIB_POINTS_MM]), rvec, t, K, None)
-    return detector.Calibration(pts.reshape(-1, 2) + np.random.normal(0, 1.0, (5, 2)), (W, H))
+    board = [detector.spec_point(k, a, detector.STANDARD_RINGS) for k, a in detector.CALIB_SPEC]
+    pts, _ = cv2.projectPoints(np.float64([(x, y, 0) for x, y in board]), rvec, t, K, None)
+    return detector.Calibration(pts.reshape(-1, 2) + np.random.normal(0, 1.0, (len(board), 2)), (W, H))
 
 
 def test_three_cameras():
@@ -118,3 +119,26 @@ def test_three_cameras():
 if __name__ == "__main__":
     test_three_cameras()
     print("ok")
+
+
+def test_ring_points():
+    """Les bords des bandes cliqués aux 4 repères mesurent l'épaisseur des bandes d'une cible non officielle."""
+    np.random.seed(2)
+    R, t = pose(detector.PRESET_DIRS["Haut gauche"])
+    rvec, _ = cv2.Rodrigues(R)
+    real = {"double_in": 160.0, "triple_out": 108.5, "triple_in": 97.0}
+    board = [detector.spec_point(k, a, real) for k, a in detector.CALIB_SPEC]
+    pts, _ = cv2.projectPoints(np.float64([(x, y, 0) for x, y in board]), rvec, t, K, None)
+    cal = detector.Calibration(pts.reshape(-1, 2) + np.random.normal(0, 0.7, (len(board), 2)), (W, H))
+    # Ancien format à 5 points toujours accepté.
+    legacy = [detector.spec_point(k, a, real) for k, a in detector.LEGACY_SPEC]
+    lp, _ = cv2.projectPoints(np.float64([(x, y, 0) for x, y in legacy]), rvec, t, K, None)
+    assert detector.Calibration(lp.reshape(-1, 2), (W, H)).rings == detector.STANDARD_RINGS
+    for k, r in real.items():
+        assert abs(cal.rings[k] - r) < 1.5, (k, cal.rings[k])
+    assert dart_at(0, -98, cal.rings) == (20, 3)  # simple sur une cible officielle, triple ici
+
+
+if __name__ == "__main__":
+    test_ring_points()
+    print("bandes ok")

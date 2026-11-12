@@ -9,3 +9,4 @@ ios/ThibsDarts/Info.plist
 ios/TV/Info.plist
 photos-thibs/
 cam/captures/
+__pycache__/

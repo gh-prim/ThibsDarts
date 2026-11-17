@@ -20,6 +20,7 @@ class CamLink {
   static const takeoutTopic = 'thibsdarts/cam/takeout';
   static const statusTopic = 'thibsdarts/cam/status';
   static const stateTopic = 'thibsdarts/hub/state';
+  static const turnTopic = 'thibsdarts/hub/turn';
   static const cmdTopic = 'thibsdarts/cam/cmd';
 
   /// Écran de partie qui reçoit les fléchettes (position en unités plateau, en mm).
@@ -82,6 +83,14 @@ class CamLink {
     if (_playing == playing) return;
     _playing = playing;
     _publishState();
+  }
+
+  /// Fin de tour (bouton ou retrait) : le Pi 5 sait que les fléchettes en place sont de l'ancien tour.
+  void turnEnded() {
+    final client = _client;
+    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
+    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({'ts': DateTime.now().millisecondsSinceEpoch}));
+    client.publishMessage(turnTopic, MqttQos.atLeastOnce, payload.payload!);
   }
 
   /// Demande au Pi 5 de s'éteindre ("poweroff") ou de redémarrer ("reboot"). Faux si le broker est injoignable.

@@ -29,7 +29,7 @@ import traces
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "simulator"))
 from dartlink import (  # noqa: E402
-    DART_TOPIC, MQTT_HOST, MQTT_PORT, STATE_TOPIC, STATUS_TOPIC, TAKEOUT_TOPIC, VERSION,
+    DART_TOPIC, MQTT_HOST, MQTT_PORT, STATE_TOPIC, STATUS_TOPIC, TAKEOUT_TOPIC, TURN_TOPIC, VERSION,
     dart_at, dart_message, new_client, segment_name,
 )
 
@@ -626,6 +626,7 @@ def main():
     def on_connect(c, *_):
         c.subscribe(CMD_TOPIC, qos=1)
         c.subscribe(STATE_TOPIC, qos=1)
+        c.subscribe(TURN_TOPIC, qos=1)
         registry.publish_status("online")
 
     def on_state(c, userdata, msg):
@@ -637,6 +638,9 @@ def main():
             print(f"hub : partie {'en cours' if on else 'arrêtée'}", flush=True)
             registry.playing = on
             registry.publish_status("online")
+
+    def on_turn(c, userdata, msg):
+        registry.detector.end_turn()
 
     def on_power(c, userdata, msg):
         # Le hub s'éteint ou redémarre : le Pi 5 fait pareil.
@@ -666,6 +670,7 @@ def main():
     client.on_connect = on_connect
     client.message_callback_add(CMD_TOPIC, on_power)
     client.message_callback_add(STATE_TOPIC, on_state)
+    client.message_callback_add(TURN_TOPIC, on_turn)
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()

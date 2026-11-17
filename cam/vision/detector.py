@@ -205,6 +205,13 @@ def changed(a, b, level=DIFF_MIN):
     return cv2.countNonZero(cv2.threshold(cv2.absdiff(a, b), level, 255, cv2.THRESH_BINARY)[1]) / a.size
 
 
+def changed_light(a, b, level=DIFF_MIN):
+    """Comme changed, sans compter un changement de lumière d'ensemble (lampe allumée, soir qui tombe)."""
+    shift = float(np.mean(a)) - float(np.mean(b))
+    b2 = np.clip(b.astype(np.float32) + shift, 0, 255).astype(np.uint8)
+    return changed(a, b2, level)
+
+
 def find_dart(bg, cur, cal, why=None):
     """Nouvelle fléchette entre deux images grises pleine résolution. None si rien de net.
     why : liste qui reçoit la raison du refus (montrée dans la trace)."""
@@ -359,6 +366,14 @@ class Detector:
         self.stable = 0
         self.quiet_since = time.monotonic()
         self.last = None
+        self.turn_over = False
+        self.placed = []  # fléchettes en place : zone de chaque caméra et son image d'avant la fléchette
+
+    def end_turn(self):
+        """Le hub est passé au joueur suivant (bouton Fin de tour) : les fléchettes en place sont
+        de l'ancien tour. Le prochain retrait ou la prochaine fléchette repart d'une cible vide."""
+        if self.darts:
+            self.turn_over = True
 
     def forget(self, name):
         for d in (self.bg, self.bg_small, self.empty_small, self.prev):
@@ -392,14 +407,16 @@ class Detector:
             return
         self.quiet_since = time.monotonic()
         # Cible redevenue comme au début du tour : fléchettes retirées.
-        empty = max((changed(smalls[n], self.empty_small[n]) for n in frames if n in self.empty_small), default=1)
+        empty = max((changed_light(smalls[n], self.empty_small[n]) for n in frames if n in self.empty_small),
+                    default=1)
         if self.darts and empty < EMPTY_MAX and empty < 0.5 * max(change.values()):
-            self.log(f"fléchettes retirées (écart {empty:.4f})")
-            self.darts = 0
-            self.on_takeout()
-            self._rebase(frames, smalls, empty=True)
+            self._takeout(frames, smalls, f"écart {empty:.4f}")
             return
         if max(change.values()) > BIG_CHANGE:
+            if self.turn_over:
+                # Tour fini à la main, puis main devant la cible : c'est le retrait.
+                self._takeout(frames, smalls, "main après fin de tour")
+                return
             # Main ou objet resté devant une caméra : on repart de cette image, sans rien compter.
             self.log(f"gros changement ignoré ({max(change.values()):.3f}, écart vide {empty:.4f})")
             self._rebase(frames, smalls, empty=self.darts == 0)
@@ -419,6 +436,28 @@ class Detector:
             if o:
                 o["cam"] = n
                 obs.append(o)
+        gone = self._removed(frames) if obs else None
+        if gone is not None:
+            # Une fléchette en place a été retirée (sa zone est redevenue comme avant elle) : pas une nouvelle.
+            self.placed.remove(gone)
+            self.darts = max(0, self.darts - 1)
+            if self.darts == 0:
+                self._takeout(frames, smalls, "dernière fléchette retirée")
+            else:
+                self.log("fléchette retirée")
+                self._rebase(frames, smalls)
+            return
+        if self.turn_over:
+            if not obs:
+                self._takeout(frames, smalls, "retrait après fin de tour")
+                return
+            # Fléchette du joueur suivant : la cible d'avant était donc déjà vide.
+            self.log("nouveau tour : cible d'avant prise comme vide")
+            self.turn_over = False
+            self.darts = 0
+            self.placed = []
+            for n in frames:
+                self.empty_small[n] = small_gray(before[n])
         self._rebase(frames, smalls, empty=self.darts == 0 and not obs)
         if not obs:
             self.log(f"changement sans fléchette ({', '.join(f'{n} {c:.4f}' for n, c in change.items())})")
@@ -426,12 +465,43 @@ class Detector:
         x, y = fuse(obs, self.model)
         raw = fuse(obs) if self.model is not None else (x, y)
         self.darts += 1
+        crops = {}
+        for o in obs:
+            g = before[o["cam"]]
+            bx, by, bw, bh = o["bbox"]
+            x0, y0 = max(bx - 10, 0), max(by - 10, 0)
+            x1, y1 = min(bx + bw + 10, g.shape[1]), min(by + bh + 10, g.shape[0])
+            crops[o["cam"]] = ((x0, y0, x1, y1), g[y0:y1, x0:x1].copy())
+        self.placed.append(crops)
         self.last = {"x": float(x), "y": float(y), "cams": {o["cam"]: [round(float(v), 1) for v in o["tip"]]
                                                            for o in obs}, "ts": time.time()}
         # Tout ce qu'il faut pour la trace : images avant / après, ce que chaque caméra a vu.
         info = dict(self.last, raw=[float(raw[0]), float(raw[1])], obs=obs, change=change, why=why,
                     frames={n: (before[n], frames[n]) for n in frames})
         self.on_dart(float(x), float(y), info)
+
+    def _removed(self, frames):
+        """Fléchette en place dont la zone ressemble de nouveau à l'image d'avant elle, ou None."""
+        for p in reversed(self.placed):
+            votes = []
+            for n, ((x0, y0, x1, y1), pre) in p.items():
+                if n not in frames or n not in self.bg:
+                    continue
+                cur = frames[n][y0:y1, x0:x1].astype(np.int16)
+                d_pre = float(np.mean(np.abs(cur - pre)))
+                d_bg = float(np.mean(np.abs(cur - self.bg[n][y0:y1, x0:x1])))
+                votes.append(d_pre < 0.5 * d_bg)
+            if votes and sum(votes) * 2 > len(votes):
+                return p
+        return None
+
+    def _takeout(self, frames, smalls, why):
+        self.log(f"fléchettes retirées ({why})")
+        self.placed = []
+        self.darts = 0
+        self.turn_over = False
+        self.on_takeout()
+        self._rebase(frames, smalls, empty=True)
 
     def _rebase(self, frames, smalls, empty=False):
         for n in frames:

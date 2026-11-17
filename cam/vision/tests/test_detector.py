@@ -162,10 +162,63 @@ def test_fuse_disagreement():
     assert np.linalg.norm(x - t) < 3, x
 
 
+def test_takeout_light_and_manual_end():
+    np.random.seed(5)
+    tex = board_texture()
+    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
+    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
+    got, takeouts = [], []
+    det = detector.Detector(lambda x, y, info: got.append((x, y)), lambda: takeouts.append(1), log=print)
+    thrown, light = [], [0]
+
+    def frames():
+        return {n: np.clip(render(R, t, tex, thrown).astype(np.int16) + light[0], 0, 255).astype(np.uint8)
+                for n, (R, t) in cams.items()}
+
+    def settle():
+        for _ in range(4):
+            det.step(frames(), cals)
+
+    settle()
+    thrown.append((30, -80))
+    settle()
+    assert len(got) == 1
+    # Lampe allumée pendant qu'on retire : le retrait est quand même vu.
+    thrown.clear()
+    light[0] = 25
+    settle()
+    assert takeouts == [1] and det.darts == 0, (takeouts, det.darts)
+    # Retrait sans main, référence vide faussée : vu quand même (la zone redevient comme avant).
+    thrown.append((-50, 40))
+    settle()
+    det.empty_small = {n: np.zeros_like(v) for n, v in det.empty_small.items()}
+    thrown.clear()
+    settle()
+    assert det.darts == 0 and takeouts == [1, 1] and len(got) == 2, (det.darts, takeouts, got)
+    # Compteur resté bloqué (retrait raté), Fin de tour à la main, puis joueur suivant : on repart à 1.
+    det.darts, det.placed = 2, []
+    det.end_turn()
+    thrown.append((60, 60))
+    settle()
+    assert det.darts == 1 and not det.turn_over, (det.darts, det.turn_over)
+    thrown.clear()
+    settle()
+    assert det.darts == 0 and takeouts == [1, 1, 1], (det.darts, takeouts)
+    # Fin de tour à la main fléchette en place, puis retrait : retrait.
+    thrown.append((-20, -20))
+    settle()
+    det.end_turn()
+    det.empty_small = {n: np.zeros_like(v) for n, v in det.empty_small.items()}
+    thrown.clear()
+    settle()
+    assert det.darts == 0 and not det.turn_over, (det.darts, det.turn_over)
+
+
 if __name__ == "__main__":
     test_three_cameras()
     test_flight_and_broken_shaft()
     test_fuse_disagreement()
+    test_takeout_light_and_manual_end()
     print("ok")
 
 
@@ -185,6 +238,48 @@ def test_ring_points():
     for k, r in real.items():
         assert abs(cal.rings[k] - r) < 1.5, (k, cal.rings[k])
     assert dart_at(0, -98, cal.rings) == (20, 3)  # simple sur une cible officielle, triple ici
+
+
+def test_takeout_light_and_manual_end():
+    np.random.seed(5)
+    tex = board_texture()
+    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
+    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
+    got, takeouts = [], []
+    det = detector.Detector(lambda x, y, info: got.append((x, y)), lambda: takeouts.append(1), log=print)
+    thrown, light = [], [0]
+
+    def frames():
+        return {n: np.clip(render(R, t, tex, thrown).astype(np.int16) + light[0], 0, 255).astype(np.uint8)
+                for n, (R, t) in cams.items()}
+
+    def settle():
+        for _ in range(4):
+            det.step(frames(), cals)
+
+    settle()
+    thrown.append((30, -80))
+    settle()
+    assert len(got) == 1
+    # Lampe allumée pendant qu'on retire : le retrait est quand même vu.
+    thrown.clear()
+    light[0] = 25
+    settle()
+    assert takeouts == [1] and det.darts == 0, (takeouts, det.darts)
+    # Fin de tour à la main, retrait raté (rien de vu), puis fléchette du joueur suivant.
+    thrown.append((-50, 40))
+    settle()
+    assert det.darts == 1
+    det.end_turn()
+    det.empty_small = {n: np.zeros_like(v) for n, v in det.empty_small.items()}  # référence vide faussée
+    thrown.clear()
+    thrown.append((60, 60))
+    settle()
+    # Le changement (une fléchette en moins, une en plus) vaut retrait ou nouveau tour : compteur reparti.
+    assert det.darts <= 1 and not det.turn_over, (det.darts, det.turn_over)
+    thrown.clear()
+    settle()
+    assert det.darts == 0, det.darts
 
 
 if __name__ == "__main__":

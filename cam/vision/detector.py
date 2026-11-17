@@ -281,6 +281,16 @@ def _dart_from(main, n, labels, stats, centroids, cal):
     length = float(proj.max() - proj.min())
     if length < 12:
         return "tache trop courte"
+    # L'axe final vient du bout côté cible (fût et pointe) : l'empennage, gros et souvent vu de biais
+    # ou mêlé à une autre fléchette, décale la droite de plusieurs mm.
+    near = pts[proj <= proj.min() + max(30.0, 0.4 * length)]
+    if len(near) >= 30:
+        nv = cv2.fitLine(near, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
+        v2 = np.float64(nv[:2])
+        if abs(v2 @ v) > 0.8:
+            v, p0 = (v2 if v2 @ up > 0 else -v2), np.float64(nv[2:])
+            proj = (pts - p0) @ v
+            length = float(proj.max() - proj.min())
     # La pointe est le bout opposé à l'empennage (qui part vers le joueur, donc vers la caméra).
     tip, tail = p0 + v * proj.min(), p0 + v * proj.max()
     tip_mm = cal.to_board(tip)

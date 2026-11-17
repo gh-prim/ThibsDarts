@@ -148,6 +148,30 @@ def test_flight_and_broken_shaft():
             assert err < 8, (name, tgt, [round(float(v), 1) for v in o["tip"]], err)
 
 
+def test_flight_off_axis():
+    """Empennage décalé sur le côté (vu de biais, ou mêlé à une fléchette voisine) : l'axe suit le fût."""
+    np.random.seed(11)
+    tex = board_texture()
+    lat = []
+    for name, d in detector.PRESET_DIRS.items():
+        R, t = pose(d)
+        cal = calib_for(R, t)
+        rvec, _ = cv2.Rodrigues(R)
+        for tgt in [(0, -45), (30, -90), (-60, 20)]:
+            bg = render(R, t, tex)
+            cur = bg.copy()
+            p, _ = cv2.projectPoints(np.float64([(*tgt, 0), (*tgt, -45), (*tgt, -70), (*tgt, -110)]), rvec, t, K, None)
+            p = p.reshape(-1, 2)
+            cv2.line(cur, tuple(np.int32(p[0])), tuple(np.int32(p[1])), shade(bg, p[0]), 5)
+            cv2.line(cur, tuple(np.int32(p[1])), tuple(np.int32(p[2])), 255, 4)
+            c = (p[2] + p[3]) / 2 + np.float64([22, 0])
+            cv2.ellipse(cur, tuple(np.int32(c)), (30, 22), 0, 0, 360, 255, -1)
+            o = detector.find_dart(bg, cur, cal)
+            v, dd = np.float64(tgt) - o["tip"], o["dir"]
+            lat.append(abs(v[0] * dd[1] - v[1] * dd[0]))
+    assert max(lat) < 1.5, [round(float(x), 1) for x in lat]
+
+
 def test_fuse_disagreement():
     # Haut gauche voit toute la fléchette ; Haut droite n'a que l'empennage, pointe loin.
     good = {"cam": "Haut gauche", "tip": np.float64([44.8, -24.2]), "dir": np.float64([0.0, 1.0]), "length": 249}
@@ -217,6 +241,7 @@ def test_takeout_light_and_manual_end():
 if __name__ == "__main__":
     test_three_cameras()
     test_flight_and_broken_shaft()
+    test_flight_off_axis()
     test_fuse_disagreement()
     test_takeout_light_and_manual_end()
     print("ok")
@@ -238,48 +263,6 @@ def test_ring_points():
     for k, r in real.items():
         assert abs(cal.rings[k] - r) < 1.5, (k, cal.rings[k])
     assert dart_at(0, -98, cal.rings) == (20, 3)  # simple sur une cible officielle, triple ici
-
-
-def test_takeout_light_and_manual_end():
-    np.random.seed(5)
-    tex = board_texture()
-    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
-    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
-    got, takeouts = [], []
-    det = detector.Detector(lambda x, y, info: got.append((x, y)), lambda: takeouts.append(1), log=print)
-    thrown, light = [], [0]
-
-    def frames():
-        return {n: np.clip(render(R, t, tex, thrown).astype(np.int16) + light[0], 0, 255).astype(np.uint8)
-                for n, (R, t) in cams.items()}
-
-    def settle():
-        for _ in range(4):
-            det.step(frames(), cals)
-
-    settle()
-    thrown.append((30, -80))
-    settle()
-    assert len(got) == 1
-    # Lampe allumée pendant qu'on retire : le retrait est quand même vu.
-    thrown.clear()
-    light[0] = 25
-    settle()
-    assert takeouts == [1] and det.darts == 0, (takeouts, det.darts)
-    # Fin de tour à la main, retrait raté (rien de vu), puis fléchette du joueur suivant.
-    thrown.append((-50, 40))
-    settle()
-    assert det.darts == 1
-    det.end_turn()
-    det.empty_small = {n: np.zeros_like(v) for n, v in det.empty_small.items()}  # référence vide faussée
-    thrown.clear()
-    thrown.append((60, 60))
-    settle()
-    # Le changement (une fléchette en moins, une en plus) vaut retrait ou nouveau tour : compteur reparti.
-    assert det.darts <= 1 and not det.turn_over, (det.darts, det.turn_over)
-    thrown.clear()
-    settle()
-    assert det.darts == 0, det.darts
 
 
 if __name__ == "__main__":

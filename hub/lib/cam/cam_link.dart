@@ -23,7 +23,7 @@ class CamLink {
   static const cmdTopic = 'thibsdarts/cam/cmd';
 
   /// Écran de partie qui reçoit les fléchettes (position en unités plateau, en mm).
-  void Function(DartThrow dart, Offset? position)? onDart;
+  void Function(DartThrow dart, Offset? position, String? traceId)? onDart;
 
   /// Fléchettes retirées de la cible : fin du tour.
   VoidCallback? onTakeout;
@@ -124,7 +124,7 @@ class CamLink {
           if (!_seen.add(id)) return;
           if (_seen.length > 100) _seen.remove(_seen.first);
         }
-        onDart?.call(parsed.$1, parsed.$2);
+        onDart?.call(parsed.$1, parsed.$2, json['source'] == 'vision' ? id : null);
     }
   }
 

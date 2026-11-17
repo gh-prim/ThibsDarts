@@ -16,12 +16,16 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
+from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
 
 import detector
 import identity
+import learning
+import traces
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "simulator"))
 from dartlink import (  # noqa: E402
@@ -218,13 +222,25 @@ class Registry:
     def detecting(self):
         return self.mode == "vision" and (self.playing or time.monotonic() < self.test_until)
 
+    def segment(self, x, y):
+        return segment_name(*dart_at(x, y, self.calibs.rings()))
+
     def on_dart(self, x, y, info):
         n, m = dart_at(x, y, self.calibs.rings())
+        dart_id = str(uuid.uuid4())
         print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}", flush=True)
-        self._event({"type": "dart", "segment": segment_name(n, m), "x": round(x, 1), "y": round(y, 1),
-                     "cams": info["cams"]})
+        self._event({"type": "dart", "id": dart_id, "segment": segment_name(n, m), "x": round(x, 1),
+                     "y": round(y, 1), "cams": info["cams"]})
         if self.client:
-            self.client.publish(DART_TOPIC, dart_message(n, m, x, y, source="vision"), qos=1)
+            self.client.publish(DART_TOPIC, dart_message(n, m, x, y, source="vision", dart_id=dart_id), qos=1)
+        self.traces.save(dart_id, info)
+        self.learner.add(dart_id, info["obs"], x, y)
+
+    def correct(self, dart_id, number, multiplier, x=None, y=None):
+        """Correction venue du Pi 4 : exemple juste pour l'apprentissage, modèle refait et validé."""
+        result = self.learner.correct(dart_id, segment_name(number, multiplier), x, y)
+        self.detector.model = None if self.learner.model.empty else self.learner.model
+        return result
 
     def on_takeout(self):
         self._event({"type": "takeout"})
@@ -398,6 +414,28 @@ class Handler(BaseHTTPRequestHandler):
             }
             return self._send(200, json.dumps(body, ensure_ascii=False).encode())
         parts = path.strip("/").split("/")
+        query = {k: v[-1] for k, v in parse_qs(self.path.partition("?")[2]).items()}
+        if parts == ["traces"]:
+            return self._send(200, json.dumps(registry.traces.list(), ensure_ascii=False).encode())
+        if parts == ["learning"]:
+            return self._send(200, json.dumps(registry.learner.stats(), ensure_ascii=False).encode())
+        # GET /trace/<id> : mesures de chaque caméra pour cette fléchette.
+        if len(parts) == 2 and parts[0] == "trace":
+            t = registry.traces.get(parts[1])
+            if t is None:
+                return self._send(404, b'{"error": "trace introuvable"}')
+            return self._send(200, json.dumps(t, ensure_ascii=False).encode())
+        # GET /trace/<id>/<camera>.jpg?view=avant&overlay=0&zoom=1 : image de la caméra, overlay dessiné à la demande.
+        if len(parts) == 3 and parts[0] == "trace" and parts[2].endswith(".jpg"):
+            t = registry.traces.get(parts[1])
+            want = parts[2][:-4]
+            name = next((n for n in (t or {}).get("cams", {}) if traces.slug(n) == want), None)
+            jpg = name and registry.traces.image(
+                parts[1], name, registry.calibs.get(name), view=query.get("view", "apres"),
+                overlay=query.get("overlay", "1") != "0", zoom=query.get("zoom") == "1")
+            if not jpg:
+                return self._send(404, b'{"error": "image introuvable"}')
+            return self._send(200, jpg, "image/jpeg")
         if len(parts) == 2 and parts[0] == "cam":
             cid, _, ext = parts[1].partition(".")
             cam = registry.get(cid)
@@ -428,6 +466,24 @@ class Handler(BaseHTTPRequestHandler):
             registry.test_until = time.monotonic() + TEST_DURATION if on else 0.0
             registry.publish_status("online")
             return self._send(200, json.dumps(detect_status(), ensure_ascii=False).encode())
+        # POST /trace/<id>/correct {"number", "multiplier", "x", "y"} : vraie fléchette (x, y si touchée sur la cible).
+        if len(parts) == 3 and parts[0] == "trace" and parts[2] == "correct":
+            try:
+                b = self._body()
+                n, m = int(b["number"]), int(b["multiplier"])
+                x = float(b["x"]) if b.get("x") is not None else None
+                y = float(b["y"]) if b.get("y") is not None else None
+            except (ValueError, KeyError, TypeError):
+                return self._send(400, b'{"error": "correction"}')
+            result = registry.correct(parts[1], n, m, x, y)
+            if result is None:
+                return self._send(404, b'{"error": "fl\xc3\xa9chette inconnue"}')
+            return self._send(200, json.dumps(result, ensure_ascii=False).encode())
+        # POST /learning/reset : oublie les ajustements appris (les exemples restent).
+        if parts == ["learning", "reset"]:
+            registry.learner.reset()
+            registry.detector.model = None
+            return self._send(200, json.dumps(registry.learner.stats(), ensure_ascii=False).encode())
         cam = registry.get(parts[1]) if len(parts) == 3 and parts[0] == "cam" else None
         # POST /cam/<id>/calib {"points": [[x, y] x 5]} (pleine résolution), [] : oublie la calibration.
         if cam is not None and parts[2] == "calib":
@@ -562,6 +618,9 @@ def base_url():
 def main():
     registry.refs = identity.RefStore(DATA_DIR)
     registry.calibs = detector.CalibStore(DATA_DIR)
+    registry.traces = traces.TraceStore(DATA_DIR, registry.segment)
+    registry.learner = learning.Learner(DATA_DIR, detector.fuse, registry.segment)
+    registry.detector.model = None if registry.learner.model.empty else registry.learner.model
     client = new_client("dartos-cam-vision")
     client.will_set(STATUS_TOPIC, registry.status("offline"), qos=1, retain=True)
     def on_connect(c, *_):

@@ -108,19 +108,19 @@ class _TrainerScreenState extends State<TrainerScreen> {
   int get _score => _g.scoreOf(0);
   bool get _newRecord => _g.isFinished && _score > 0 && (_record == null || _score > _record!);
 
-  void _camDart(DartThrow d, Offset? pos) {
-    if (mounted) _throw(d, pos ?? boardPositionFor(d));
+  void _camDart(DartThrow d, Offset? pos, String? traceId) {
+    if (mounted) _throw(d, pos ?? boardPositionFor(d), traceId: traceId);
   }
 
   void _camTakeout() {
     if (mounted && _g.awaitingNextPlayer && !_g.isFinished) _nextVolley();
   }
 
-  void _throw(DartThrow d, Offset pos) {
+  void _throw(DartThrow d, Offset pos, {String? traceId}) {
     if (_g.awaitingNextPlayer || _g.isFinished) return;
     setState(() {
       _g.throwDart(d);
-      _hits.add(BoardHit(d, pos, _hits.length + 1));
+      _hits.add(BoardHit(d, pos, _hits.length + 1, traceId: traceId));
       _tagDart = d;
       _tagKey++;
     });
@@ -161,7 +161,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
       for (var i = 0; i < _g.currentTurn.length; i++) {
         final d = _g.currentTurn[i];
         final old = i < _hits.length ? _hits[i] : null;
-        kept.add(old != null && old.dart == d ? old : BoardHit(d, boardPositionFor(d), i + 1));
+        kept.add(
+          old != null && old.dart == d && i != c.index
+              ? old
+              : BoardHit(d, (i == c.index ? c.position : null) ?? boardPositionFor(d), i + 1, traceId: old?.traceId),
+        );
       }
       _hits
         ..clear()

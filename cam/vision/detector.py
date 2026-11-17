@@ -177,7 +177,7 @@ class CalibStore:
         os.replace(tmp, self.file)
 
 
-def draw_board(img, cal, color=(0, 255, 255)):
+def draw_board(img, cal, color=(0, 255, 255), points=True):
     """Dessine les anneaux et les secteurs de la cible vus par la caméra (pour vérifier la calibration)."""
     sectors = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
     for r in cal.ring_radii():
@@ -192,7 +192,7 @@ def draw_board(img, cal, color=(0, 255, 255)):
         t = cal.to_image((190 * math.sin(a), -190 * math.cos(a)))
         cv2.putText(img, str(sectors[i]), (int(t[0]) - 8, int(t[1]) + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     color, 1, cv2.LINE_AA)
-    for i, p in enumerate(cal.points):
+    for p in cal.points if points else ():
         cv2.circle(img, (int(p[0]), int(p[1])), 5, (255, 0, 255), 2)
     return img
 
@@ -232,8 +232,9 @@ def find_dart(bg, cur, cal):
         c = np.float64(centroids[i]) - p0
         if abs(c[0] * v[1] - c[1] * v[0]) < 8 and abs(c @ v) < span * 3 + 60:
             keep.append(i)
+    sel = np.isin(labels, keep)
     if len(keep) > 1:
-        ys, xs = np.nonzero(np.isin(labels, keep))
+        ys, xs = np.nonzero(sel)
         pts = np.float32(np.column_stack([xs, ys]))
         vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
         v, p0 = np.float64([vx, vy]), np.float64([x0, y0])
@@ -253,32 +254,42 @@ def find_dart(bg, cur, cal):
     other = cal.to_board(tip + step)
     direction = other - tip_mm
     nd = np.linalg.norm(direction)
+    x0b, y0b = int(xs.min()), int(ys.min())
+    x1b, y1b = int(xs.max()) + 1, int(ys.max()) + 1
     return {
         "tip": tip_mm,
         "dir": direction / nd if nd > 1e-6 else None,
         "tip_img": tip,
-        "area": int(stats[best, cv2.CC_STAT_AREA]),
+        "tail_img": tail,
+        "area": int(sel.sum()),
         "length": length,
+        # Tache retenue (pour la trace) : boîte englobante et masque découpé.
+        "bbox": (x0b, y0b, x1b - x0b, y1b - y0b),
+        "mask": (sel[y0b:y1b, x0b:x1b].astype(np.uint8) * 255),
     }
 
 
-def fuse(obs):
-    """Position de la pointe (mm) à partir des observations de plusieurs caméras."""
+def fuse(obs, model=None):
+    """Position de la pointe (mm) à partir des observations de plusieurs caméras.
+    model : ajustements appris des corrections (learning.Model), ou None."""
+    if model is not None:
+        obs = model.apply(obs)
     tips = np.float64([o["tip"] for o in obs])
     if len(obs) == 1:
         return tips[0]
+    weights = [float(o.get("weight", 1.0)) for o in obs]
     A, b = np.zeros((2, 2)), np.zeros(2)
-    for o in obs:
+    for o, wc in zip(obs, weights):
         if o["dir"] is None:
             continue
-        d = o["dir"].reshape(2, 1)
-        P = np.eye(2) - d @ d.T
+        d = np.float64(o["dir"]).reshape(2, 1)
+        P = (np.eye(2) - d @ d.T) * wc
         A += P
-        b += P @ o["tip"]
+        b += P @ np.float64(o["tip"])
     # Un peu de poids aux pointes : évite l'instabilité si les droites sont presque parallèles.
     w = 0.05
-    A += w * len(obs) * np.eye(2)
-    b += w * tips.sum(axis=0)
+    A += w * sum(weights) * np.eye(2)
+    b += w * sum(wc * t for wc, t in zip(weights, tips))
     x = np.linalg.solve(A, b)
     if np.min(np.linalg.norm(tips - x, axis=1)) > 40:
         return np.median(tips, axis=0)
@@ -290,6 +301,7 @@ class Detector:
 
     def __init__(self, on_dart, on_takeout, log=print):
         self.on_dart, self.on_takeout, self.log = on_dart, on_takeout, log
+        self.model = None  # ajustements appris (learning.Model)
         self.reset()
 
     def reset(self):
@@ -344,6 +356,7 @@ class Detector:
             self._rebase(frames, smalls, empty=self.darts == 0)
             return
         obs = []
+        before = {n: self.bg[n] for n in frames}
         for n, g in frames.items():
             cal = cals.get(n)
             if cal is None or change[n] < CHANGE_MIN / 3:
@@ -356,11 +369,15 @@ class Detector:
         if not obs:
             self.log(f"changement sans fléchette ({', '.join(f'{n} {c:.4f}' for n, c in change.items())})")
             return
-        x, y = fuse(obs)
+        x, y = fuse(obs, self.model)
+        raw = fuse(obs) if self.model is not None else (x, y)
         self.darts += 1
         self.last = {"x": float(x), "y": float(y), "cams": {o["cam"]: [round(float(v), 1) for v in o["tip"]]
                                                            for o in obs}, "ts": time.time()}
-        self.on_dart(float(x), float(y), self.last)
+        # Tout ce qu'il faut pour la trace : images avant / après, ce que chaque caméra a vu.
+        info = dict(self.last, raw=[float(raw[0]), float(raw[1])], obs=obs, change=change,
+                    frames={n: (before[n], frames[n]) for n in frames})
+        self.on_dart(float(x), float(y), info)
 
     def _rebase(self, frames, smalls, empty=False):
         for n in frames:

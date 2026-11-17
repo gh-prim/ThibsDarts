@@ -109,8 +109,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   }
 
   /// Fléchette détectée par le Pi 5, comme un toucher du plateau.
-  void _camDart(DartThrow d, Offset? pos) {
-    if (mounted) _throw(d, pos ?? boardPositionFor(d));
+  void _camDart(DartThrow d, Offset? pos, String? traceId) {
+    if (mounted) _throw(d, pos ?? boardPositionFor(d), traceId: traceId);
   }
 
   /// Fléchettes retirées : comme le bouton de fin de tour, une fois le tour fini.
@@ -150,11 +150,11 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     super.dispose();
   }
 
-  void _throw(DartThrow d, Offset pos, {bool bot = false}) {
+  void _throw(DartThrow d, Offset pos, {bool bot = false, String? traceId}) {
     if (_g.awaitingNextPlayer || _g.isFinished || (_botTurn && !bot)) return;
     setState(() {
       _g.throwDart(d);
-      _hits.add(BoardHit(d, pos, _hits.length + 1));
+      _hits.add(BoardHit(d, pos, _hits.length + 1, traceId: traceId));
       _tagDart = d;
       _tagKey++;
     });
@@ -198,7 +198,11 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       for (var i = 0; i < _g.currentTurn.length; i++) {
         final d = _g.currentTurn[i];
         final old = i < _hits.length ? _hits[i] : null;
-        kept.add(old != null && old.dart == d ? old : BoardHit(d, boardPositionFor(d), i + 1));
+        kept.add(
+          old != null && old.dart == d && i != c.index
+              ? old
+              : BoardHit(d, (i == c.index ? c.position : null) ?? boardPositionFor(d), i + 1, traceId: old?.traceId),
+        );
       }
       _hits
         ..clear()

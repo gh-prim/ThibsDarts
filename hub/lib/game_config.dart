@@ -139,6 +139,42 @@ class GameConfig {
   );
 
   /// Même partie avec un autre niveau de robot (fin de partie : monter ou descendre).
+  /// Pour garder une partie en pause sur le disque.
+  Map<String, Object?> toJson() => {
+    'players': players,
+    'startScore': startScore,
+    'doubleOut': doubleOut,
+    'legsToWin': legsToWin,
+    if (mode != null) 'mode': mode!.name,
+    if (tournamentMatch != null) 'tournamentMatch': tournamentMatch,
+    if (training != null) 'training': [training!.sector, training!.multiplier],
+    'trainingDarts': trainingDarts,
+    if (freeVolleys != null) 'freeVolleys': freeVolleys,
+    'practice': practice,
+    'cricketVariant': cricketVariant.name,
+    if (botLevel != null) 'botLevel': botLevel,
+    'option': option,
+  };
+
+  static GameConfig fromJson(Map<String, Object?> j) {
+    final t = j['training'] as List?;
+    return GameConfig(
+      players: [for (final p in j['players'] as List) p as String],
+      startScore: j['startScore'] as int? ?? 501,
+      doubleOut: j['doubleOut'] as bool? ?? true,
+      legsToWin: j['legsToWin'] as int? ?? 1,
+      mode: j['mode'] == null ? null : GameMode.values.byName(j['mode'] as String),
+      tournamentMatch: j['tournamentMatch'] as String?,
+      training: t == null ? null : TrainingTarget(t[0] as int, t[1] as int),
+      trainingDarts: j['trainingDarts'] as int? ?? 15,
+      freeVolleys: j['freeVolleys'] as int?,
+      practice: j['practice'] as bool? ?? false,
+      cricketVariant: CricketVariant.values.byName(j['cricketVariant'] as String? ?? 'classic'),
+      botLevel: j['botLevel'] as int?,
+      option: j['option'] as int? ?? 0,
+    );
+  }
+
   GameConfig withBot(int level) => GameConfig(
     players: players,
     startScore: startScore,

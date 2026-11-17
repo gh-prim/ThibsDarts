@@ -205,54 +205,82 @@ def changed(a, b, level=DIFF_MIN):
     return cv2.countNonZero(cv2.threshold(cv2.absdiff(a, b), level, 255, cv2.THRESH_BINARY)[1]) / a.size
 
 
-def find_dart(bg, cur, cal):
-    """Nouvelle fléchette entre deux images grises pleine résolution. None si rien de net."""
+def find_dart(bg, cur, cal, why=None):
+    """Nouvelle fléchette entre deux images grises pleine résolution. None si rien de net.
+    why : liste qui reçoit la raison du refus (montrée dans la trace)."""
     d = cv2.absdiff(cv2.GaussianBlur(cur, (5, 5), 0), cv2.GaussianBlur(bg, (5, 5), 0))
     mask = cv2.threshold(d, DIFF_MIN, 255, cv2.THRESH_BINARY)[1]
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
     n, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    best = None
-    for i in range(1, n):
-        area = stats[i, cv2.CC_STAT_AREA]
-        if DART_MIN_AREA <= area <= DART_MAX_AREA and (best is None or area > stats[best, cv2.CC_STAT_AREA]):
-            best = i
-    if best is None:
-        return None
-    ys, xs = np.nonzero(labels == best)
+    areas = stats[:, cv2.CC_STAT_AREA]
+    # Plusieurs taches possibles (fléchette, ombre, câble, reflet) : on essaie les plus grosses
+    # et on garde la plus grosse fléchette plausible, pas juste la plus grosse tache.
+    cands = sorted((i for i in range(1, n) if areas[i] >= DART_MIN_AREA // 3), key=lambda i: -areas[i])[:6]
+    reasons, best = [], None
+    for i in cands:
+        r = _dart_from(i, n, labels, stats, centroids, cal)
+        if isinstance(r, str):
+            reasons.append(r)
+        elif best is None or r["area"] > best["area"]:
+            best = r
+    if best is None and why is not None:
+        why.append(reasons[0] if reasons else "aucune tache")
+    return best
+
+
+def _dart_from(main, n, labels, stats, centroids, cal):
+    """Fléchette construite autour de la tache main, ou la raison du refus (texte)."""
+    areas = stats[:, cv2.CC_STAT_AREA]
+    c0 = np.float64(centroids[main])
+    up = cal.normal_dir(c0)  # direction attendue pointe -> empennage dans l'image
+    ys, xs = np.nonzero(labels == main)
     pts = np.float32(np.column_stack([xs, ys]))
-    vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
-    v, p0 = np.float64([vx, vy]), np.float64([x0, y0])
+    axis = up
+    if len(pts) >= 5:
+        ev, evec = np.linalg.eigh(np.cov(pts.T))
+        v = evec[:, 1]
+        # Tache allongée (fût) : son axe. Tache ronde (empennage seul) : la direction attendue.
+        if ev[1] > 9 * max(ev[0], 1e-6) and abs(v @ up) > 0.5:
+            axis = v if v @ up > 0 else -v
     # Le fût, fin, se coupe souvent en morceaux : on garde ceux qui sont dans l'axe de la fléchette.
-    span = max(stats[best, cv2.CC_STAT_WIDTH], stats[best, cv2.CC_STAT_HEIGHT])
-    keep = [best]
+    keep = [main]
     for i in range(1, n):
-        if i == best or stats[i, cv2.CC_STAT_AREA] < 15:
+        if i == main or areas[i] < 15:
             continue
-        c = np.float64(centroids[i]) - p0
-        if abs(c[0] * v[1] - c[1] * v[0]) < 8 and abs(c @ v) < span * 3 + 60:
+        c = np.float64(centroids[i]) - c0
+        along = c @ axis
+        if abs(c[0] * axis[1] - c[1] * axis[0]) < 10 + 0.15 * abs(along) and abs(along) < 450:
             keep.append(i)
     sel = np.isin(labels, keep)
-    if len(keep) > 1:
-        ys, xs = np.nonzero(sel)
-        pts = np.float32(np.column_stack([xs, ys]))
-        vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
-        v, p0 = np.float64([vx, vy]), np.float64([x0, y0])
+    area = int(sel.sum())
+    if area < DART_MIN_AREA:
+        return "tache trop petite"
+    if area > DART_MAX_AREA:
+        return "tache trop grande"
+    ys, xs = np.nonzero(sel)
+    pts = np.float32(np.column_stack([xs, ys]))
+    if len(keep) > 1 and axis is up:
+        # Empennage + morceaux de fût : l'axe passe par le centre de l'empennage et le fût.
+        others = np.float32(np.column_stack(np.nonzero(np.isin(labels, keep[1:]))[::-1]))
+        fit_pts = np.vstack([others, np.repeat(np.float32([c0]), min(len(others), 200), axis=0)])
+    else:
+        fit_pts = pts
+    vx, vy, x0, y0 = cv2.fitLine(fit_pts, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
+    v, p0 = np.float64([vx, vy]), np.float64([x0, y0])
+    if v @ up < 0:
+        v = -v
     proj = (pts - p0) @ v
-    e1, e2 = p0 + v * proj.min(), p0 + v * proj.max()
     length = float(proj.max() - proj.min())
     if length < 12:
-        return None
-    # La pointe est le bout d'où part l'empennage (vers le joueur, donc vers la caméra).
-    mid = (e1 + e2) / 2
-    up = cal.normal_dir(mid)
-    tip, tail = (e1, e2) if (e2 - e1) @ up > 0 else (e2, e1)
+        return "tache trop courte"
+    # La pointe est le bout opposé à l'empennage (qui part vers le joueur, donc vers la caméra).
+    tip, tail = p0 + v * proj.min(), p0 + v * proj.max()
     tip_mm = cal.to_board(tip)
     if np.linalg.norm(tip_mm) > BOARD_LIMIT:
-        return None
+        return "pointe hors cible"
     step = (tail - tip) / max(np.linalg.norm(tail - tip), 1e-6) * min(25.0, length / 2)
-    other = cal.to_board(tip + step)
-    direction = other - tip_mm
+    direction = cal.to_board(tip + step) - tip_mm
     nd = np.linalg.norm(direction)
     x0b, y0b = int(xs.min()), int(ys.min())
     x1b, y1b = int(xs.max()) + 1, int(ys.max()) + 1
@@ -261,7 +289,7 @@ def find_dart(bg, cur, cal):
         "dir": direction / nd if nd > 1e-6 else None,
         "tip_img": tip,
         "tail_img": tail,
-        "area": int(sel.sum()),
+        "area": area,
         "length": length,
         # Tache retenue (pour la trace) : boîte englobante et masque découpé.
         "bbox": (x0b, y0b, x1b - x0b, y1b - y0b),
@@ -269,18 +297,17 @@ def find_dart(bg, cur, cal):
     }
 
 
-def fuse(obs, model=None):
-    """Position de la pointe (mm) à partir des observations de plusieurs caméras.
-    model : ajustements appris des corrections (learning.Model), ou None."""
-    if model is not None:
-        obs = model.apply(obs)
+AGREE_MM = 40.0  # une caméra est d'accord si sa pointe est à moins de ça du point trouvé
+
+
+def _intersect(obs):
     tips = np.float64([o["tip"] for o in obs])
     if len(obs) == 1:
         return tips[0]
     weights = [float(o.get("weight", 1.0)) for o in obs]
     A, b = np.zeros((2, 2)), np.zeros(2)
     for o, wc in zip(obs, weights):
-        if o["dir"] is None:
+        if o.get("dir") is None:
             continue
         d = np.float64(o["dir"]).reshape(2, 1)
         P = (np.eye(2) - d @ d.T) * wc
@@ -290,10 +317,32 @@ def fuse(obs, model=None):
     w = 0.05
     A += w * sum(weights) * np.eye(2)
     b += w * sum(wc * t for wc, t in zip(weights, tips))
-    x = np.linalg.solve(A, b)
-    if np.min(np.linalg.norm(tips - x, axis=1)) > 40:
-        return np.median(tips, axis=0)
-    return x
+    return np.linalg.solve(A, b)
+
+
+def _agree(x, obs):
+    return min(np.linalg.norm(np.float64(o["tip"]) - x) for o in obs) <= AGREE_MM
+
+
+def fuse(obs, model=None):
+    """Position de la pointe (mm) à partir des observations de plusieurs caméras.
+    model : ajustements appris des corrections (learning.Model), ou None."""
+    if model is not None:
+        obs = model.apply(obs)
+    x = _intersect(obs)
+    if len(obs) == 1 or _agree(x, obs):
+        return x
+    # Caméras en désaccord : on écarte celle qui gêne (3 caméras), sinon on croit la plus longue tache
+    # (fléchette vue en entier) plutôt que de couper la poire en deux.
+    if len(obs) >= 3:
+        subs = [[o for o in obs if o is not out] for out in obs]
+        sols = [(_intersect(s), s) for s in subs]
+        ok = [(x2, s) for x2, s in sols if _agree(x2, s)]
+        if ok:
+            x2, s = min(ok, key=lambda e: np.mean([np.linalg.norm(np.float64(o["tip"]) - e[0]) for o in e[1]]))
+            return x2
+    best = max(obs, key=lambda o: float(o.get("length", 0)) * float(o.get("weight", 1.0)))
+    return np.float64(best["tip"])
 
 
 class Detector:
@@ -355,13 +404,18 @@ class Detector:
             self.log(f"gros changement ignoré ({max(change.values()):.3f}, écart vide {empty:.4f})")
             self._rebase(frames, smalls, empty=self.darts == 0)
             return
-        obs = []
+        obs, why = [], {}
         before = {n: self.bg[n] for n in frames}
         for n, g in frames.items():
             cal = cals.get(n)
             if cal is None or change[n] < CHANGE_MIN / 3:
+                if cal is not None:
+                    why[n] = "changement trop faible"
                 continue
-            o = find_dart(self.bg[n], g, cal)
+            reasons = []
+            o = find_dart(self.bg[n], g, cal, reasons)
+            if reasons:
+                why[n] = reasons[0]
             if o:
                 o["cam"] = n
                 obs.append(o)
@@ -375,7 +429,7 @@ class Detector:
         self.last = {"x": float(x), "y": float(y), "cams": {o["cam"]: [round(float(v), 1) for v in o["tip"]]
                                                            for o in obs}, "ts": time.time()}
         # Tout ce qu'il faut pour la trace : images avant / après, ce que chaque caméra a vu.
-        info = dict(self.last, raw=[float(raw[0]), float(raw[1])], obs=obs, change=change,
+        info = dict(self.last, raw=[float(raw[0]), float(raw[1])], obs=obs, change=change, why=why,
                     frames={n: (before[n], frames[n]) for n in frames})
         self.on_dart(float(x), float(y), info)
 

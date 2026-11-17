@@ -4,16 +4,22 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../cam/cam_traces.dart';
 import '../theme/tokens.dart';
 import '../widgets/controls.dart';
 import '../widgets/dartboard.dart';
 import '../widgets/stage.dart';
+import '../widgets/td_button.dart';
+import 'trace_screen.dart';
 
-/// Résultat d'une correction : quelle fléchette, et sa nouvelle valeur.
+/// Résultat d'une correction : quelle fléchette, sa nouvelle valeur, et l'endroit exact touché sur la cible.
 class Correction {
-  const Correction(this.index, this.dart);
+  const Correction(this.index, this.dart, {this.position});
   final int index;
   final DartThrow dart;
+
+  /// Position touchée sur la cible (unités plateau = mm), null si corrigée au pavé.
+  final Offset? position;
 }
 
 /// "Corriger une fléchette" (planche Correction) : plateau à gauche,
@@ -35,6 +41,15 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
   late String _mult;
   late int _sector; // 0 = raté, 25 = bull
 
+  /// Endroit exact touché sur la cible pour cette fléchette.
+  Offset? _tapped;
+
+  /// Trace de la fléchette sur le Pi 5 (fléchette vue par les caméras), null sinon.
+  String? get _traceId => _index < widget.hits.length ? widget.hits[_index].traceId : null;
+
+  /// Position envoyée : seulement si elle correspond encore à la valeur choisie (pas changée au pavé).
+  Offset? get _position => _tapped != null && dartAt(_tapped!) == _dart ? _tapped : null;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +57,7 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
   }
 
   void _load() {
+    _tapped = null;
     final d = _index < widget.turn.length ? widget.turn[_index] : const DartThrow.triple(20);
     _sector = d.sector;
     _mult = _mults[d.isMiss ? 0 : d.multiplier - 1];
@@ -63,6 +79,7 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
   void _pickOnBoard(Offset p) {
     final d = dartAt(p);
     setState(() {
+      _tapped = p;
       _sector = d.sector;
       if (!d.isMiss) _mult = _mults[d.multiplier - 1];
     });
@@ -87,10 +104,15 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                   children: [
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 460, maxHeight: 520),
-                      child: Dartboard(hits: widget.hits, aimed: _sector == 0 ? null : _dart, onTapBoard: _pickOnBoard),
+                      child: Dartboard(hits: _shownHits, aimed: _sector == 0 ? null : _dart, onTapBoard: _pickOnBoard),
                     ),
                     const SizedBox(height: Td.s2),
-                    Text('Ou touche directement le secteur sur la cible.', style: TdText.inter(15, 20, 400, Td.ink2)),
+                    Text(
+                      _traceId == null
+                          ? 'Ou touche directement le secteur sur la cible.'
+                          : "Touche l'endroit exact de la fléchette sur la cible.",
+                      style: TdText.inter(15, 20, 400, Td.ink2),
+                    ),
                   ],
                 ),
               ),
@@ -114,6 +136,21 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                         Row(
                           children: [
                             Expanded(child: Text('Corriger une fléchette', style: TdText.inter(22, 28, 700, Td.ink))),
+                            if (_traceId != null && CamTraces.available) ...[
+                              SizedBox(
+                                width: 150,
+                                child: TdButton(
+                                  label: 'Caméras',
+                                  icon: LucideIcons.camera,
+                                  variant: TdButtonVariant.secondary,
+                                  height: 44,
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(builder: (_) => TraceScreen(traceId: _traceId!)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: Td.s2),
+                            ],
                             TdIconButton(
                               icon: LucideIcons.x,
                               label: 'Fermer',
@@ -182,7 +219,7 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                               child: _ActionButton(
                                 label: 'Valider',
                                 primary: true,
-                                onTap: () => Navigator.of(context).pop(Correction(_index, _dart)),
+                                onTap: _validate,
                               ),
                             ),
                           ],
@@ -197,6 +234,20 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
         ),
       ),
     );
+  }
+
+  /// Impacts affichés : celui de la fléchette corrigée suit l'endroit touché.
+  List<BoardHit> get _shownHits => [
+    for (final (i, h) in widget.hits.indexed)
+      i == _index && _tapped != null ? BoardHit(_dart, _tapped!, h.n, traceId: h.traceId) : h,
+  ];
+
+  void _validate() {
+    final id = _traceId;
+    final pos = _position;
+    // La vraie fléchette part au Pi 5 : exemple juste pour l'apprentissage de la détection.
+    if (id != null) CamTraces.correct(id, _dart, pos);
+    Navigator.of(context).pop(Correction(_index, _dart, position: pos));
   }
 
   Widget _key(int n) {

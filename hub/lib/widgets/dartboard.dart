@@ -13,8 +13,11 @@ const _rB = 6.35, _rOb = 15.9, _rTi = 99.0, _rTo = 107.0, _rDi = 162.0, _rDo = 1
 
 /// Une fléchette posée sur le plateau.
 class BoardHit {
-  const BoardHit(this.dart, this.position, this.n);
+  const BoardHit(this.dart, this.position, this.n, {this.traceId});
   final DartThrow dart;
+
+  /// Identifiant de la fléchette détectée par les caméras (trace sur le Pi 5), null si saisie à la main.
+  final String? traceId;
 
   /// Position en unités plateau (centre = 0,0).
   final Offset position;

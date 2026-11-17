@@ -113,8 +113,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   bool get _newRecord => _over && _score > 0 && (_record == null || _score > _record!);
 
-  void _camDart(DartThrow d, Offset? pos) {
-    if (mounted) _throw(d, pos ?? boardPositionFor(d));
+  void _camDart(DartThrow d, Offset? pos, String? traceId) {
+    if (mounted) _throw(d, pos ?? boardPositionFor(d), traceId: traceId);
   }
 
   /// Fléchettes retirées : volée suivante, une fois les 3 lancées.
@@ -122,11 +122,11 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (mounted && _g.awaitingNextPlayer && !_g.isFinished) _nextVolley();
   }
 
-  void _throw(DartThrow d, Offset pos) {
+  void _throw(DartThrow d, Offset pos, {String? traceId}) {
     if (_g.awaitingNextPlayer || _over) return;
     setState(() {
       _g.throwDart(d);
-      _hits.add(BoardHit(d, pos, _hits.length + 1));
+      _hits.add(BoardHit(d, pos, _hits.length + 1, traceId: traceId));
       _throws.add({'d': d.label, 'x': (pos.dx * 10).round() / 10, 'y': (pos.dy * 10).round() / 10});
       _tagDart = d;
       _tagKey++;
@@ -165,7 +165,11 @@ class _TrainingScreenState extends State<TrainingScreen> {
       for (var i = 0; i < turn.length; i++) {
         final d = turn[i];
         final old = i < _hits.length ? _hits[i] : null;
-        kept.add(old != null && old.dart == d ? old : BoardHit(d, boardPositionFor(d), i + 1));
+        kept.add(
+          old != null && old.dart == d && i != c.index
+              ? old
+              : BoardHit(d, (i == c.index ? c.position : null) ?? boardPositionFor(d), i + 1, traceId: old?.traceId),
+        );
       }
       _hits
         ..clear()

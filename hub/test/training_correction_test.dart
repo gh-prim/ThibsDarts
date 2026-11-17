@@ -23,13 +23,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final out = Platform.environment['SHOTS'];
-    if (out != null) {
-      await tester.runAsync(() async {
-        await _font('Inter', 'assets/fonts/Inter.ttf');
-        await _font('Nunito', 'assets/fonts/Nunito.ttf');
-        await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
-      });
-    }
+    // Vraies polices : sans elles (police de test plus large), les boutons débordent.
+    await tester.runAsync(() async {
+      await _font('Inter', 'assets/fonts/Inter.ttf');
+      await _font('Nunito', 'assets/fonts/Nunito.ttf');
+      await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
+    });
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),

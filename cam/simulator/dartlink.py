@@ -93,9 +93,9 @@ def parse_segment(text):
     return n, mult or 1
 
 
-def dart_message(number, multiplier, x=None, y=None, source="sim"):
+def dart_message(number, multiplier, x=None, y=None, source="sim", dart_id=None):
     msg = {
-        "id": str(uuid.uuid4()),
+        "id": dart_id or str(uuid.uuid4()),
         "ts": int(time.time() * 1000),
         "segment": segment_name(number, multiplier),
         "number": number,

@@ -116,8 +116,56 @@ def test_three_cameras():
     assert takeouts == [1]
 
 
+def shade(img, p):
+    v = int(img[int(p[1]) % H, int(p[0]) % W])
+    return v + 60 if v < 128 else v - 60
+
+
+def test_flight_and_broken_shaft():
+    """Empennage gros et rond, fût pâle et coupé, plus une tache parasite hors cible plus grosse."""
+    np.random.seed(3)
+    tex = board_texture()
+    for name, d in detector.PRESET_DIRS.items():
+        R, t = pose(d)
+        cal = calib_for(R, t)
+        rvec, _ = cv2.Rodrigues(R)
+        for tgt in [(10, -60), (45, -25), (-80, 70)]:
+            bg = render(R, t, tex)
+            cur = bg.copy()
+            p, _ = cv2.projectPoints(np.float64([(*tgt, 0), (*tgt, -70), (*tgt, -110)]), rvec, t, K, None)
+            p = p.reshape(-1, 2)
+            # Fût en pointillés, juste au-dessus du seuil.
+            for k in range(0, 10, 2):
+                a, b = p[0] + (p[1] - p[0]) * k / 10, p[0] + (p[1] - p[0]) * (k + 1) / 10
+                cv2.line(cur, tuple(np.int32(a)), tuple(np.int32(b)), shade(bg, a), 3)
+            # Empennage : disque autour du haut.
+            cv2.circle(cur, tuple(np.int32((p[1] + p[2]) / 2)), 28, 255, -1)
+            # Parasite (câble, reflet) hors de la cible, plus gros que la fléchette.
+            cv2.rectangle(cur, (20, 20), (130, 140), 255, -1)
+            o = detector.find_dart(bg, cur, cal)
+            assert o is not None, (name, tgt)
+            err = float(np.linalg.norm(o["tip"] - np.float64(tgt)))
+            assert err < 8, (name, tgt, [round(float(v), 1) for v in o["tip"]], err)
+
+
+def test_fuse_disagreement():
+    # Haut gauche voit toute la fléchette ; Haut droite n'a que l'empennage, pointe loin.
+    good = {"cam": "Haut gauche", "tip": np.float64([44.8, -24.2]), "dir": np.float64([0.0, 1.0]), "length": 249}
+    bad = {"cam": "Haut droite", "tip": np.float64([-131.8, 95.8]), "dir": np.float64([1.0, 0.0]), "length": 88}
+    x = detector.fuse([good, bad])
+    assert np.linalg.norm(x - good["tip"]) < 1, x
+    # Trois caméras dont une fausse : on garde les deux d'accord.
+    t = np.float64([40, -30])
+    a = {"cam": "a", "tip": t + [3, 4], "dir": np.float64([0.6, 0.8]), "length": 200}
+    b = {"cam": "b", "tip": t + [-4, 3], "dir": np.float64([-0.8, 0.6]), "length": 200}
+    x = detector.fuse([a, b, bad])
+    assert np.linalg.norm(x - t) < 3, x
+
+
 if __name__ == "__main__":
     test_three_cameras()
+    test_flight_and_broken_shaft()
+    test_fuse_disagreement()
     print("ok")
 
 

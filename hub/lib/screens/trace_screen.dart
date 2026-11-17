@@ -181,8 +181,10 @@ class _TraceScreenState extends State<TraceScreen> {
                 _fact('Pointe', 'x ${_mm((c['tip'] as List?)?[0])} · y ${_mm((c['tip'] as List?)?[1])} mm'),
                 _fact('Tache', '${c['area']} px'),
                 _fact('Longueur', '${_mm(c['length'])} px'),
-              ] else
+              ] else ...[
                 _fact('Segment', 'Rien vu', big: true),
+                if (c['why'] != null) _fact('Refus', '${c['why']}'),
+              ],
               _fact('Changement', '${_mm(((c['change'] as num?) ?? 0) * 100)} %'),
               const Spacer(),
               TdSegmented(

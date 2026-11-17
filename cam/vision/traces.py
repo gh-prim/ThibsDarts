@@ -69,6 +69,8 @@ class TraceStore:
             cv2.imwrite(os.path.join(d, f"{s}-apres.jpg"), after, [cv2.IMWRITE_JPEG_QUALITY, 90])
             o = obs.get(name)
             c = {"seen": o is not None, "change": round(float(info["change"].get(name, 0)), 4)}
+            if o is None and info.get("why", {}).get(name):
+                c["why"] = info["why"][name]
             if o is not None:
                 cv2.imwrite(os.path.join(d, f"{s}-masque.png"), o["mask"])
                 c.update({

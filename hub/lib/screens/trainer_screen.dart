@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../cam/cam_link.dart';
+import '../game/paused_game.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../theme/tokens.dart';
@@ -36,18 +37,22 @@ int? trainerRecord(String name, GameMode mode, int option) {
 /// Entraînements solo (planches Catch 40 à Cricket Count Up) : joueur et progression à gauche,
 /// plateau au centre, score et fléchettes à droite. Toucher le plateau lance une fléchette à cet endroit.
 class TrainerScreen extends StatefulWidget {
-  const TrainerScreen({super.key, required this.config, this.game});
+  const TrainerScreen({super.key, required this.config, this.game, this.paused});
 
   final GameConfig config;
 
   /// Entraînement déjà commencé (captures et tests).
   final TurnGame? game;
 
+  /// Entraînement repris après une pause : rejoué tel quel.
+  final PausedGame? paused;
+
   @override
   State<TrainerScreen> createState() => _TrainerScreenState();
 }
 
 class _TrainerScreenState extends State<TrainerScreen> {
+  late final GameLog _log = GameLog(seed: widget.paused?.seed, replayLog: widget.paused?.log);
   late TurnGame _g = widget.game ?? _newGame();
   final List<BoardHit> _hits = [];
   DartThrow? _tagDart;
@@ -71,6 +76,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
     GameMode.randomCheckout => CheckoutDrill.random(
       _name,
       range: CheckoutRange.values[_option.clamp(0, CheckoutRange.values.length - 1)],
+      random: _log.random,
     ),
     GameMode.jdc => JdcGame(_name),
     GameMode.darts99 => Darts99Game(_name, sector: _option == 0 ? 20 : _option),
@@ -85,6 +91,10 @@ class _TrainerScreenState extends State<TrainerScreen> {
     super.initState();
     AppState.lastGame = widget.config;
     _record = trainerRecord(_name, _mode, _option);
+    if (widget.paused != null) {
+      _log.replay(_apply);
+      PausedGame.clear();
+    }
     CamLink.instance
       ..onDart = _camDart
       ..onTakeout = _camTakeout
@@ -105,6 +115,26 @@ class _TrainerScreenState extends State<TrainerScreen> {
     super.dispose();
   }
 
+  /// Rejoue une entrée du journal d'un entraînement repris.
+  void _apply(Map<String, Object?> e) {
+    switch (e['t']) {
+      case 'd':
+        _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)));
+      case 'c':
+        _applyCorrection(GameLog.correctionOf(e));
+      case 'e':
+        _nextVolley();
+      case 'r':
+        _again();
+    }
+  }
+
+  /// Pause : l'entraînement est gardé sur le disque, on revient à l'accueil.
+  void _pause() {
+    _log.pause(_cfg);
+    Navigator.of(context).pop();
+  }
+
   int get _score => _g.scoreOf(0);
   bool get _newRecord => _g.isFinished && _score > 0 && (_record == null || _score > _record!);
 
@@ -118,6 +148,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
 
   void _throw(DartThrow d, Offset pos, {String? traceId}) {
     if (_g.awaitingNextPlayer || _g.isFinished) return;
+    _log.add(GameLog.dart('d', d, x: pos.dx, y: pos.dy));
     setState(() {
       _g.throwDart(d);
       _hits.add(BoardHit(d, pos, _hits.length + 1, traceId: traceId));
@@ -155,6 +186,11 @@ class _TrainerScreenState extends State<TrainerScreen> {
       ),
     );
     if (c == null || !mounted) return;
+    _applyCorrection(c);
+  }
+
+  void _applyCorrection(Correction c) {
+    _log.add(GameLog.correction(c));
     setState(() {
       _g.correctDart(c.index, c.dart);
       final kept = <BoardHit>[];
@@ -176,7 +212,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
   }
 
   void _nextVolley() {
-    CamLink.instance.turnEnded();
+    if (!_log.replaying) CamLink.instance.turnEnded();
+    _log.add({'t': 'e'});
     if (_g.isFinished) {
       setState(() => _showEnd = true);
       return;
@@ -189,6 +226,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   }
 
   void _again() {
+    _log.add({'t': 'r'});
     _endTimer?.cancel();
     _save();
     _saved = false;
@@ -206,6 +244,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
   // MARK: Historique
 
   void _save() {
+    if (_log.replaying) return; // déjà enregistré avant la pause
     final g = _g;
     if (!g.isFinished || _saved) return;
     _saved = true;
@@ -390,7 +429,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
       Row(
         spacing: Td.s2,
         children: [
-          const StopGameButton(),
+          StopGameButton(onPause: _g.isFinished ? null : _pause),
           Expanded(
             child: Text(
               _headerLabel,

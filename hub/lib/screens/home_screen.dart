@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../game/paused_game.dart';
 import '../game_config.dart';
 import '../lobby/lobby.dart';
 import '../theme/tokens.dart';
@@ -87,7 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _home(BuildContext context) {
-    final last = AppState.lastGame;
+    final paused = PausedGame.load();
+    final last = paused?.config ?? AppState.lastGame;
     final players = last?.players ?? [AppState.owner];
     return Scaffold(
       backgroundColor: Td.beton,
@@ -131,14 +133,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            last == null
+                            paused != null
+                                ? (last!.drill || last.practice ? 'Entraînement en pause.' : 'Partie en pause.')
+                                : last == null
                                 ? 'Prêt à jouer.'
                                 : (last.drill || last.practice ? "Ton entraînement t'attend." : "Le ${last.title} t'attend."),
                             style: TdText.title,
                           ),
                           const SizedBox(height: Td.s4),
                           Text(
-                            last == null
+                            paused != null
+                                ? '${last!.label}, avec ${players.join(', ')}.'
+                                : last == null
                                 ? 'Lance une partie ici. Les potes rejoignent depuis leur iPhone.'
                                 : last.drill || last.practice
                                 ? 'Dernier entraînement : ${last.label}.'
@@ -148,7 +154,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TdText.body,
                           ),
                           const SizedBox(height: Td.s6),
-                          if (last != null) ...[
+                          if (paused != null) ...[
+                            TdButton(
+                              label: 'Reprendre',
+                              icon: LucideIcons.play,
+                              onPressed: () => _open(gameScreenFor(paused.config, paused: paused)),
+                            ),
+                            const SizedBox(height: Td.s4),
+                          ] else if (last != null) ...[
                             TdButton(
                               label: 'Rejouer',
                               icon: LucideIcons.refreshCw,
@@ -159,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           TdButton(
                             label: 'Nouvelle partie',
                             icon: LucideIcons.plus,
-                            variant: last == null ? TdButtonVariant.primary : TdButtonVariant.secondary,
+                            variant: last == null && paused == null ? TdButtonVariant.primary : TdButtonVariant.secondary,
                             onPressed: () => _open(const PlayKindScreen()),
                           ),
                         ],

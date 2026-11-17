@@ -398,20 +398,85 @@ Future<bool> confirmAction(
   return ok == true;
 }
 
-/// Bouton "Arrêter" de l'écran de jeu : demande confirmation puis revient à l'accueil.
+/// Bouton "Arrêter" de l'écran de jeu : pause (gardée même après un redémarrage) ou fin de la partie.
 class StopGameButton extends StatelessWidget {
-  const StopGameButton({super.key, this.size = 44});
+  const StopGameButton({super.key, this.size = 44, this.onPause});
 
   final double size;
 
-  static Future<void> confirm(BuildContext context) async {
-    final stop = await confirmAction(
-      context,
-      title: 'Arrêter la partie ?',
-      body: 'Elle ne comptera pas dans l’historique.',
-      action: 'Arrêter',
+  /// Met la partie en pause (la garde sur le disque). Sans lui, seulement Terminer.
+  final VoidCallback? onPause;
+
+  static Future<void> confirm(BuildContext context, {VoidCallback? onPause}) async {
+    if (onPause == null) {
+      final stop = await confirmAction(
+        context,
+        title: 'Arrêter la partie ?',
+        body: 'Elle ne comptera pas dans l’historique.',
+        action: 'Arrêter',
+      );
+      if (stop && context.mounted) Navigator.of(context).pop();
+      return;
+    }
+    final choice = await showDialog<String>(
+      context: context,
+      barrierColor: const Color(0xCC000000),
+      builder: (ctx) => Dialog(
+        backgroundColor: Td.plateauNoir,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Td.rXl)),
+        child: Padding(
+          padding: const EdgeInsets.all(Td.s8),
+          child: SizedBox(
+            width: 600,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Pause ou fin de partie ?', style: TdText.headline),
+                const SizedBox(height: Td.s2),
+                Text('En pause : reprise depuis l’accueil, même après un redémarrage ou une mise à jour.', style: TdText.body),
+                const SizedBox(height: Td.s1),
+                Text('Terminée : hors de l’historique.', style: TdText.body),
+                const SizedBox(height: Td.s6),
+                Row(
+                  spacing: Td.s3,
+                  children: [
+                    Expanded(
+                      child: TdButton(
+                        label: 'Continuer',
+                        variant: TdButtonVariant.secondary,
+                        onPressed: () => Navigator.of(ctx).pop(null),
+                      ),
+                    ),
+                    Expanded(
+                      child: TdButton(
+                        label: 'Terminer',
+                        icon: LucideIcons.x,
+                        variant: TdButtonVariant.secondary,
+                        onPressed: () => Navigator.of(ctx).pop('stop'),
+                      ),
+                    ),
+                    Expanded(
+                      child: TdButton(
+                        label: 'Pause',
+                        icon: LucideIcons.pause,
+                        onPressed: () => Navigator.of(ctx).pop('pause'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
-    if (stop && context.mounted) Navigator.of(context).pop();
+    if (!context.mounted) return;
+    if (choice == 'pause') {
+      onPause();
+    } else if (choice == 'stop') {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -419,7 +484,7 @@ class StopGameButton extends StatelessWidget {
     button: true,
     label: 'Arrêter la partie',
     child: GestureDetector(
-      onTap: () => confirm(context),
+      onTap: () => confirm(context, onPause: onPause),
       child: Container(
         width: size,
         height: size,

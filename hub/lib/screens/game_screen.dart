@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../cam/cam_link.dart';
+import '../game/paused_game.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../lobby/lobby.dart';
@@ -28,15 +29,20 @@ import 'correction_screen.dart';
 /// toucher le plateau lance aussi une fléchette à cet endroit.
 /// Avec [GameConfig.botLevel], le robot joue son tour tout seul (planche BotTour).
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.config});
+  const GameScreen({super.key, required this.config, this.paused});
 
   final GameConfig config;
+
+  /// Partie reprise après une pause : rejouée telle quelle.
+  final PausedGame? paused;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen> {
+  late final GameLog _log = GameLog(seed: widget.paused?.seed, replayLog: widget.paused?.log);
+  bool _pausing = false;
   late X01Game _game = _newGame();
   int _leg = 1;
   int _starter = 0;
@@ -104,12 +110,37 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     AppState.lastGame = widget.config;
+    if (widget.paused != null) {
+      _log.replay(_apply);
+      PausedGame.clear();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _botPlay());
     Lobby.instance.stopGame = _stopFromPhone;
     CamLink.instance
       ..onDart = _camDart
       ..onTakeout = _camTakeout
       ..setPlaying(true);
+  }
+
+  /// Rejoue une entrée du journal d'une partie reprise.
+  void _apply(Map<String, Object?> e) {
+    switch (e['t']) {
+      case 'd':
+        _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)), bot: e['b'] == true);
+      case 'c':
+        _applyCorrection(GameLog.correctionOf(e));
+      case 'e':
+        _endTurn();
+      case 'r':
+        _rematch();
+    }
+  }
+
+  /// Pause : la partie est gardée sur le disque, on revient à l'accueil.
+  void _pause() {
+    _log.pause(_cfg);
+    _pausing = true;
+    Navigator.of(context).pop();
   }
 
   /// Arrêt demandé depuis un iPhone du salon (déjà confirmé là-bas).
@@ -143,7 +174,7 @@ class _GameScreenState extends State<GameScreen> {
     _winTimer?.cancel();
     _botTimer?.cancel();
     _save();
-    _reportTournament();
+    if (!_pausing) _reportTournament();
     if (Lobby.instance.stopGame == _stopFromPhone) Lobby.instance.stopGame = null;
     if (CamLink.instance.onDart == _camDart) {
       CamLink.instance
@@ -157,6 +188,7 @@ class _GameScreenState extends State<GameScreen> {
 
   void _throw(DartThrow d, Offset pos, {bool bot = false, String? traceId}) {
     if (_game.awaitingNextPlayer || _game.isFinished || (_botTurn && !bot)) return;
+    _log.add(GameLog.dart('d', d, x: pos.dx, y: pos.dy, more: {if (bot) 'b': true}));
     setState(() {
       _last = _game.throwDart(d);
       if (_last == ThrowOutcome.checkout) {
@@ -193,6 +225,7 @@ class _GameScreenState extends State<GameScreen> {
 
   /// Revanche : mêmes joueurs, on repart de zéro, le joueur suivant commence.
   void _rematch() {
+    _log.add({'t': 'r'});
     _winTimer?.cancel();
     _save();
     _saved = false;
@@ -282,6 +315,7 @@ class _GameScreenState extends State<GameScreen> {
 
   /// Enregistre la partie finie dans l'historique (une fois, en quittant ou avant la revanche).
   void _save() {
+    if (_log.replaying) return; // déjà enregistrée avant la pause
     if (!_matchOver || _saved) return;
     _saved = true;
     final winner = _game.winner!.name;
@@ -333,6 +367,11 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
     if (c == null || !mounted) return;
+    _applyCorrection(c);
+  }
+
+  void _applyCorrection(Correction c) {
+    _log.add(GameLog.correction(c));
     final hadWinner = _game.winner;
     setState(() {
       if (hadWinner != null) _legsWon.update(hadWinner.name, (n) => n - 1);
@@ -361,11 +400,12 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _endTurn() {
-    CamLink.instance.turnEnded();
+    if (!_log.replaying) CamLink.instance.turnEnded();
     if (_matchOver) {
       Navigator.of(context).pop();
       return;
     }
+    _log.add({'t': 'e'});
     if (_game.isFinished) {
       // Manche suivante.
       setState(() {
@@ -532,7 +572,7 @@ class _GameScreenState extends State<GameScreen> {
                         child: const Logo(variant: LogoVariant.icon, height: 44),
                       ),
                       const SizedBox(width: Td.s2),
-                      const StopGameButton(),
+                      StopGameButton(onPause: _matchOver || _cfg.tournamentMatch != null ? null : _pause),
                       const SizedBox(width: Td.s2),
                       const MusicButton(),
                       const Spacer(),

@@ -213,6 +213,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   }
 
   void _endTurn() {
+    CamLink.instance.turnEnded();
     if (_g.isFinished) {
       setState(() => _showWin = true);
       return;

@@ -138,7 +138,7 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                             Expanded(child: Text('Corriger une fléchette', style: TdText.inter(22, 28, 700, Td.ink))),
                             if (_traceId != null && CamTraces.available) ...[
                               SizedBox(
-                                width: 150,
+                                width: 190,
                                 child: TdButton(
                                   label: 'Caméras',
                                   icon: LucideIcons.camera,

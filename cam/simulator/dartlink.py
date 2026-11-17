@@ -28,6 +28,7 @@ DART_TOPIC = "thibsdarts/cam/dart"
 TAKEOUT_TOPIC = "thibsdarts/cam/takeout"
 STATUS_TOPIC = "thibsdarts/cam/status"
 STATE_TOPIC = "thibsdarts/hub/state"
+TURN_TOPIC = "thibsdarts/hub/turn"  # hub -> cam : joueur suivant (fin de tour), non retenu
 
 # Ordre des secteurs en partant du haut, sens horaire (comme le hub).
 SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]

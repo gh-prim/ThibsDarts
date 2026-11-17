@@ -361,6 +361,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _endTurn() {
+    CamLink.instance.turnEnded();
     if (_matchOver) {
       Navigator.of(context).pop();
       return;

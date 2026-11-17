@@ -217,6 +217,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   void _nextVolley() {
+    CamLink.instance.turnEnded();
     if (_over) {
       setState(() => _showEnd = true);
       return;

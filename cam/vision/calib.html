@@ -3,62 +3,210 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ThibsDarts caméras</title>
+<title>ThibsDarts calibration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@800;900&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #16171a; --card: #22242a; --line: #34373f; --text: #ecebe8; --dim: #9a9ca3; --accent: #ff7a3d; --ok: #d8f23a; --bad: #ff4d6d; }
+  :root {
+    --beton: #121214; --asphalte: #1E1F24; --haut: #2A2B31; --noir: #0B0B0D;
+    --ink: #F5F3EE; --ink2: #B9B9C2; --ink3: #94959F;
+    --sunset: #FF7A2F; --crepuscule: #FF4D8D; --fluo: #FFE14D; --succes: #3DDC97; --erreur: #FF6464;
+    --verre: rgba(255,255,255,.09); --verre2: rgba(255,255,255,.05); --bord: rgba(255,255,255,.10); --bord2: rgba(255,255,255,.16);
+    --golden: linear-gradient(120deg, #FF7A2F, #FF4D8D);
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, system-ui, sans-serif; }
-  main { max-width: 1320px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 17px; margin: 0; }
-  .dim { color: var(--dim); }
-  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 18px; }
-  .pill { padding: 3px 10px; border-radius: 99px; background: var(--line); font-size: 13px; }
-  .pill.ok { background: var(--ok); color: #111; }
-  .pill.warn { background: var(--accent); color: #111; }
-  button, select { font: inherit; color: var(--text); background: var(--line); border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer; }
-  button.main { background: var(--accent); color: #111; font-weight: 600; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--beton); color: var(--ink); font: 14px/1.4 Inter, system-ui, -apple-system, sans-serif; overflow: hidden; }
+  button, select { font: inherit; color: var(--ink); cursor: pointer; }
   button:disabled { opacity: .4; cursor: default; }
-  .cam { background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
-  .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
-  .wrap { position: relative; }
-  canvas.view { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; cursor: crosshair; touch-action: none; }
-  canvas.loupe { position: absolute; width: 220px; height: 220px; border: 2px solid var(--accent); border-radius: 50%; display: none; pointer-events: none; box-shadow: 0 6px 24px #000a; }
-  .pad { display: inline-grid; grid-template-columns: repeat(3, 38px); gap: 4px; vertical-align: middle; }
-  .pad button { padding: 6px 0; }
-  label.chk { display: inline-flex; gap: 6px; align-items: center; }
-  .cam:focus { outline: 1px solid var(--line); }
-  .step { margin: 8px 0; }
-  .step b { color: var(--accent); }
-  .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  #events { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-  #events li { background: var(--card); border-radius: 8px; padding: 6px 10px; }
-  #events li.big { font-size: 22px; font-weight: 700; color: var(--ok); }
-  .err { color: var(--bad); }
+  .num { font-family: Nunito, Inter, sans-serif; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .cap { font-size: 12px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; }
+  .btn { height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--bord2); background: var(--verre); font-weight: 600; }
+  .btn:hover:not(:disabled) { background: rgba(255,255,255,.14); }
+
+  .app { height: 100vh; display: flex; flex-direction: column; }
+  header { height: 64px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid var(--bord); background: var(--asphalte); }
+  header .logo { font-family: Nunito, sans-serif; font-weight: 900; font-size: 22px; }
+  header .sub { color: var(--ink3); font-size: 15px; }
+  .grow { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--verre); color: var(--ink2); font-weight: 600; font-size: 13px; white-space: nowrap; }
+  .pill.ok { background: rgba(61,220,151,.14); color: var(--succes); }
+  .pill.ok::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--succes); }
+  .pill.warn { background: rgba(255,122,47,.16); color: var(--sunset); }
+  #test[data-on="1"] { border-color: var(--fluo); color: var(--fluo); }
+
+  .body { flex: 1; min-height: 0; display: grid; grid-template-columns: 248px 1fr 336px; }
+  .left { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-right: 1px solid var(--bord); min-height: 0; overflow: auto; }
+  .tile { display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 14px; border: 2px solid transparent; background: var(--verre2); text-align: left; width: 100%; }
+  .tile.on { border-color: var(--sunset); background: var(--haut); }
+  .tile img { width: 72px; height: 44px; flex: none; border-radius: 6px; object-fit: cover; background: #000; }
+  .tile b { display: block; font-size: 15px; }
+  .tile small { font-size: 12px; color: var(--ink3); }
+  .tile small.ok { color: var(--succes); }
+  .tile small.todo { color: var(--fluo); }
+  .tile small.warn { color: var(--sunset); }
+  .sep { height: 1px; background: var(--bord); margin: 4px 0; }
+  #events { display: flex; flex-direction: column; gap: 6px; }
+  #events div { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--verre2); font-size: 13px; color: var(--ink3); }
+  #events div .num { font-size: 15px; color: var(--ink); }
+  #events div:first-child .num { color: var(--fluo); }
+  .rename { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink3); }
+  .rename select { height: 40px; border-radius: 10px; border: 1px solid var(--bord2); background: var(--haut); padding: 0 10px; font-size: 14px; }
+
+  .center { position: relative; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; background: var(--noir); overflow: hidden; }
+  #view { display: block; max-width: 100%; max-height: 100%; cursor: crosshair; touch-action: none; }
+  .float { position: absolute; display: flex; gap: 8px; align-items: center; padding: 6px; border-radius: 14px; background: rgba(30,31,36,.92); border: 1px solid var(--bord2); }
+  .float.tl { top: 16px; left: 16px; }
+  .float.tr { top: 16px; right: 16px; padding: 8px 12px; font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+  .float button { height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--verre); font-weight: 600; font-size: 13px; }
+  .float button[aria-pressed="true"] { background: var(--fluo); color: var(--beton); font-weight: 700; }
+  .float label { display: flex; align-items: center; gap: 8px; padding: 0 6px; color: var(--ink2); font-size: 13px; }
+  .float input[type=range] { width: 96px; accent-color: var(--fluo); }
+  .loupe { position: absolute; bottom: 24px; display: none; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+  .loupe.r { right: 24px; } .loupe.l { left: 24px; }
+  .loupe canvas { width: 240px; height: 240px; border-radius: 50%; border: 3px solid var(--ink); box-shadow: 0 8px 32px rgba(0,0,0,.6); background: #000; }
+  .loupe div { display: flex; gap: 6px; }
+  .loupe span { padding: 4px 10px; border-radius: 999px; background: rgba(30,31,36,.92); font-size: 12px; color: var(--ink2); }
+  .empty { color: var(--ink3); font-size: 15px; }
+
+  .right { display: flex; flex-direction: column; gap: 16px; padding: 16px; border-left: 1px solid var(--bord); background: var(--asphalte); min-height: 0; overflow: auto; }
+  .step { padding: 16px; border-radius: 20px; background: var(--haut); display: flex; flex-direction: column; gap: 4px; }
+  .step .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .step .num { font-size: 28px; }
+  .step .num small { color: var(--ink3); font-size: 18px; }
+  .step .what { font-weight: 700; font-size: 20px; }
+  .step .wire { font-size: 15px; color: var(--fluo); font-weight: 600; min-height: 21px; }
+  .grid { display: grid; grid-template-columns: 56px repeat(4, 1fr); gap: 6px; align-items: center; font-size: 12px; color: var(--ink3); }
+  .grid .h { text-align: center; }
+  .cell { height: 28px; border-radius: 6px; border: 2px solid transparent; background: var(--verre); padding: 0; }
+  .cell.done { background: var(--succes); }
+  .cell.next { border-color: var(--fluo); background: transparent; }
+  .cell.sel { border-color: var(--crepuscule); }
+  .bull { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink3); }
+  .bull .cell { width: 56px; }
+  .bands { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; }
+  .bands div { padding: 10px 12px; border-radius: 10px; background: var(--verre2); }
+  .bands small { display: block; color: var(--ink3); font-size: 12px; }
+  .bands b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .nudge { display: flex; align-items: center; gap: 12px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px); gap: 4px; }
+  .pad button { border-radius: 10px; border: 0; background: var(--verre); font-size: 16px; }
+  .pad span.c { border-radius: 10px; background: rgba(255,255,255,.04); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink3); }
+  .nudge .keys { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink3); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .two .btn { height: 44px; }
+  #save { height: 52px; border-radius: 14px; border: 0; background: var(--golden); color: var(--beton); font-weight: 800; font-size: 16px; }
+  #forget { height: 36px; border: 0; background: transparent; color: var(--erreur); font-weight: 600; font-size: 13px; }
+  #msg { font-size: 13px; color: var(--ink2); min-height: 18px; text-align: center; }
+  #msg.err { color: var(--erreur); }
+
+  @media (max-width: 960px) {
+    body { overflow: auto; }
+    .app { height: auto; }
+    header { height: auto; min-height: 64px; flex-wrap: wrap; padding: 10px 16px; }
+    .body { display: flex; flex-direction: column; }
+    .left { border-right: 0; border-bottom: 1px solid var(--bord); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .left .cap, .left .rename { grid-column: 1 / -1; }
+    .left .tile { flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px; }
+    .left .tile img { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+    .left .hide-s, #events.hide-s { display: none; }
+    .center { height: 62vw; min-height: 240px; }
+    .float.tr, .float label { display: none; }
+    .float.tl { top: 8px; left: 8px; }
+    .loupe { bottom: 8px; } .loupe.r { right: 8px; } .loupe.l { left: 8px; }
+    .loupe canvas { width: 140px; height: 140px; }
+    .loupe div { display: none; }
+    .right { border-left: 0; }
+    .right .grow { display: none; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>Caméras ThibsDarts</h1>
-  <div class="dim">Calibration et test de la détection des fléchettes.</div>
-  <div class="bar">
+<div class="app">
+  <header>
+    <span class="logo">ThibsDarts</span>
+    <span class="sub">Calibration</span>
+    <span class="grow"></span>
     <span class="pill" id="mode">...</span>
     <span class="pill" id="det">...</span>
-    <button id="test" class="main">Tester la détection</button>
-    <span class="dim" id="testinfo"></span>
+    <button class="btn" id="test">Tester la détection</button>
+  </header>
+  <div class="body">
+    <aside class="left">
+      <span class="cap">Caméras</span>
+      <div id="tiles" style="display: contents"></div>
+      <div class="sep hide-s"></div>
+      <span class="cap hide-s">Dernières fléchettes</span>
+      <div id="events" class="hide-s"></div>
+      <span class="grow hide-s"></span>
+      <label class="rename">Nom de la caméra
+        <select id="rename"><option value="">Nommer...</option><option>Bas</option><option>Haut gauche</option><option>Haut droite</option></select>
+      </label>
+    </aside>
+
+    <main class="center" id="center">
+      <canvas id="view" width="1280" height="720"></canvas>
+      <div class="empty" id="empty" style="display: none">Aucune caméra</div>
+      <div class="float tl">
+        <button id="lines" aria-pressed="true">Lignes</button>
+        <label>Opacité <input type="range" id="opacity" min="10" max="100" value="70"></label>
+        <button id="refresh">Nouvelle image</button>
+      </div>
+      <div class="float tr" id="coords">x 0 · y 0</div>
+      <div class="loupe r" id="loupe">
+        <canvas width="480" height="480"></canvas>
+        <div><span>x5</span><span>Image brute</span></div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <div class="step">
+        <div class="top"><span class="cap">Point</span><span class="num" id="count">0<small> / 17</small></span></div>
+        <div class="what" id="what"></div>
+        <div class="wire" id="wire"></div>
+      </div>
+      <div>
+        <div class="grid" id="grid"></div>
+        <div class="bull" style="margin-top: 8px"><button class="cell" id="cell-0" aria-label="Bull"></button>Bull</div>
+      </div>
+      <div class="bands">
+        <div><small>Triple</small><b id="b-triple">?</b></div>
+        <div><small>Double</small><b id="b-double">?</b></div>
+      </div>
+      <div class="nudge">
+        <div class="pad">
+          <span></span><button data-d="0,-1" aria-label="Haut">↑</button><span></span>
+          <button data-d="-1,0" aria-label="Gauche">←</button><span class="c">0,5 px</span><button data-d="1,0" aria-label="Droite">→</button>
+          <span></span><button data-d="0,1" aria-label="Bas">↓</button><span></span>
+        </div>
+        <div class="keys"><span>Flèches clavier</span><span>Maj = 2 px</span><span>Tab = point suivant</span></div>
+      </div>
+      <span class="grow"></span>
+      <div class="two">
+        <button class="btn" id="undo">Annuler</button>
+        <button class="btn" id="reset">Recommencer</button>
+      </div>
+      <button id="save" disabled>Enregistrer</button>
+      <div id="msg"></div>
+      <button id="forget">Effacer la calibration</button>
+    </aside>
   </div>
-  <section>
-    <h2>Dernières fléchettes</h2>
-    <p class="dim" id="noev">Rien pour l'instant. Lance une fléchette pendant une partie ou en mode test.</p>
-    <ul id="events"></ul>
-  </section>
-  <p></p>
-  <div id="cams"></div>
-</main>
+</div>
 <script>
-const PRESETS = ["Bas", "Haut gauche", "Haut droite"];
 const SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
-let HELP = [], SPEC = [], STD = {}, LEGACY = 5;
+const KEY_NAMES = { center: "Bull", double_out: "Double extérieur", double_in: "Double intérieur", triple_out: "Triple extérieur", triple_in: "Triple intérieur" };
+const ROWS = [["double_out", "D ext"], ["double_in", "D int"], ["triple_out", "T ext"], ["triple_in", "T int"]];
+const WIRES = [[9, "20|1"], [99, "6|10"], [189, "3|19"], [279, "11|14"]];
+const ZOOM = 5;
+let SPEC = [], STD = {}, LEGACY = 5, cams = [], cur = null;
+const state = {};  // id -> { points, img, sel, dirty, rings }
+const $ = id => document.getElementById(id);
+const view = $("view"), loupe = $("loupe"), lc = loupe.querySelector("canvas");
+
+const prefs = (() => { try { return JSON.parse(localStorage.getItem("calib-prefs") || "{}"); } catch (e) { return {}; } })();
+const savePrefs = () => { try { localStorage.setItem("calib-prefs", JSON.stringify(prefs)); } catch (e) {} };
+if (prefs.lines === false) $("lines").setAttribute("aria-pressed", "false");
+if (prefs.opacity) $("opacity").value = prefs.opacity;
 
 function specPoint([key, angle], rings) {
   const r = key === "center" ? 0 : key === "double_out" ? 170 : rings[key], a = angle * Math.PI / 180;
@@ -93,14 +241,6 @@ function fit(points) {
   const H = homography(board, points);
   return H && { H, rings };
 }
-const state = {};  // id -> carte
-
-async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || r.status);
-  return j;
-}
 
 // Homographie cible (mm) -> image (px) par moindres carrés (DLT, h33 = 1).
 function homography(src, dst) {
@@ -122,227 +262,307 @@ function homography(src, dst) {
   return ([x, y]) => { const w = h[6] * x + h[7] * y + 1; return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w]; };
 }
 
-function camCard(c) {
-  const el = document.createElement("div");
-  el.className = "cam";
-  el.id = "cam-" + c.id;
-  el.innerHTML = `
-    <div class="head">
-      <h2 class="name"></h2>
-      <span class="pill cal"></span>
-      <select class="rename"><option value="">Nommer...</option>${PRESETS.map(p => `<option>${p}</option>`).join("")}</select>
-    </div>
-    <div class="step"></div>
-    <div class="wrap"><canvas class="view" width="1280" height="720"></canvas><canvas class="loupe" width="220" height="220"></canvas></div>
-    <div class="tools">
-      <label class="chk"><input type="checkbox" class="show" checked> Cible</label>
-      <span class="pad">
-        <span></span><button data-d="0,-1">↑</button><span></span>
-        <button data-d="-1,0">←</button><button class="next">${"•"}</button><button data-d="1,0">→</button>
-        <span></span><button data-d="0,1">↓</button><span></span>
-      </span>
-      <button class="undo">Annuler le dernier point</button>
-      <button class="reset">Recommencer</button>
-      <button class="save main" disabled>Enregistrer</button>
-      <button class="refresh">Nouvelle image</button>
-      <button class="forget">Effacer</button>
-      <span class="msg dim"></span>
-    </div>`;
-  const s = state[c.id] = { points: c.calib ? c.calib.points.map(p => p.slice()) : [], img: null, sel: -1, dirty: false };
-  const view = el.querySelector(".view"), loupe = el.querySelector(".loupe"), wrap = el.querySelector(".wrap");
-  const msg = t => el.querySelector(".msg").textContent = t;
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+const msg = (t, err) => { $("msg").textContent = t || ""; $("msg").className = err ? "err" : ""; };
 
-  s.load = () => {
-    const img = new Image();
-    img.onload = () => { s.img = img; view.width = img.naturalWidth; view.height = img.naturalHeight; draw(); };
-    img.onerror = () => msg("image indisponible");
-    img.src = `/cam/${c.id}/full.jpg?t=${Date.now()}`;
-  };
-
-  const clean = document.createElement("canvas");  // image + cible, sans les marqueurs (pour la loupe)
-  function draw() {
-    clean.width = view.width; clean.height = view.height;
-    const g = clean.getContext("2d");
-    if (s.img) g.drawImage(s.img, 0, 0); else { g.fillStyle = "#000"; g.fillRect(0, 0, view.width, view.height); }
-    const n = s.points.length;
-    const base = LEGACY, f = fit(s.points);
-    s.rings = f && f.rings;
-    if (f && el.querySelector(".show").checked) {
-      const H = f.H, rings = [6.35, 15.9, f.rings.triple_in, f.rings.triple_out, f.rings.double_in, 170];
-      {
-        g.strokeStyle = "rgba(216, 242, 58, .9)"; g.lineWidth = 1;
-        for (const r of rings) {
-          g.beginPath();
-          for (let k = 0; k <= 180; k++) { const t = k / 180 * 2 * Math.PI, [u, v] = H([r * Math.sin(t), -r * Math.cos(t)]); k ? g.lineTo(u, v) : g.moveTo(u, v); }
-          g.stroke();
-        }
-        g.beginPath();
-        for (let i = 0; i < 20; i++) {
-          const a = (i * 18 + 9) * Math.PI / 180, [u1, v1] = H([15.9 * Math.sin(a), -15.9 * Math.cos(a)]), [u2, v2] = H([170 * Math.sin(a), -170 * Math.cos(a)]);
-          g.moveTo(u1, v1); g.lineTo(u2, v2);
-        }
-        g.stroke();
-        g.fillStyle = "#d8f23a"; g.font = "bold 16px sans-serif";
-        SECTORS.forEach((num, i) => { const a = i * 18 * Math.PI / 180, [u, v] = H([190 * Math.sin(a), -190 * Math.cos(a)]); g.fillText(num, u - 8, v + 6); });
-      }
-    }
-    const gv = view.getContext("2d");
-    gv.drawImage(clean, 0, 0);
-    s.points.forEach((p, i) => {
-      const g = gv;
-      g.strokeStyle = i === s.sel ? "#ff4d6d" : "#ff7a3d"; g.lineWidth = 2;
-      // Petits marqueurs : les bords des bandes sont à quelques pixels les uns des autres.
-      g.lineWidth = 1.5;
-      g.beginPath(); g.arc(p[0], p[1], 5, 0, 2 * Math.PI); g.stroke();
-      if (i === s.sel) { g.fillStyle = g.strokeStyle; g.font = "bold 16px sans-serif"; g.fillText(i + 1, p[0] + 8, p[1] - 8); }
-    });
-    const ringInfo = s.rings && n > base ? ` Bandes mesurées : triple ${s.rings.triple_in.toFixed(1)} à ${s.rings.triple_out.toFixed(1)} mm, double ${s.rings.double_in.toFixed(1)} à 170 mm.` : "";
-    el.querySelector(".step").innerHTML = n < HELP.length
-      ? `Point ${n + 1} sur ${HELP.length} : clique sur le <b>${HELP[n]}</b>.${n >= base ? " Ces points règlent l'épaisseur des bandes : vise pile le bord, avec la loupe." : ""}${ringInfo}`
-      : `Ajuste : fais glisser un point (ou choisis-le puis flèches, 0,5 px par appui) jusqu'à ce que les anneaux jaunes collent aux bandes double et triple.${ringInfo}${s.sel >= 0 ? ` Point choisi : <b>${s.sel + 1}, ${HELP[s.sel]}</b>.` : ""}`;
-    el.querySelector(".save").disabled = (n !== HELP.length && n !== base) || !s.dirty;
+// Cible calibrée : anneaux et fils, transformés par tr (image -> repère de dessin).
+function drawTarget(g, f, tr, width) {
+  const H = f.H, P = p => tr(H(p));
+  const rings = [6.35, 15.9, f.rings.triple_in, f.rings.triple_out, f.rings.double_in, 170];
+  g.lineWidth = width;
+  for (const r of rings) {
+    g.beginPath();
+    for (let k = 0; k <= 360; k++) { const t = k / 360 * 2 * Math.PI, [u, v] = P([r * Math.sin(t), -r * Math.cos(t)]); k ? g.lineTo(u, v) : g.moveTo(u, v); }
+    g.stroke();
   }
-  s.draw = draw;
-
-  function pos(e) {
-    const r = view.getBoundingClientRect();
-    return [(e.clientX - r.left) * view.width / r.width, (e.clientY - r.top) * view.height / r.height];
+  g.beginPath();
+  for (let i = 0; i < 20; i++) {
+    const a = (i * 18 + 9) * Math.PI / 180, [u1, v1] = P([15.9 * Math.sin(a), -15.9 * Math.cos(a)]), [u2, v2] = P([170 * Math.sin(a), -170 * Math.cos(a)]);
+    g.moveTo(u1, v1); g.lineTo(u2, v2);
   }
-  function showLoupe(e, at) {
-    const r = view.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), z = 5, g = loupe.getContext("2d");
-    const cx = e.clientX - wr.left, cy = e.clientY - wr.top;
-    // La loupe se place en haut à gauche du doigt, ou de l'autre côté près des bords.
-    loupe.style.left = (cx > 260 ? cx - 250 : cx + 30) + "px";
-    loupe.style.top = (cy > 260 ? cy - 250 : cy + 30) + "px";
-    loupe.style.display = "block";
-    g.imageSmoothingEnabled = false;
-    g.fillStyle = "#000"; g.fillRect(0, 0, 220, 220);
-    g.drawImage(clean, at[0] - 110 / z, at[1] - 110 / z, 220 / z, 220 / z, 0, 0, 220, 220);
-    g.strokeStyle = "#ff4d6d"; g.lineWidth = 1;
-    g.beginPath(); g.moveTo(110, 90); g.lineTo(110, 130); g.moveTo(90, 110); g.lineTo(130, 110); g.stroke();
-  }
-  function nearest(p) {
-    const r = view.getBoundingClientRect(), tol = 28 * view.width / r.width;
-    let best = -1, d = tol;
-    s.points.forEach((q, i) => { const k = Math.hypot(q[0] - p[0], q[1] - p[1]); if (k < d) { d = k; best = i; } });
-    return best;
-  }
-  let drag = null;
-  view.addEventListener("pointerdown", e => {
-    // Tant que tous les points ne sont pas placés, un clic pose le point suivant (les bords des bandes
-    // sont trop proches pour deviner qu'on voulait reprendre un point). Ensuite, un clic reprend le plus proche.
-    const p = pos(e), i = s.points.length < HELP.length ? -1 : nearest(p);
-    if (i >= 0) {
-      drag = { i, dx: s.points[i][0] - p[0], dy: s.points[i][1] - p[1] };
-      s.sel = i;
-    } else if (s.points.length < HELP.length) {
-      s.points.push(p.map(v => Math.round(v * 2) / 2));
-      s.sel = s.points.length - 1; s.dirty = true;
-      drag = { i: s.sel, dx: 0, dy: 0 };
-    } else { s.sel = -1; }
-    view.setPointerCapture(e.pointerId);
-    draw();
-    if (drag) showLoupe(e, s.points[drag.i]);
-  });
-  view.addEventListener("pointermove", e => {
-    const p = pos(e);
-    if (drag) {
-      // Glisser lentement : le point bouge 4 fois moins vite que le doigt, pour viser au demi-pixel.
-      const k = e.shiftKey ? 1 : 0.25;
-      if (drag.last) {
-        s.points[drag.i][0] += (p[0] - drag.last[0]) * k;
-        s.points[drag.i][1] += (p[1] - drag.last[1]) * k;
-        s.dirty = true;
-      }
-      drag.last = p;
-      draw();
-      showLoupe(e, s.points[drag.i]);
-    } else if (e.pointerType === "mouse") showLoupe(e, p);
-  });
-  const end = () => { drag = null; loupe.style.display = "none"; };
-  view.addEventListener("pointerup", end);
-  view.addEventListener("pointercancel", end);
-  view.addEventListener("pointerleave", () => { if (!drag) loupe.style.display = "none"; });
-
-  function nudge(dx, dy) {
-    if (s.sel < 0) s.sel = 0;
-    if (!s.points[s.sel]) return;
-    s.points[s.sel][0] += dx; s.points[s.sel][1] += dy; s.dirty = true;
-    draw();
-  }
-  el.querySelectorAll(".pad button[data-d]").forEach(b => b.onclick = () => { const [dx, dy] = b.dataset.d.split(",").map(Number); nudge(dx * 0.5, dy * 0.5); });
-  el.querySelector(".next").onclick = () => { s.sel = s.points.length ? (s.sel + 1) % s.points.length : -1; draw(); };
-  el.tabIndex = 0;
-  el.addEventListener("keydown", e => {
-    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-    if (d && s.sel >= 0) { e.preventDefault(); const k = e.shiftKey ? 2 : 0.5; nudge(d[0] * k, d[1] * k); }
-    if (e.key === "Tab" && s.points.length) { e.preventDefault(); s.sel = (s.sel + 1) % s.points.length; draw(); }
-  });
-  view.addEventListener("pointerdown", () => el.focus({ preventScroll: true }));
-  el.querySelector(".show").onchange = draw;
-  el.querySelector(".undo").onclick = () => { s.points.pop(); s.sel = s.points.length - 1; s.dirty = true; draw(); };
-  el.querySelector(".reset").onclick = () => { s.points = []; s.sel = -1; s.dirty = true; s.load(); };
-  el.querySelector(".refresh").onclick = () => s.load();
-  el.querySelector(".save").onclick = async () => {
-    try {
-      const r = await api(`/cam/${c.id}/calib`, { points: s.points });
-      s.dirty = false;
-      msg(`Enregistré (écart ${r.error_px} px).`);
-      draw();
-      refresh();
-    } catch (e) { msg("Erreur : " + e.message); }
-  };
-  el.querySelector(".forget").onclick = async () => {
-    if (!confirm("Effacer la calibration de cette caméra ?")) return;
-    try { await api(`/cam/${c.id}/calib`, { points: [] }); s.points = []; s.sel = -1; draw(); refresh(); } catch (e) { msg("Erreur : " + e.message); }
-  };
-  el.querySelector(".rename").onchange = async e => {
-    if (!e.target.value) return;
-    try { await api(`/cam/${c.id}/name`, { name: e.target.value }); refresh(); } catch (err) { msg("Erreur : " + err.message); }
-    e.target.value = "";
-  };
-  s.load();
-  return el;
+  g.stroke();
 }
 
-function update(c) {
-  const el = document.getElementById("cam-" + c.id);
-  el.querySelector(".name").textContent = c.label || "Caméra non reconnue (" + c.id + ")";
-  const cal = el.querySelector(".cal");
-  cal.textContent = !c.label ? "à nommer" : c.calibrated ? "calibrée" : "à calibrer";
-  cal.className = "pill cal " + (!c.label ? "warn" : c.calibrated ? "ok" : "warn");
-  const s = state[c.id];
-  // Calibration arrivée d'ailleurs (autre onglet) et rien en cours ici : on la reprend.
-  if (c.calib && !s.dirty && JSON.stringify(c.calib.points) !== JSON.stringify(s.points)) { s.points = c.calib.points.map(p => p.slice()); s.draw(); }
+function linesOn() { return $("lines").getAttribute("aria-pressed") === "true"; }
+
+function draw() {
+  const s = cur && state[cur.id];
+  $("empty").style.display = cur ? "none" : "";
+  view.style.display = cur ? "" : "none";
+  if (!s) return;
+  const g = view.getContext("2d"), n = s.points.length;
+  if (s.img) g.drawImage(s.img, 0, 0, view.width, view.height); else { g.fillStyle = "#000"; g.fillRect(0, 0, view.width, view.height); }
+  const f = fit(s.points);
+  s.fit = f; s.rings = f && f.rings;
+  if (f && linesOn()) {
+    g.save();
+    g.globalAlpha = $("opacity").value / 100;
+    g.strokeStyle = "#FFE14D";
+    drawTarget(g, f, p => p, 1);
+    g.fillStyle = "#FFE14D"; g.font = "bold 16px Inter, sans-serif";
+    SECTORS.forEach((num, i) => { const a = i * 18 * Math.PI / 180, [u, v] = f.H([190 * Math.sin(a), -190 * Math.cos(a)]); g.fillText(num, u - 8, v + 6); });
+    g.restore();
+  }
+  s.points.forEach((p, i) => {
+    g.strokeStyle = i === s.sel ? "#FF4D8D" : "#FF7A2F"; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(p[0], p[1], 5, 0, 2 * Math.PI); g.stroke();
+  });
+  panel();
+}
+
+function panel() {
+  const s = state[cur.id], n = s.points.length, total = SPEC.length;
+  $("count").innerHTML = `${Math.min(n + (n < total ? 1 : 0), total)}<small> / ${total}</small>`;
+  const shown = s.sel >= 0 && (n >= total || s.sel < n - 1) ? s.sel : n < total ? n : -1;
+  const sp = SPEC[shown];
+  $("what").textContent = sp ? KEY_NAMES[sp[0]] : "Complet";
+  const w = sp && WIRES.find(x => x[0] === sp[1]);
+  $("wire").textContent = sp && sp[0] !== "center" && w ? "Fil " + w[1].replace("|", " | ") : "";
+  SPEC.forEach((sp, j) => {
+    const c = $("cell-" + j);
+    if (!c) return;
+    c.className = "cell" + (j < n ? " done" : "") + (j === n ? " next" : "") + (j === s.sel && j < n ? " sel" : "");
+  });
+  const r = s.rings, full = n > LEGACY;
+  $("b-triple").textContent = r && full ? `${fmt(r.triple_in)} à ${fmt(r.triple_out)} mm` : "?";
+  $("b-double").textContent = r && full ? `${fmt(r.double_in)} à 170,0 mm` : "?";
+  $("save").disabled = (n !== total && n !== LEGACY) || !s.dirty || !cur.label;
+  $("undo").disabled = !n;
+}
+const fmt = v => v.toFixed(1).replace(".", ",");
+
+function buildGrid() {
+  const g = $("grid");
+  let h = "<span></span>" + WIRES.map(w => `<span class="h">${w[1]}</span>`).join("");
+  for (const [key, label] of ROWS) {
+    h += `<span>${label}</span>`;
+    for (const [a] of WIRES) {
+      const j = SPEC.findIndex(s => s[0] === key && s[1] === a);
+      h += `<button class="cell" id="cell-${j}" data-j="${j}" aria-label="${KEY_NAMES[key]} ${a}"></button>`;
+    }
+  }
+  g.innerHTML = h;
+  document.querySelectorAll(".cell").forEach(c => c.onclick = () => {
+    const s = cur && state[cur.id], j = Number(c.id.slice(5));
+    if (s && j < s.points.length) { s.sel = j; draw(); }
+  });
+}
+
+// Loupe : l'image brute agrandie, une croix fine, les autres points en petit. Pas de lignes jaunes.
+function showLoupe(e, at) {
+  const s = state[cur.id], cr = $("center").getBoundingClientRect();
+  loupe.className = "loupe " + (e.clientX - cr.left > cr.width / 2 ? "l" : "r");
+  loupe.style.display = "flex";
+  const W = lc.width, z = ZOOM * W / 240, g = lc.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.fillStyle = "#000"; g.fillRect(0, 0, W, W);
+  const sx = at[0] - W / 2 / z, sy = at[1] - W / 2 / z;
+  if (s.img) {
+    const kx = s.img.naturalWidth / view.width, ky = s.img.naturalHeight / view.height;
+    g.drawImage(s.img, sx * kx, sy * ky, W / z * kx, W / z * ky, 0, 0, W, W);
+  }
+  const tr = p => [(p[0] - sx) * z, (p[1] - sy) * z];
+  s.points.forEach((p, i) => {
+    if (drag && i === drag.i) return;
+    const [u, v] = tr(p);
+    g.strokeStyle = "#FF7A2F"; g.lineWidth = 2;
+    g.beginPath(); g.arc(u, v, 6, 0, 2 * Math.PI); g.stroke();
+  });
+  // Croix fine avec un trou au centre : le fil reste visible sous le point.
+  const c = W / 2, gap = 10, len = 60;
+  g.strokeStyle = "#FF4D8D"; g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(c, c - gap - len); g.lineTo(c, c - gap); g.moveTo(c, c + gap); g.lineTo(c, c + gap + len);
+  g.moveTo(c - gap - len, c); g.lineTo(c - gap, c); g.moveTo(c + gap, c); g.lineTo(c + gap + len, c);
+  g.stroke();
+  g.fillStyle = "#FF4D8D"; g.fillRect(c - 1, c - 1, 2, 2);
+}
+const hideLoupe = () => { loupe.style.display = "none"; };
+
+function pos(e) {
+  const r = view.getBoundingClientRect();
+  return [(e.clientX - r.left) * view.width / r.width, (e.clientY - r.top) * view.height / r.height];
+}
+function nearest(p) {
+  const s = state[cur.id], r = view.getBoundingClientRect(), tol = 28 * view.width / r.width;
+  let best = -1, d = tol;
+  s.points.forEach((q, i) => { const k = Math.hypot(q[0] - p[0], q[1] - p[1]); if (k < d) { d = k; best = i; } });
+  return best;
+}
+let drag = null;
+view.addEventListener("pointerdown", e => {
+  if (!cur) return;
+  const s = state[cur.id];
+  // Tant que tous les points ne sont pas placés, un clic pose le point suivant. Ensuite, un clic reprend le plus proche.
+  const p = pos(e), i = s.points.length < SPEC.length ? -1 : nearest(p);
+  if (i >= 0) {
+    drag = { i };
+    s.sel = i;
+  } else if (s.points.length < SPEC.length) {
+    s.points.push(p.map(v => Math.round(v * 2) / 2));
+    s.sel = s.points.length - 1; s.dirty = true;
+    drag = { i: s.sel };
+  } else s.sel = -1;
+  view.setPointerCapture(e.pointerId);
+  draw();
+  if (drag) showLoupe(e, s.points[drag.i]);
+});
+view.addEventListener("pointermove", e => {
+  if (!cur) return;
+  const s = state[cur.id], p = pos(e);
+  $("coords").textContent = `x ${Math.round(p[0])} · y ${Math.round(p[1])}`;
+  if (drag) {
+    // Glisser lentement : le point bouge 4 fois moins vite que le doigt, pour viser au demi-pixel.
+    const k = e.shiftKey ? 1 : 0.25;
+    if (drag.last) {
+      s.points[drag.i][0] += (p[0] - drag.last[0]) * k;
+      s.points[drag.i][1] += (p[1] - drag.last[1]) * k;
+      s.dirty = true;
+    }
+    drag.last = p;
+    draw();
+    showLoupe(e, s.points[drag.i]);
+  } else if (e.pointerType === "mouse") showLoupe(e, p);
+});
+const end = () => { drag = null; hideLoupe(); };
+view.addEventListener("pointerup", end);
+view.addEventListener("pointercancel", end);
+view.addEventListener("pointerleave", () => { if (!drag) hideLoupe(); });
+
+function nudge(dx, dy) {
+  const s = cur && state[cur.id];
+  if (!s || !s.points.length) return;
+  if (s.sel < 0) s.sel = s.points.length - 1;
+  s.points[s.sel][0] += dx; s.points[s.sel][1] += dy; s.dirty = true;
+  draw();
+}
+document.querySelectorAll(".pad button[data-d]").forEach(b => b.onclick = () => { const [dx, dy] = b.dataset.d.split(",").map(Number); nudge(dx * 0.5, dy * 0.5); });
+document.addEventListener("keydown", e => {
+  if (!cur || e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+  const s = state[cur.id];
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (d && s.points.length) { e.preventDefault(); const k = e.shiftKey ? 2 : 0.5; nudge(d[0] * k, d[1] * k); }
+  if (e.key === "Tab" && s.points.length) { e.preventDefault(); s.sel = (s.sel + (e.shiftKey ? s.points.length - 1 : 1)) % s.points.length; draw(); }
+});
+
+$("lines").onclick = () => { const on = !linesOn(); $("lines").setAttribute("aria-pressed", String(on)); prefs.lines = on; savePrefs(); draw(); };
+$("opacity").oninput = () => { prefs.opacity = $("opacity").value; savePrefs(); draw(); };
+$("refresh").onclick = () => cur && load(cur.id);
+$("undo").onclick = () => { const s = state[cur.id]; s.points.pop(); s.sel = s.points.length - 1; s.dirty = true; draw(); };
+$("reset").onclick = () => { const s = state[cur.id]; s.points = []; s.sel = -1; s.dirty = true; msg(""); load(cur.id); };
+$("save").onclick = async () => {
+  const s = state[cur.id];
+  try {
+    const r = await api(`/cam/${cur.id}/calib`, { points: s.points });
+    s.dirty = false;
+    msg(`Enregistré · écart ${String(r.error_px).replace(".", ",")} px`);
+    draw(); refresh();
+  } catch (e) { msg("Erreur : " + e.message, true); }
+};
+$("forget").onclick = async () => {
+  if (!cur || !confirm("Effacer la calibration de cette caméra ?")) return;
+  const s = state[cur.id];
+  try { await api(`/cam/${cur.id}/calib`, { points: [] }); s.points = []; s.sel = -1; s.dirty = false; msg(""); draw(); refresh(); }
+  catch (e) { msg("Erreur : " + e.message, true); }
+};
+$("rename").onchange = async e => {
+  if (!e.target.value || !cur) return;
+  try { await api(`/cam/${cur.id}/name`, { name: e.target.value }); refresh(); } catch (err) { msg("Erreur : " + err.message, true); }
+  e.target.value = "";
+};
+$("test").onclick = async e => { await api("/detect", { test: !e.target.dataset.on }).catch(() => {}); refresh(); };
+
+function load(id) {
+  const s = state[id], img = new Image();
+  img.onload = () => {
+    s.img = img;
+    if (cur && cur.id === id) { view.width = img.naturalWidth; view.height = img.naturalHeight; draw(); }
+  };
+  img.onerror = () => { if (cur && cur.id === id) msg("Image indisponible", true); };
+  img.src = `/cam/${id}/full.jpg?t=${Date.now()}`;
+}
+
+function select(id) {
+  cur = cams.find(c => c.id === id) || null;
+  prefs.cam = id; savePrefs();
+  msg("");
+  if (!cur) return draw();
+  const s = state[id];
+  if (s.img) { view.width = s.img.naturalWidth; view.height = s.img.naturalHeight; } else load(id);
+  tiles();
+  draw();
+}
+
+function tileStatus(c) {
+  const s = state[c.id], n = s.points.length;
+  if (!c.label) return ["warn", "À nommer"];
+  if (s.dirty) return ["todo", `${n} / ${SPEC.length} points`];
+  if (c.calibrated) return ["ok", c.error_px != null ? `Calibrée · ${String(c.error_px).replace(".", ",")} px` : "Calibrée"];
+  return ["todo", "À calibrer"];
+}
+
+let thumbAt = 0;
+function tiles() {
+  const box = $("tiles"), now = Date.now(), fresh = now - thumbAt > 4000;
+  if (fresh) thumbAt = now;
+  for (const c of cams) {
+    let el = $("tile-" + c.id);
+    if (!el) {
+      el = document.createElement("button");
+      el.className = "tile"; el.id = "tile-" + c.id;
+      el.innerHTML = `<img alt=""><span><b></b><small></small></span>`;
+      el.onclick = () => select(c.id);
+      box.appendChild(el);
+      el.querySelector("img").src = `/cam/${c.id}.jpg?t=${now}`;
+    } else if (fresh) el.querySelector("img").src = `/cam/${c.id}.jpg?t=${now}`;
+    el.classList.toggle("on", !!cur && cur.id === c.id);
+    el.querySelector("b").textContent = c.label || "Caméra non reconnue";
+    const [cls, txt] = tileStatus(c);
+    const sm = el.querySelector("small");
+    sm.className = cls; sm.textContent = txt;
+  }
+  for (const el of [...box.children]) if (!cams.some(c => "tile-" + c.id === el.id)) el.remove();
 }
 
 async function refresh() {
   let d;
-  try { d = await api("/detect"); } catch (e) { document.getElementById("det").textContent = "Pi 5 injoignable"; return; }
-  HELP = d.points; SPEC = d.spec; STD = d.rings_standard; LEGACY = d.legacy.length;
-  document.getElementById("mode").textContent = d.mode === "vision" ? "Vraie détection" : "Simulateur (aucune caméra calibrée)";
-  document.getElementById("mode").className = "pill " + (d.mode === "vision" ? "ok" : "warn");
-  document.getElementById("det").textContent = d.detecting ? `Détection active, ${d.darts} fléchette(s) en cible` : d.playing ? "Partie en cours" : "Détection en pause (pas de partie)";
-  document.getElementById("test").textContent = d.test ? "Arrêter le test" : "Tester la détection";
-  document.getElementById("test").dataset.on = d.test ? "1" : "";
-  document.getElementById("testinfo").textContent = d.test ? `test encore ${Math.ceil(d.test / 60)} min` : "";
-  const box = document.getElementById("cams");
-  for (const c of d.cams) {
-    if (!document.getElementById("cam-" + c.id)) box.appendChild(camCard(c));
-    update(c);
+  try { d = await api("/detect"); } catch (e) { $("det").textContent = "Pi 5 injoignable"; $("det").className = "pill warn"; return; }
+  const first = !SPEC.length;
+  SPEC = d.spec; STD = d.rings_standard; LEGACY = d.legacy.length;
+  if (first) buildGrid();
+  $("mode").textContent = d.mode === "vision" ? "Vraie détection" : "Simulateur";
+  $("mode").className = "pill " + (d.mode === "vision" ? "ok" : "warn");
+  const calibrated = d.cams.filter(c => c.calibrated).length;
+  $("det").textContent = d.test ? `Test · ${Math.ceil(d.test / 60)} min · ${d.darts} fléchette(s)`
+    : d.detecting ? `Détection active · ${d.darts} fléchette(s)` : `${calibrated} / ${d.cams.length} calibrées`;
+  $("det").className = "pill";
+  $("test").textContent = d.test ? "Arrêter le test" : "Tester la détection";
+  $("test").dataset.on = d.test ? "1" : "";
+  cams = d.cams;
+  for (const c of cams) {
+    if (!state[c.id]) state[c.id] = { points: c.calib ? c.calib.points.map(p => p.slice()) : [], img: null, sel: -1, dirty: false };
+    const s = state[c.id];
+    // Calibration arrivée d'ailleurs (autre onglet) et rien en cours ici : on la reprend.
+    if (!s.dirty && JSON.stringify(c.calib ? c.calib.points : []) !== JSON.stringify(s.points)) {
+      s.points = c.calib ? c.calib.points.map(p => p.slice()) : []; s.sel = -1;
+      if (cur && cur.id === c.id) draw();
+    }
   }
-  for (const el of [...box.children]) if (!d.cams.some(c => "cam-" + c.id === el.id)) el.remove();
-  const ev = document.getElementById("events");
-  document.getElementById("noev").style.display = d.events.length ? "none" : "";
-  ev.innerHTML = d.events.slice().reverse().map((e, i) => e.type === "dart"
-    ? `<li class="${i === 0 ? "big" : ""}">${e.segment} <span class="dim">(${e.x}, ${e.y}) ${Object.keys(e.cams).length} cam.</span></li>`
-    : `<li class="dim">retrait</li>`).join("");
+  if (cur) cur = cams.find(c => c.id === cur.id) || null;
+  if (!cur && cams.length) select((cams.find(c => c.id === prefs.cam) || cams.find(c => !c.calibrated) || cams[0]).id);
+  else if (!cams.length) draw();
+  tiles();
+  if (cur) panel();
+  $("events").innerHTML = d.events.filter(e => e.type === "dart").slice(-6).reverse()
+    .map(e => `<div><span class="num">${e.segment}</span><span>${Object.keys(e.cams || {}).length} cam.</span></div>`).join("")
+    || `<div>Aucune</div>`;
 }
 
-document.getElementById("test").onclick = async e => {
-  await api("/detect", { test: !e.target.dataset.on }).catch(() => {});
-  refresh();
-};
 refresh();
 setInterval(refresh, 1000);
 </script>

@@ -56,6 +56,7 @@ STABLE_TICKS = 3       # images immobiles avant l'analyse
 BIG_CHANGE = 0.05      # main ou bras devant la caméra
 EMPTY_MAX = 0.004      # cible "vide" : presque pareille qu'au début du tour
 DART_MIN_AREA = 120    # pixels pleine résolution
+PIECE_GAP = 60.0  # trou max (px) entre deux morceaux d'une même fléchette, le long de son axe
 DART_MAX_AREA = 40000
 BOARD_LIMIT = 230.0    # au-delà, la tache n'est pas sur la cible (mm)
 
@@ -251,14 +252,33 @@ def _dart_from(main, n, labels, stats, centroids, cal):
         if ev[1] > 9 * max(ev[0], 1e-6) and abs(v @ up) > 0.5:
             axis = v if v @ up > 0 else -v
     # Le fût, fin, se coupe souvent en morceaux : on garde ceux qui sont dans l'axe de la fléchette.
+    # Les morceaux doivent se suivre (trou de moins de PIECE_GAP px) : des petites taches de bruit
+    # alignées par hasard de l'autre côté de la cible ne doivent pas rallonger la fléchette.
     keep = [main]
+    proj_main = (pts - c0) @ axis
+    lo, hi = float(proj_main.min()), float(proj_main.max())
+    near_axis = []
     for i in range(1, n):
         if i == main or areas[i] < 15:
             continue
         c = np.float64(centroids[i]) - c0
         along = c @ axis
-        if abs(c[0] * axis[1] - c[1] * axis[0]) < 10 + 0.15 * abs(along) and abs(along) < 450:
-            keep.append(i)
+        if abs(c[0] * axis[1] - c[1] * axis[0]) < min(10 + 0.15 * abs(along), 40) and abs(along) < 450:
+            # Étendue du morceau le long de l'axe, depuis sa boîte englobante.
+            x, y, w, h = stats[i, :4]
+            corners = np.float64([[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) - c0
+            pr = corners @ axis
+            near_axis.append((i, float(pr.min()), float(pr.max())))
+    grown = True
+    while grown:
+        grown = False
+        for piece in list(near_axis):
+            i, a, b = piece
+            if a <= hi + PIECE_GAP and b >= lo - PIECE_GAP:
+                keep.append(i)
+                lo, hi = min(lo, a), max(hi, b)
+                near_axis.remove(piece)
+                grown = True
     sel = np.isin(labels, keep)
     area = int(sel.sum())
     if area < DART_MIN_AREA:

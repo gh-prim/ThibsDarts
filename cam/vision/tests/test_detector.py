@@ -172,6 +172,18 @@ def test_flight_off_axis():
     assert max(lat) < 1.5, [round(float(x), 1) for x in lat]
 
 
+def test_fuse_outlier_camera():
+    # Cas réel S4 : Haut gauche et Haut droite d'accord à 2 mm, Bas voit la fléchette hors cible.
+    def o(cam, tip, d):
+        d = np.float64(d)
+        return {"cam": cam, "tip": np.float64(tip), "dir": d / np.linalg.norm(d), "length": 100}
+    obs = [o("Bas", [21.3, 218.8], [30, -150]), o("Haut gauche", [58.1, -35.7], [305, 115]),
+           o("Haut droite", [60.2, -35.1], [325, -90])]
+    x = detector.fuse(obs)
+    assert np.linalg.norm(x - np.float64([59.6, -35.0])) < 1.5, x
+    assert dart_at(*x) == (4, 1), dart_at(*x)
+
+
 def test_fuse_disagreement():
     # Haut gauche voit toute la fléchette ; Haut droite n'a que l'empennage, pointe loin.
     good = {"cam": "Haut gauche", "tip": np.float64([44.8, -24.2]), "dir": np.float64([0.0, 1.0]), "length": 249}
@@ -243,6 +255,7 @@ if __name__ == "__main__":
     test_flight_and_broken_shaft()
     test_flight_off_axis()
     test_fuse_disagreement()
+    test_fuse_outlier_camera()
     test_takeout_light_and_manual_end()
     print("ok")
 

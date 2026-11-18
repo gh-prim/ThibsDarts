@@ -315,6 +315,8 @@ def _dart_from(main, n, labels, stats, centroids, cal):
 
 
 AGREE_MM = 40.0  # une caméra est d'accord si sa pointe est à moins de ça du point trouvé
+OUTLIER_MM = 80.0  # pointe à plus de ça du point où les autres caméras concordent : caméra écartée
+LINE_MM = 8.0  # ... ou si sa droite passe à moins de ça (une caméra est précise de côté, pas en profondeur)
 
 
 def _intersect(obs):
@@ -322,23 +324,61 @@ def _intersect(obs):
     if len(obs) == 1:
         return tips[0]
     weights = [float(o.get("weight", 1.0)) for o in obs]
-    A, b = np.zeros((2, 2)), np.zeros(2)
-    for o, wc in zip(obs, weights):
-        if o.get("dir") is None:
-            continue
-        d = np.float64(o["dir"]).reshape(2, 1)
-        P = (np.eye(2) - d @ d.T) * wc
-        A += P
-        b += P @ np.float64(o["tip"])
-    # Un peu de poids aux pointes : évite l'instabilité si les droites sont presque parallèles.
-    w = 0.05
-    A += w * sum(weights) * np.eye(2)
-    b += w * sum(wc * t for wc, t in zip(weights, tips))
-    return np.linalg.solve(A, b)
+
+    def solve(tip_w):
+        A, b = np.zeros((2, 2)), np.zeros(2)
+        for o, wc in zip(obs, weights):
+            if o.get("dir") is None:
+                continue
+            d = np.float64(o["dir"]).reshape(2, 1)
+            P = (np.eye(2) - d @ d.T) * wc
+            A += P
+            b += P @ np.float64(o["tip"])
+        # Un peu de poids aux pointes : évite l'instabilité si les droites sont presque parallèles.
+        A += sum(tw * wc for tw, wc in zip(tip_w, weights)) * np.eye(2)
+        b += sum(tw * wc * t for tw, wc, t in zip(tip_w, weights, tips))
+        return np.linalg.solve(A, b)
+
+    # D'abord les droites seules, puis le petit poids des pointes, mais seulement pour les pointes proches :
+    # une pointe aberrante (caméra qui voit la fléchette hors cible) ne doit pas tirer le résultat.
+    x = solve([1e-3] * len(obs))
+    near = [0.05 if np.linalg.norm(t - x) <= AGREE_MM else 0.0 for t in tips]
+    if not any(near):
+        near = [0.05] * len(obs)
+    return solve(near)
+
+
+def _residual(x, o):
+    """Distance (mm) entre x et l'observation : à sa droite si elle en a une, sinon à sa pointe."""
+    t = np.float64(o["tip"])
+    if o.get("dir") is None:
+        return float(np.linalg.norm(t - x))
+    d = np.float64(o["dir"])
+    v = x - t
+    return float(np.linalg.norm(v - (v @ d) * d))
 
 
 def _agree(x, obs):
-    return min(np.linalg.norm(np.float64(o["tip"]) - x) for o in obs) <= AGREE_MM
+    """Toutes les caméras collent : droite à moins de LINE_MM, et au moins une pointe à moins de AGREE_MM."""
+    if min(np.linalg.norm(np.float64(o["tip"]) - x) for o in obs) > AGREE_MM:
+        return False
+    return len(obs) == 1 or all(_residual(x, o) <= LINE_MM for o in obs)
+
+
+def _drop_outlier(obs):
+    """3 caméras ou plus : celle dont la pointe est très loin du point où les autres concordent
+    (pointes à moins de AGREE_MM) est écartée, même si sa droite passe pas loin."""
+    if len(obs) < 3:
+        return obs
+    best = None
+    for out in obs:
+        rest = [o for o in obs if o is not out]
+        x = _intersect(rest)
+        spread = max(np.linalg.norm(np.float64(o["tip"]) - x) for o in rest)
+        far = np.linalg.norm(np.float64(out["tip"]) - x)
+        if spread <= AGREE_MM and far > OUTLIER_MM and (best is None or spread < best[0]):
+            best = (spread, rest)
+    return best[1] if best else obs
 
 
 def fuse(obs, model=None):
@@ -346,18 +386,22 @@ def fuse(obs, model=None):
     model : ajustements appris des corrections (learning.Model), ou None."""
     if model is not None:
         obs = model.apply(obs)
+    obs = _drop_outlier(obs)
     x = _intersect(obs)
     if len(obs) == 1 or _agree(x, obs):
         return x
-    # Caméras en désaccord : on écarte celle qui gêne (3 caméras), sinon on croit la plus longue tache
-    # (fléchette vue en entier) plutôt que de couper la poire en deux.
+    # Caméras en désaccord, 3 caméras : si 2 sont d'accord, on écarte la troisième.
     if len(obs) >= 3:
         subs = [[o for o in obs if o is not out] for out in obs]
         sols = [(_intersect(s), s) for s in subs]
         ok = [(x2, s) for x2, s in sols if _agree(x2, s)]
         if ok:
-            x2, s = min(ok, key=lambda e: np.mean([np.linalg.norm(np.float64(o["tip"]) - e[0]) for o in e[1]]))
+            x2, s = min(ok, key=lambda e: max(_residual(e[0], o) for o in e[1]))
             return x2
+    # Aucun accord net : l'intersection si une pointe la confirme, sinon la plus longue tache
+    # (fléchette vue en entier) plutôt que de couper la poire en deux.
+    if min(np.linalg.norm(np.float64(o["tip"]) - x) for o in obs) <= AGREE_MM:
+        return x
     best = max(obs, key=lambda o: float(o.get("length", 0)) * float(o.get("weight", 1.0)))
     return np.float64(best["tip"])
 

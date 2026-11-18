@@ -148,6 +148,32 @@ def test_flight_and_broken_shaft():
             assert err < 8, (name, tgt, [round(float(v), 1) for v in o["tip"]], err)
 
 
+def test_aligned_noise_beyond_tip():
+    """Cas réel : petites taches de bruit dans l'axe, de l'autre côté de la cible. La pointe reste sur la fléchette."""
+    np.random.seed(5)
+    tex = board_texture()
+    for name, d in detector.PRESET_DIRS.items():
+        R, t = pose(d)
+        cal = calib_for(R, t)
+        rvec, _ = cv2.Rodrigues(R)
+        for tgt in [(10, -120), (-60, -100)]:
+            bg = render(R, t, tex)
+            cur = bg.copy()
+            p, _ = cv2.projectPoints(np.float64([(*tgt, 0), (*tgt, -70), (*tgt, -110)]), rvec, t, K, None)
+            p = p.reshape(-1, 2)
+            cv2.line(cur, tuple(np.int32(p[0])), tuple(np.int32(p[1])), shade(bg, p[0]), 4)
+            cv2.line(cur, tuple(np.int32(p[1])), tuple(np.int32(p[2])), 255, 9)
+            # Taches de bruit tous les 90 px dans le prolongement, côté pointe, jusqu'au bord de la cible.
+            u = (p[0] - p[2]) / np.linalg.norm(p[0] - p[2])
+            for k in range(1, 6):
+                q = p[0] + u * 90 * k
+                cv2.circle(cur, tuple(np.int32(q)), 4, shade(bg, q), -1)
+            o = detector.find_dart(bg, cur, cal)
+            assert o is not None, (name, tgt)
+            err = float(np.linalg.norm(o["tip"] - np.float64(tgt)))
+            assert err < 8, (name, tgt, [round(float(v), 1) for v in o["tip"]], err)
+
+
 def test_flight_off_axis():
     """Empennage décalé sur le côté (vu de biais, ou mêlé à une fléchette voisine) : l'axe suit le fût."""
     np.random.seed(11)
@@ -254,6 +280,7 @@ if __name__ == "__main__":
     test_three_cameras()
     test_flight_and_broken_shaft()
     test_flight_off_axis()
+    test_aligned_noise_beyond_tip()
     test_fuse_disagreement()
     test_fuse_outlier_camera()
     test_takeout_light_and_manual_end()

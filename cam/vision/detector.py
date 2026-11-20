@@ -510,6 +510,18 @@ class Detector:
             if o:
                 o["cam"] = n
                 obs.append(o)
+        usable = sum(1 for n in frames if cals.get(n) is not None)
+        if obs and usable >= 2:
+            # Une vraie fléchette est vue par au moins 2 caméras qui concordent. Une seule caméra,
+            # c'est presque toujours la lumière projetée (ombre de quelqu'un devant le projecteur,
+            # reflet sur un logo imprimé) : on ne compte rien.
+            agree = len(obs) >= 2 and any(_agree(_intersect([a, b]), [a, b])
+                                          for i, a in enumerate(obs) for b in obs[i + 1:])
+            if not agree:
+                cams = ", ".join(o["cam"] for o in obs)
+                self.log(f"tache ignorée ({'une seule caméra' if len(obs) < 2 else 'caméras en désaccord'} : {cams})")
+                self._rebase(frames, smalls, empty=self.darts == 0)
+                return
         gone = self._removed(frames) if obs else None
         if gone is not None:
             # Une fléchette en place a été retirée (sa zone est redevenue comme avant elle) : pas une nouvelle.

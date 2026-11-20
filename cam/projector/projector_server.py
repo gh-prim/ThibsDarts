@@ -50,12 +50,18 @@ class Hub:
         self.screen = [1280, 720]  # taille de la page projetée, envoyée par elle au chargement
 
     def send(self, kind, data, keep=False):
-        if kind in ("pointer", "calib") and self.client:
+        msg = f"event: {kind}\ndata: {json.dumps(data)}\n\n".encode()
+        # Partie lancée ou arrêtée : l'éclairage de la cible change d'intensité.
+        changed_state = False
+        if kind == "state" and isinstance(data, dict):
+            playing = bool(data.get("playing"))
+            changed_state = getattr(self, "playing", None) not in (None, playing)
+            self.playing = playing
+        if (kind in ("pointer", "calib") or changed_state) and self.client:
             # L'image projetée change pour de bon (croix, mire, nouveau calage) : caméras en pause,
             # puis nouveau fond, sinon la différence est prise pour une fléchette.
             until = int(time.time() * 1000) + 1500
             self.client.publish(LIGHT_TOPIC, json.dumps({"until": until, "rebase": True}), qos=0)
-        msg = f"event: {kind}\ndata: {json.dumps(data)}\n\n".encode()
         with self.lock:
             if keep:
                 self.last[kind] = msg

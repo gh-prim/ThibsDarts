@@ -31,8 +31,8 @@ def _targets():
         a = math.radians(i * 18 + 9)
         n0, n1 = ORDER[i], ORDER[(i + 1) % 20]
         out.append({"id": f"{n0}-{n1}", "ring": None, "mm": (math.sin(a) * DOUT, math.cos(a) * DOUT),
-                    "where": f"Entre le {n0} et le {n1}", "hint": "Superpose les traits cyan au double et au fil de séparation"})
-    out.append({"id": "bull", "ring": None, "mm": (0.0, 0.0), "where": "Centre du bull", "hint": "Superpose les deux cercles cyan au bull"})
+                    "where": f"Entre le {n0} et le {n1}", "hint": "Croix sur le croisement du fil extérieur du double et du fil de séparation"})
+    out.append({"id": "bull", "ring": None, "mm": (0.0, 0.0), "where": "Centre du bull", "hint": "Croix au centre du 50"})
     for ring, nums in (("dIn", (20, 3)), ("tOut", (6, 11)), ("tIn", (20, 3)), ("board", (20, 6, 3, 11)), ("sur", (20, 6, 3, 11))):
         for n in nums:
             a = math.radians(ORDER.index(n) * 18)
@@ -91,6 +91,7 @@ class Guide:
         self.proj = dict(DEF_PROJ)
         self.loaded = False
         self.shape = []
+        self.seq = 0
 
     # ---------- modèle ----------
     def _screen(self):
@@ -160,7 +161,7 @@ class Guide:
         elif self.tab == "points":
             t = TARGETS[self.cur]
             done = [list(p["px"]) for i, p in self.pairs.items() if i != t["id"]]
-            self.hub.send("pointer", {"x": self.ptr[0], "y": self.ptr[1], "shape": self.shape, "done": done}, keep=True)
+            self.hub.send("pointer", {"x": self.ptr[0], "y": self.ptr[1], "done": done}, keep=True)
         else:
             self.hub.send("pointer", {"off": True}, keep=True)
 
@@ -222,6 +223,8 @@ class Guide:
             self._ensure()
             a = b.get("action")
             msg = None
+            if a != "set":
+                self.seq = 0  # nouvel écran ou nouvelle étape : la numérotation repart de zéro
             if a == "tab" and b.get("tab") in ("frame", "points", "check"):
                 self.tab = b["tab"]
                 if self.tab == "points":
@@ -232,6 +235,19 @@ class Guide:
                 W, H = self._screen()
                 dx, dy = float(b.get("dx", 0)), float(b.get("dy", 0))
                 self.ptr = [max(0.0, min(W, self.ptr[0] + dx)), max(0.0, min(H, self.ptr[1] + dy))]
+            elif a == "set":
+                # Position absolue envoyée en continu par l'iPhone ; une requête plus ancienne arrivée
+                # en retard est ignorée (numéro de séquence).
+                seq = int(b.get("seq", 0))
+                if seq and seq < self.seq:
+                    return {"ptr": self.ptr, "seq": self.seq}
+                self.seq = seq
+                W, H = self._screen()
+                self.ptr = [max(0.0, min(W, float(b.get("x", 0)))), max(0.0, min(H, float(b.get("y", 0))))]
+                t = TARGETS[self.cur]
+                self.hub.send("pointer", {"x": self.ptr[0], "y": self.ptr[1],
+                                          "done": [list(p["px"]) for i, p in self.pairs.items() if i != t["id"]]}, keep=True)
+                return {"ptr": self.ptr, "seq": seq}
             elif a == "goto":
                 self._goto(int(b.get("index", 0)))
             elif a == "ok":

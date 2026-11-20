@@ -23,6 +23,7 @@ struct ProjectorGuide: Decodable {
     let error: Err?
     let rings: [String: Double]
     let message: String?
+    let ptr: [Double]?
 }
 
 /// Profil > Projecteur (propriétaire) : calibration du vidéoprojecteur depuis l'iPhone.
@@ -34,8 +35,11 @@ struct ProjectorCalibView: View {
     @State private var error: String?
     @State private var fine = true
     @State private var lastDrag: CGSize = .zero
-    @State private var pending: CGSize = .zero
-    @State private var sending = false
+    /// Position de la croix tenue localement : chaque geste l'envoie en absolu, sans attendre la réponse.
+    @State private var ptr: CGPoint?
+    @State private var seq = 0
+    @State private var inFlight = 0
+    @State private var dirty = false
 
     var body: some View {
         Stage {
@@ -212,20 +216,27 @@ struct ProjectorCalibView: View {
 
     // MARK: Réseau
 
-    /// Les déplacements s'accumulent et partent au plus 30 fois par seconde.
+    /// Déplacement : la croix bouge tout de suite côté iPhone, la position absolue part au Pi 5 avec
+    /// un numéro croissant (au plus 3 envois en vol, le dernier l'emporte, un envoi en retard est ignoré).
     private func move(_ dx: CGFloat, _ dy: CGFloat) {
-        pending.width += dx
-        pending.height += dy
-        guard !sending else { return }
-        sending = true
+        guard var p = ptr else { return }
+        p.x += dx
+        p.y += dy
+        ptr = p
+        flush()
+    }
+
+    private func flush() {
+        guard let p = ptr else { return }
+        if inFlight >= 3 { dirty = true; return }
+        dirty = false
+        seq += 1
+        inFlight += 1
+        guard let req = request("guide", ["action": "set", "x": Double(p.x), "y": Double(p.y), "seq": seq]) else { inFlight -= 1; return }
         Task {
-            while pending != .zero {
-                let d = pending
-                pending = .zero
-                await send(["action": "move", "dx": Double(d.width), "dy": Double(d.height)], quiet: true)
-                try? await Task.sleep(for: .milliseconds(33))
-            }
-            sending = false
+            _ = try? await URLSession.shared.data(for: req)
+            inFlight -= 1
+            if dirty { flush() }
         }
     }
 
@@ -261,6 +272,7 @@ struct ProjectorCalibView: View {
                 let g = try JSONDecoder().decode(ProjectorGuide.self, from: data)
                 if quiet, let cur = guide, cur.index == g.index, cur.tab == g.tab { return }
                 guide = g
+                if let p = g.ptr, p.count == 2, inFlight == 0 { ptr = CGPoint(x: p[0], y: p[1]) }
                 error = nil
             case 401: error = "Réservé au propriétaire de la cible."
             default: error = "Le Pi 5 du projecteur ne répond pas."

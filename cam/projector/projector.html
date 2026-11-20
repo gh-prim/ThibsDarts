@@ -87,13 +87,12 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
       return;
     }
     (d.done || []).forEach(([x, y]) => { pg.fillStyle = '#FF4D8D'; pg.beginPath(); pg.arc(x, y, 3, 0, Math.PI * 2); pg.fill(); });
-    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5;
-    if (d.shape && d.shape.length) {
-      // Fils projetés à superposer aux vrais fils de la cible (épais pour être vus du pas de tir).
-      pg.strokeStyle = '#00F0FF'; pg.lineWidth = 3; pg.lineJoin = 'round';
-      d.shape.forEach(pl => { pg.beginPath(); pl.forEach(([dx, dy], k) => k ? pg.lineTo(x + dx, y + dy) : pg.moveTo(x + dx, y + dy)); pg.stroke(); });
-      return;
-    }
+    // Croix simple : deux traits continus de 2 px, cyan, qui se coupent sur le point visé.
+    const x = Math.round(d.x), y = Math.round(d.y), len = 110;
+    pg.fillStyle = '#00F0FF';
+    pg.fillRect(x - len, y - 1, len * 2, 2);
+    pg.fillRect(x - 1, y - len, 2, len * 2);
+  }
     // Sans forme : viseur à 4 branches épaisses et centre fin.
     const gap = 26, len = 260, w = 7;
     pg.strokeStyle = '#00F0FF'; pg.lineCap = 'butt';

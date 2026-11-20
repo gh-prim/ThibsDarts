@@ -343,6 +343,8 @@ class Lobby extends ChangeNotifier {
     }
   }
 
+  HttpClient? _projClient;
+
   /// Vidéoprojecteur du Pi 5 (port 8082) relayé pour l'app iOS (réservé au propriétaire) :
   /// GET/POST /api/projector/guide pour la calibration guidée, POST /api/projector/test pour un essai.
   Future<void> _projectorRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
@@ -352,7 +354,10 @@ class Lobby extends ChangeNotifier {
     final rest = seg.skip(2).join('/');
     if (rest != 'guide' && rest != 'test') return _send(res, {'error': 'introuvable'}, status: 404);
     final target = base.replace(port: 8082, path: '/$rest');
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+    // Client gardé d'une requête à l'autre : la connexion au Pi 5 reste ouverte (pointeur fluide).
+    final client = _projClient ??= (HttpClient()
+      ..connectionTimeout = const Duration(seconds: 4)
+      ..idleTimeout = const Duration(seconds: 30));
     try {
       final out = req.method == 'POST' ? await client.postUrl(target) : await client.getUrl(target);
       if (req.method == 'POST') {
@@ -371,8 +376,6 @@ class Lobby extends ChangeNotifier {
       await res.close();
     } catch (_) {
       await _send(res, {'error': 'camera'}, status: 503);
-    } finally {
-      client.close(force: true);
     }
   }
 

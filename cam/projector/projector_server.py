@@ -84,6 +84,16 @@ def load_calib():
 
 def save_calib(data):
     os.makedirs(DATA_DIR, exist_ok=True)
+    # Une calibration guidée n'est jamais perdue : si l'enregistrement en efface des points,
+    # l'ancienne est d'abord copiée dans projector-backups/ (les 20 dernières).
+    old = load_calib() or {}
+    if len(old.get("pairs") or []) > len(data.get("pairs") or []):
+        bdir = os.path.join(DATA_DIR, "projector-backups")
+        os.makedirs(bdir, exist_ok=True)
+        with open(os.path.join(bdir, time.strftime("projector-%Y%m%d-%H%M%S.json")), "w") as f:
+            json.dump(old, f)
+        for name in sorted(os.listdir(bdir))[:-20]:
+            os.remove(os.path.join(bdir, name))
     tmp = CALIB_FILE + ".tmp"
     with open(tmp, "w") as f:
         json.dump(data, f)

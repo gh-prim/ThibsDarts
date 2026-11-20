@@ -87,15 +87,14 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
       return;
     }
     (d.done || []).forEach(([x, y]) => { pg.fillStyle = '#FF4D8D'; pg.beginPath(); pg.arc(x, y, 3, 0, Math.PI * 2); pg.fill(); });
-    // Halo blanc qui éclaire la cible autour du point, croix noire (sans lumière) dedans pour le
-    // contraste maximal, prolongée en rouge au-delà du halo pour la retrouver de loin.
-    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, R = 90, len = 220;
-    const gr = pg.createRadialGradient(x, y, 0, x, y, R);
-    gr.addColorStop(0, '#fff'); gr.addColorStop(.75, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    pg.fillStyle = gr; pg.beginPath(); pg.arc(x, y, R, 0, Math.PI * 2); pg.fill();
-    pg.lineWidth = 1;
-    pg.strokeStyle = '#FF1E3C'; pg.beginPath(); pg.moveTo(x - len, y); pg.lineTo(x + len, y); pg.moveTo(x, y - len); pg.lineTo(x, y + len); pg.stroke();
-    pg.strokeStyle = '#000'; pg.beginPath(); pg.moveTo(x - R, y); pg.lineTo(x + R, y); pg.moveTo(x, y - R); pg.lineTo(x, y + R); pg.stroke();
+    // Viseur lisible de loin : 4 branches épaisses cyan qui pointent vers le centre, puis un trait
+    // fin d'1 px jusqu'au point exact (l'oeil prolonge les branches, le trait fin donne la précision).
+    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, gap = 26, len = 260, w = 7;
+    pg.strokeStyle = '#00F0FF'; pg.lineCap = 'butt';
+    pg.lineWidth = w; pg.beginPath();
+    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { pg.moveTo(x + dx * gap, y + dy * gap); pg.lineTo(x + dx * len, y + dy * len); });
+    pg.stroke();
+    pg.lineWidth = 1; pg.beginPath(); pg.moveTo(x - gap, y); pg.lineTo(x + gap, y); pg.moveTo(x, y - gap); pg.lineTo(x, y + gap); pg.stroke();
   }
 
   const es = new EventSource('/events');

@@ -93,14 +93,6 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
     pg.fillRect(x - len, y - 1, len * 2, 2);
     pg.fillRect(x - 1, y - len, 2, len * 2);
   }
-    // Sans forme : viseur à 4 branches épaisses et centre fin.
-    const gap = 26, len = 260, w = 7;
-    pg.strokeStyle = '#00F0FF'; pg.lineCap = 'butt';
-    pg.lineWidth = w; pg.beginPath();
-    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { pg.moveTo(x + dx * gap, y + dy * gap); pg.lineTo(x + dx * len, y + dy * len); });
-    pg.stroke();
-    pg.lineWidth = 1; pg.beginPath(); pg.moveTo(x - gap, y); pg.lineTo(x + gap, y); pg.moveTo(x, y - gap); pg.lineTo(x, y + gap); pg.stroke();
-  }
 
   const es = new EventSource('/events');
   es.addEventListener('pointer', e => pointer(JSON.parse(e.data)));

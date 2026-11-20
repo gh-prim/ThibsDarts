@@ -144,6 +144,14 @@ class Handler(BaseHTTPRequestHandler):
             if not (isinstance(pts, list) and len(pts) == 4 and all(isinstance(p, list) and len(p) == 2 for p in pts)):
                 return self._send(400, {"error": "4 points [x, y] attendus"})
             data = {"points": [[float(x), float(y)] for x, y in pts], "pattern": bool(body.get("pattern"))}
+            pairs = body.get("pairs")
+            if isinstance(pairs, list) and all(
+                isinstance(q, dict) and isinstance(q.get("mm"), list) and isinstance(q.get("px"), list)
+                and len(q["mm"]) == 2 and len(q["px"]) == 2 for q in pairs
+            ):
+                # Correspondances relevées en calibration guidée (point de la cible en mm, pixel visé).
+                data["pairs"] = [{"id": str(q.get("id", "")), "mm": [float(v) for v in q["mm"]],
+                                  "px": [float(v) for v in q["px"]]} for q in pairs[:64]]
             pr = body.get("projector")
             if isinstance(pr, dict) and all(isinstance(pr.get(k), (int, float)) for k in "xyz"):
                 data["projector"] = {k: float(pr[k]) for k in "xyz"}
@@ -160,6 +168,17 @@ class Handler(BaseHTTPRequestHandler):
                 n, m = SEGMENTS.get(kind, (20, 3))
                 hub.send("dart", {"number": n, "multiplier": m, "test": True})
             return self._send(200, {"ok": True})
+        if path == "/pointer":
+            # Pointeur de la calibration guidée, en pixels d'écran ; {"off": true} le retire.
+            if body.get("grid"):
+                data = {"grid": True}  # mire rectangulaire plein écran, pour placer le projecteur
+            elif body.get("off") or not isinstance(body.get("x"), (int, float)):
+                data = {"off": True}
+            else:
+                done = [p for p in body.get("done", []) if isinstance(p, list) and len(p) == 2][:64]
+                data = {"x": float(body["x"]), "y": float(body["y"]), "done": done}
+            hub.send("pointer", data, keep=True)
+            return self._send(200, data)
         if path == "/screen":
             w, h = body.get("w"), body.get("h")
             if isinstance(w, (int, float)) and isinstance(h, (int, float)) and 100 < w < 10000 and 100 < h < 10000:

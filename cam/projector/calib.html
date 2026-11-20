@@ -6,72 +6,89 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Projecteur · calibration</title>
 <style>
-:root{--beton:#121214;--asphalte:#1E1F24;--line:rgba(255,255,255,.12);--txt:#F2EEE9;--mute:#9A978F;--sunset:#FF7A2F;--fluo:#FFE14D;--crep:#FF4D8D}
+:root{--beton:#121214;--asphalte:#1E1F24;--line:rgba(255,255,255,.12);--txt:#F2EEE9;--mute:#9A978F;--sunset:#FF7A2F;--fluo:#FFE14D;--crep:#FF4D8D;--ok:#7BD88F}
 *{box-sizing:border-box}
-body{margin:0;background:var(--beton);color:var(--txt);font:15px system-ui,sans-serif;padding:16px;max-width:760px;margin-inline:auto}
-h1{font-size:20px;margin:0}
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+body{margin:0;background:var(--beton);color:var(--txt);font:15px system-ui,sans-serif;padding:16px;max-width:560px;margin-inline:auto;-webkit-user-select:none;user-select:none}
+h1{font-size:20px;margin:0 0 12px}
 .mute{color:var(--mute);font-size:13px}
 .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);margin:16px 0 8px}
-#stage{position:relative;width:100%;border:1px solid var(--line);border-radius:12px;background:#000;touch-action:none;overflow:hidden}
-#cv{display:block;width:100%;touch-action:none;cursor:grab}
-#cv.drag{cursor:grabbing}
-.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:12px;color:var(--mute)}
-.legend b{color:var(--txt);font-weight:500}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-button{all:unset;cursor:pointer;text-align:center;padding:12px 6px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:15px;user-select:none;-webkit-user-select:none}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+button{all:unset;cursor:pointer;text-align:center;padding:12px 6px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:15px}
 button:active{background:rgba(255,122,47,.18)}
 button:focus-visible{outline:2px solid var(--fluo);outline-offset:2px}
 button[aria-pressed="true"]{border-color:var(--sunset);background:rgba(255,122,47,.15)}
 button:disabled{opacity:.35;cursor:default}
-.tog{display:flex;gap:8px;align-items:center;font-size:14px}
+.go{background:var(--sunset);color:#121214;font-weight:600;border-color:var(--sunset)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+section{display:none}section.on{display:block}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(255,255,255,.03)}
+.step{display:flex;gap:12px;align-items:center}
+#mini{width:96px;height:96px;flex:none}
+#where{font-size:17px;font-weight:600;line-height:1.3}
+#pad{margin-top:10px;height:220px;border-radius:12px;border:1px dashed rgba(255,225,77,.4);background:radial-gradient(circle at center,rgba(255,225,77,.08),transparent 70%);touch-action:none;display:flex;align-items:center;justify-content:center;color:var(--mute);font-size:13px;cursor:crosshair}
+.dots{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.dot{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--mute);cursor:pointer}
+.dot.done{background:rgba(123,216,143,.18);border-color:var(--ok);color:var(--ok)}
+.dot.skip{border-style:dashed}
+.dot.cur{border-color:var(--fluo);color:var(--fluo)}
 .row{display:flex;gap:8px;align-items:center}
 .row label{flex:1;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mute)}
-input[type=number]{width:100%;background:var(--asphalte);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px}
-details{margin-top:16px;border-top:1px solid var(--line);padding-top:8px}
+input[type=number]{width:100%;background:var(--asphalte);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;-webkit-user-select:text;user-select:text}
+details{margin-top:18px;border-top:1px solid var(--line);padding-top:8px}
 summary{cursor:pointer;color:var(--mute);font-size:13px}
-#state{font-variant-numeric:tabular-nums}
-#msg.ok{color:#7BD88F}#msg.err{color:var(--crep)}
+#msg{margin-top:10px;font-variant-numeric:tabular-nums}
+#msg.ok{color:var(--ok)}#msg.err{color:var(--crep)}
 </style>
 </head>
 <body>
-<div class="top">
-  <h1>Projecteur</h1>
-  <label class="tog"><input type="checkbox" id="pattern" checked> Mire</label>
+<h1>Projecteur</h1>
+<div class="tabs" role="tablist">
+  <button data-tab="frame">1. Cadrage</button>
+  <button data-tab="points">2. Points</button>
+  <button data-tab="check">3. Vérifier</button>
 </div>
 
-<div id="stage"><canvas id="cv"></canvas></div>
-<div class="legend">
-  <span><b>Glisser la cible</b> déplacer</span>
-  <span><b>Poignée orange</b> tourner et agrandir</span>
-  <span><b>Points 20, 6, 3, 11</b> déformer</span>
-  <span><b>2 doigts</b> tout à la fois</span>
-</div>
+<section id="frame">
+  <div class="lbl">Mire plein écran</div>
+  <div class="card mute">Cercle rose : place de la cible par défaut. Bord rose : limite de l'image.</div>
+</section>
 
-<div class="lbl">Réglage fin <span id="state" class="mute"></span></div>
-<div class="grid">
-  <button data-mv="-1,0" aria-label="Gauche">←</button>
-  <button data-mv="0,-1" aria-label="Haut">↑</button>
-  <button data-mv="0,1" aria-label="Bas">↓</button>
-  <button data-mv="1,0" aria-label="Droite">→</button>
-  <button data-rot="-0.25">↺ 0,25°</button>
-  <button data-rot="0.25">↻ 0,25°</button>
-  <button data-sc="0.995">− taille</button>
-  <button data-sc="1.005">+ taille</button>
-</div>
-<div class="grid3" style="margin-top:6px">
-  <button id="fine" aria-pressed="false">Précis</button>
-  <button id="undo" disabled>Annuler</button>
-  <button id="reset">Par défaut</button>
-</div>
-<div class="mute" id="msg" style="margin-top:10px"></div>
+<section id="points">
+  <div class="lbl">Point <span id="num"></span></div>
+  <div class="card step">
+    <canvas id="mini" width="192" height="192"></canvas>
+    <div><div id="where"></div><div class="mute" id="hint" style="margin-top:4px"></div></div>
+  </div>
+  <div id="pad">Glisser pour déplacer le pointeur</div>
+  <div class="grid4" style="margin-top:6px">
+    <button data-mv="-1,0" aria-label="Gauche">←</button>
+    <button data-mv="0,-1" aria-label="Haut">↑</button>
+    <button data-mv="0,1" aria-label="Bas">↓</button>
+    <button data-mv="1,0" aria-label="Droite">→</button>
+  </div>
+  <div class="grid3" style="margin-top:6px">
+    <button id="fine" aria-pressed="true">Précis</button>
+    <button id="skip">Caché, passer</button>
+    <button id="ok" class="go">Valider</button>
+  </div>
+  <div class="dots" id="dots"></div>
+</section>
 
-<div class="lbl">Essai</div>
-<div class="grid">
-  <button data-t="T20">T20</button><button data-t="D16">D16</button>
-  <button data-t="DB">Bull</button><button data-t="180">180</button>
-</div>
+<section id="check">
+  <div class="lbl">Mire sur la cible</div>
+  <div class="grid4">
+    <button data-t="T20">T20</button><button data-t="D16">D16</button>
+    <button data-t="DB">Bull</button><button data-t="180">180</button>
+  </div>
+  <div class="grid2" style="margin-top:6px">
+    <button id="redo">Refaire les points</button>
+    <button id="reset">Par défaut</button>
+  </div>
+</section>
+
+<div class="mute" id="msg"></div>
 
 <details>
   <summary>Position du projecteur (mm depuis le centre de la cible)</summary>
@@ -86,198 +103,177 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  // Fil extérieur du double (mm) : haut du 20, droite du 6, bas du 3, gauche du 11.
-  const DOUT = 170, CAL = [[0, DOUT], [DOUT, 0], [0, -DOUT], [-DOUT, 0]], NAMES = ['20', '6', '3', '11'];
-  const RINGS = [6.35, 15.9, 99, 107, 162, 170];
+  const DOUT = 170, CAL = [[0, DOUT], [DOUT, 0], [0, -DOUT], [-DOUT, 0]];
+  const ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
   const DEF_PROJ = { x: -700, y: -530, z: 1550 };
-  let W = 1280, H = 720, pts = null, proj = { ...DEF_PROJ }, fine = false;
-  const undo = [];
+  // Croisements du fil extérieur du double avec les fils des secteurs, puis le centre.
+  // Les 4 premiers sont bien répartis : dès le 4e validé, les suivants sont pré-placés.
+  const TARGETS = [0, 5, 10, 15, 2, 7, 12, 17].map(i => {
+    const a = (i * 18 + 9) * Math.PI / 180;
+    return { id: `${ORDER[i]}-${ORDER[(i + 1) % 20]}`, mm: [Math.sin(a) * DOUT, Math.cos(a) * DOUT],
+      where: `Entre le ${ORDER[i]} et le ${ORDER[(i + 1) % 20]}`, hint: 'Fil extérieur du double, sur le fil qui sépare les deux' };
+  }).concat([{ id: 'bull', mm: [0, 0], where: 'Centre du bull', hint: 'Milieu du 50' }]);
 
-  const defPts = () => { const s = 514 / 451; return CAL.map(([x, y]) => [W / 2 + x * s, H / 2 - y * s]); };
+  let W = 1280, H = 720, proj = { ...DEF_PROJ }, base = null, pairs = {}, skipped = {}, cur = 0, ptr = [W / 2, H / 2], fine = true;
 
-  // Homographie mm (y vers le haut) -> pixels de l'image projetée.
-  function homography(src, dst) {
-    const A = [], b = [];
-    for (let i = 0; i < 4; i++) {
-      const [x, y] = src[i], [u, v] = dst[i];
-      A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
-      A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
-    }
-    for (let c = 0; c < 8; c++) {
-      let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
-      [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
-      for (let r = 0; r < 8; r++) { if (r === c) continue; const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
-    }
-    return b.map((v, i) => v / A[i][i]);
-  }
-  const mapH = (h, x, y) => { const w = h[6] * x + h[7] * y + 1; return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w]; };
-  const center = () => mapH(homography(CAL, pts), 0, 0);
-
-  // Transformations de toute la cible (sur une copie des points).
-  const moved = (src, dx, dy) => src.map(([x, y]) => [x + dx, y + dy]);
-  function turned(src, c, ang, s) {
-    const co = Math.cos(ang) * s, si = Math.sin(ang) * s;
-    return src.map(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return [c[0] + dx * co - dy * si, c[1] + dx * si + dy * co]; });
-  }
-
-  // Dessin : cadre de l'image projetée, cible déformée, poignées.
-  const cv = $('cv'), g = cv.getContext('2d');
-  let dpr = 1, cw = 0, ch = 0, k = 1; // k : pixels projetés par pixel de l'aperçu
-  function size() {
-    dpr = devicePixelRatio || 1; cw = $('stage').clientWidth; ch = Math.round(cw * H / W); k = W / cw;
-    cv.width = cw * dpr; cv.height = ch * dpr; cv.style.height = ch + 'px'; draw();
-  }
-  const toC = ([x, y]) => [x / k, y / k];
-  function rotHandle() {
-    const h = homography(CAL, pts), c = mapH(h, 0, 0), t = mapH(h, 0, DOUT * 1.32);
-    return toC(t).concat(toC(c));
-  }
-  function draw() {
-    if (!pts) return;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
-    g.strokeStyle = 'rgba(255,255,255,.25)'; g.setLineDash([4, 4]); g.strokeRect(.5, .5, cw - 1, ch - 1); g.setLineDash([]);
-    const h = homography(CAL, pts), P = (x, y) => toC(mapH(h, x, y));
-    g.fillStyle = 'rgba(255,225,77,.07)'; g.beginPath();
-    for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2, [X, Y] = P(Math.sin(a) * DOUT, Math.cos(a) * DOUT); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
-    g.fill();
-    g.strokeStyle = '#FFE14D'; g.lineWidth = 1.2;
-    RINGS.forEach(r => { g.beginPath(); for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2, [X, Y] = P(Math.sin(a) * r, Math.cos(a) * r); i ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); });
-    for (let i = 0; i < 20; i++) { const a = (i * 18 - 9) * Math.PI / 180, [x0, y0] = P(Math.sin(a) * 15.9, Math.cos(a) * 15.9), [x1, y1] = P(Math.sin(a) * DOUT, Math.cos(a) * DOUT); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
-    // Poignée de rotation, dans l'axe du 20.
-    const [rx, ry, cx, cy] = rotHandle();
-    g.strokeStyle = 'rgba(255,122,47,.7)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(rx, ry); g.stroke();
-    g.fillStyle = '#FF7A2F'; g.beginPath(); g.arc(rx, ry, 11, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#121214'; g.lineWidth = 2; g.beginPath(); g.arc(rx, ry, 5, -.3, Math.PI * 1.5); g.stroke();
-    // Points de réglage.
-    g.font = '600 11px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    pts.forEach((p, i) => {
-      const [X, Y] = toC(p), on = drag && drag.kind === 'pt' && drag.i === i;
-      g.fillStyle = on ? '#FFE14D' : '#FF4D8D'; g.beginPath(); g.arc(X, Y, 10, 0, Math.PI * 2); g.fill();
-      g.fillStyle = '#121214'; g.fillText(NAMES[i], X, Y + .5);
+  // Homographie mm -> pixels écran, aux moindres carrés sur 4 points ou plus (coordonnées normalisées).
+  function fit(src, dst) {
+    const sx = 1 / DOUT, mx = dst.reduce((a, p) => a + p[0], 0) / dst.length, my = dst.reduce((a, p) => a + p[1], 0) / dst.length;
+    const sd = 1 / (Math.sqrt(dst.reduce((a, p) => a + (p[0] - mx) ** 2 + (p[1] - my) ** 2, 0) / dst.length) || 1);
+    const M = Array.from({ length: 8 }, () => new Array(9).fill(0));
+    src.forEach(([X, Y], i) => {
+      const x = X * sx, y = Y * sx, u = (dst[i][0] - mx) * sd, v = (dst[i][1] - my) * sd;
+      [[x, y, 1, 0, 0, 0, -u * x, -u * y, u], [0, 0, 0, x, y, 1, -v * x, -v * y, v]].forEach(r => {
+        for (let a = 0; a < 8; a++) for (let b = 0; b < 9; b++) M[a][b] += r[a] * r[b];
+      });
     });
-    const c = center(), ang = Math.atan2(pts[0][0] - c[0], c[1] - pts[0][1]) * 180 / Math.PI;
-    const diam = Math.hypot(pts[1][0] - pts[3][0], pts[1][1] - pts[3][1]);
-    $('state').textContent = `· centre ${Math.round(c[0])}, ${Math.round(c[1])} · ${ang.toFixed(1).replace('.', ',')}° · ${Math.round(diam)} px`;
+    for (let c = 0; c < 8; c++) {
+      let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      [M[c], M[p]] = [M[p], M[c]];
+      for (let r = 0; r < 8; r++) { if (r === c) continue; const f = M[r][c] / M[c][c]; for (let k = c; k < 9; k++) M[r][k] -= f * M[c][k]; }
+    }
+    const h = M.map((r, i) => r[8] / r[i]);
+    return (X, Y) => { const x = X * sx, y = Y * sx, w = h[6] * x + h[7] * y + 1; return [((h[0] * x + h[1] * y + h[2]) / w) / sd + mx, ((h[3] * x + h[4] * y + h[5]) / w) / sd + my]; };
+  }
+  const defPts = () => { const s = 514 / 451; return CAL.map(([x, y]) => [W / 2 + x * s, H / 2 - y * s]); };
+  function model() {
+    const ids = Object.keys(pairs);
+    if (ids.length >= 4) return fit(ids.map(i => pairs[i].mm), ids.map(i => pairs[i].px));
+    return fit(CAL, base || defPts());
   }
 
-  // Envoi au Pi : en direct pendant le geste (au plus toutes les 50 ms), enregistré au relâcher.
-  let lastSend = 0, sendTimer = null, saveTimer = null;
-  const body = save => JSON.stringify({ points: pts, pattern: $('pattern').checked, projector: proj, save });
-  function post(save) {
-    return fetch('/calib.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(save) })
-      .then(r => { if (!r.ok) throw 0; if (save) msg('Enregistré', 'ok'); })
+  // Réseau.
+  const post = (url, b) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+  function msg(t, cls) { $('msg').textContent = t; $('msg').className = cls || 'mute'; }
+  let ptrTimer = null, ptrLast = 0;
+  function sendPointer() {
+    const now = performance.now(); clearTimeout(ptrTimer);
+    if (now - ptrLast < 30) { ptrTimer = setTimeout(sendPointer, 30); return; }
+    ptrLast = now;
+    post('/pointer', { x: ptr[0], y: ptr[1], done: Object.values(pairs).map(p => p.px) }).catch(() => msg('Pi 5 injoignable', 'err'));
+  }
+  function saveCalib(pattern) {
+    const m = model(), points = CAL.map(([x, y]) => m(x, y));
+    const list = Object.entries(pairs).map(([id, p]) => ({ id, mm: p.mm, px: p.px }));
+    return post('/calib.json', { points, pattern, projector: proj, pairs: list, save: true })
+      .then(r => { if (!r.ok) throw 0; base = points; })
       .catch(() => msg('Pi 5 injoignable', 'err'));
   }
-  function live() {
-    const now = performance.now(); clearTimeout(sendTimer);
-    if (now - lastSend > 50) { lastSend = now; post(false); } else sendTimer = setTimeout(live, 50 - (now - lastSend));
-  }
-  function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => post(true), 400); }
-  function msg(t, cls) { $('msg').textContent = t; $('msg').className = cls || 'mute'; }
-  function change(next, final) { pts = next; draw(); live(); if (final) save(); }
-  function remember() { undo.push(pts.map(p => p.slice())); if (undo.length > 60) undo.shift(); $('undo').disabled = false; }
 
-  // Gestes sur l'aperçu.
-  const touches = new Map();
-  let lastWheel = 0;
-  let drag = null;
-  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  const f = () => fine ? .25 : 1;
-  function hit(p) {
-    const [rx, ry] = rotHandle();
-    if (Math.hypot(p[0] - rx, p[1] - ry) < 22) return { kind: 'rot' };
-    let best = -1, bd = 22;
-    pts.forEach((q, i) => { const [X, Y] = toC(q), d = Math.hypot(p[0] - X, p[1] - Y); if (d < bd) { bd = d; best = i; } });
-    return best >= 0 ? { kind: 'pt', i: best } : { kind: 'move' };
+  // Onglets : chacun pilote ce que montre le projecteur.
+  let tab = 'frame';
+  function show(t) {
+    tab = t;
+    document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === t)));
+    document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === t));
+    msg('');
+    if (t === 'frame') post('/pointer', { grid: true });
+    if (t === 'points') goTo(cur);
+    if (t === 'check') { post('/pointer', { off: true }); saveCalib(true).then(() => msg(errText(), 'ok')); }
   }
-  function startPinch() {
-    const [a, b] = [...touches.values()];
-    drag = { kind: 'pinch', a0: a.slice(), b0: b.slice(), src: pts.map(p => p.slice()), c: center() };
-  }
-  cv.addEventListener('pointerdown', e => {
-    cv.setPointerCapture(e.pointerId); touches.set(e.pointerId, pos(e));
-    remember();
-    if (touches.size === 2) startPinch();
-    else if (touches.size === 1) { const p = pos(e); drag = Object.assign(hit(p), { p0: p, src: pts.map(q => q.slice()), c: center() }); }
-    cv.classList.add('drag'); draw();
-  });
-  cv.addEventListener('pointermove', e => {
-    if (!touches.has(e.pointerId) || !drag) return;
-    touches.set(e.pointerId, pos(e));
-    const m = f();
-    if (drag.kind === 'pinch' && touches.size >= 2) {
-      const [a, b] = [...touches.values()];
-      const d0 = [drag.b0[0] - drag.a0[0], drag.b0[1] - drag.a0[1]], d1 = [b[0] - a[0], b[1] - a[1]];
-      const s = 1 + (Math.hypot(...d1) / Math.hypot(...d0) - 1) * m, ang = (Math.atan2(d1[1], d1[0]) - Math.atan2(d0[1], d0[0])) * m;
-      const mx = ((a[0] + b[0]) - (drag.a0[0] + drag.b0[0])) / 2 * k * m, my = ((a[1] + b[1]) - (drag.a0[1] + drag.b0[1])) / 2 * k * m;
-      return change(moved(turned(drag.src, drag.c, ang, s), mx, my));
-    }
-    const p = pos(e), dx = (p[0] - drag.p0[0]) * k * m, dy = (p[1] - drag.p0[1]) * k * m;
-    if (drag.kind === 'move') return change(moved(drag.src, dx, dy));
-    if (drag.kind === 'pt') { const n = drag.src.map(q => q.slice()); n[drag.i] = [n[drag.i][0] + dx, n[drag.i][1] + dy]; return change(n); }
-    if (drag.kind === 'rot') {
-      const c = toC(drag.c), v0 = [drag.p0[0] - c[0], drag.p0[1] - c[1]], v1 = [p[0] - c[0], p[1] - c[1]];
-      const s = 1 + (Math.hypot(...v1) / Math.hypot(...v0) - 1) * m, ang = (Math.atan2(v1[1], v1[0]) - Math.atan2(v0[1], v0[0])) * m;
-      return change(turned(drag.src, drag.c, ang, s));
-    }
-  });
-  function end(e) {
-    touches.delete(e.pointerId);
-    if (touches.size === 1 && drag && drag.kind === 'pinch') {
-      const p = [...touches.values()][0]; drag = { kind: 'move', p0: p, src: pts.map(q => q.slice()), c: center() }; return;
-    }
-    if (touches.size) return;
-    if (drag) { drag = null; cv.classList.remove('drag'); draw(); save(); }
-  }
-  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
-  cv.addEventListener('wheel', e => {
-    e.preventDefault(); if (performance.now() - lastWheel > 600) remember(); lastWheel = performance.now();
-    const m = f(), d = Math.sign(e.deltaY);
-    change(e.shiftKey ? turned(pts, center(), -d * .5 * m * Math.PI / 180, 1) : turned(pts, center(), 0, 1 - d * .01 * m), true);
-  }, { passive: false });
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => show(b.dataset.tab));
 
-  // Boutons de réglage fin : un appui = un pas, maintenu = ça continue.
+  // Étape par point.
+  function goTo(i) {
+    cur = Math.max(0, Math.min(TARGETS.length - 1, i));
+    const t = TARGETS[cur];
+    ptr = pairs[t.id] ? pairs[t.id].px.slice() : model()(...t.mm);
+    $('num').textContent = `${cur + 1} / ${TARGETS.length}`;
+    $('where').textContent = t.where; $('hint').textContent = t.hint;
+    drawMini(); dots(); sendPointer();
+  }
+  function dots() {
+    $('dots').innerHTML = '';
+    TARGETS.forEach((t, i) => {
+      const d = document.createElement('div');
+      d.className = 'dot' + (pairs[t.id] ? ' done' : '') + (skipped[t.id] ? ' skip' : '') + (i === cur ? ' cur' : '');
+      d.textContent = i + 1; d.title = t.where; d.onclick = () => goTo(i);
+      $('dots').appendChild(d);
+    });
+  }
+  function errText() {
+    const ids = Object.keys(pairs);
+    if (ids.length < 5) return `${ids.length} points relevés`;
+    const m = model(), e = ids.map(i => { const [x, y] = m(...pairs[i].mm); return Math.hypot(x - pairs[i].px[0], y - pairs[i].px[1]); });
+    return `${ids.length} points · écart moyen ${(e.reduce((a, b) => a + b, 0) / e.length).toFixed(1).replace('.', ',')} px · max ${Math.max(...e).toFixed(1).replace('.', ',')} px`;
+  }
+  $('ok').onclick = () => {
+    const t = TARGETS[cur]; pairs[t.id] = { mm: t.mm, px: ptr.slice() }; delete skipped[t.id];
+    next();
+  };
+  $('skip').onclick = () => { const t = TARGETS[cur]; delete pairs[t.id]; skipped[t.id] = 1; next(); };
+  function next() {
+    const n = Object.keys(pairs).length;
+    if (n >= 4) saveCalib(false);
+    const todo = TARGETS.findIndex((t, i) => i > cur && !pairs[t.id] && !skipped[t.id]);
+    if (todo >= 0) { goTo(todo); msg(errText()); return; }
+    if (n >= 4) show('check'); else { msg('4 points minimum', 'err'); goTo(TARGETS.findIndex(t => !pairs[t.id])); }
+  }
+
+  // Mini cible : le point à viser.
+  function drawMini() {
+    const g = $('mini').getContext('2d'), S = 192, c = S / 2, k = (S / 2 - 8) / DOUT;
+    g.clearRect(0, 0, S, S);
+    g.fillStyle = '#1E1F24'; g.beginPath(); g.arc(c, c, DOUT * k, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(242,238,233,.35)'; g.lineWidth = 1.5;
+    [6.35, 15.9, 99, 107, 162, 170].forEach(r => { g.beginPath(); g.arc(c, c, r * k, 0, Math.PI * 2); g.stroke(); });
+    for (let i = 0; i < 20; i++) { const a = (i * 18 + 9) * Math.PI / 180; g.beginPath(); g.moveTo(c + Math.sin(a) * 15.9 * k, c - Math.cos(a) * 15.9 * k); g.lineTo(c + Math.sin(a) * DOUT * k, c - Math.cos(a) * DOUT * k); g.stroke(); }
+    g.fillStyle = 'rgba(242,238,233,.6)'; g.font = '600 14px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('20', c, c - 135 * k);
+    TARGETS.forEach(t => { if (pairs[t.id]) { g.fillStyle = '#7BD88F'; g.beginPath(); g.arc(c + t.mm[0] * k, c - t.mm[1] * k, 4, 0, Math.PI * 2); g.fill(); } });
+    const t = TARGETS[cur], x = c + t.mm[0] * k, y = c - t.mm[1] * k;
+    g.strokeStyle = '#FFE14D'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#FFE14D'; g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.fill();
+  }
+
+  // Pavé tactile : déplacement relatif du pointeur (Précis : 1 px d'écran pour 4 px de doigt).
+  const pad = $('pad'); let last = null;
+  pad.addEventListener('pointerdown', e => { pad.setPointerCapture(e.pointerId); last = [e.clientX, e.clientY]; });
+  pad.addEventListener('pointermove', e => {
+    if (!last) return;
+    const g = fine ? .25 : 1.5;
+    ptr = [Math.max(0, Math.min(W, ptr[0] + (e.clientX - last[0]) * g)), Math.max(0, Math.min(H, ptr[1] + (e.clientY - last[1]) * g))];
+    last = [e.clientX, e.clientY]; sendPointer();
+  });
+  ['pointerup', 'pointercancel'].forEach(ev => pad.addEventListener(ev, () => { last = null; }));
   function repeat(btn, fn) {
     let t = null;
-    const stop = () => { clearTimeout(t); t = null; };
-    btn.addEventListener('pointerdown', e => { e.preventDefault(); remember(); fn(); t = setTimeout(function go() { fn(); t = setTimeout(go, 60); }, 400); });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, () => { if (t) { stop(); save(); } }));
-    btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remember(); fn(); save(); } });
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); fn(); t = setTimeout(function go() { fn(); t = setTimeout(go, 50); }, 350); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, () => clearTimeout(t)));
+    btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
   }
-  document.querySelectorAll('[data-mv]').forEach(b => { const [x, y] = b.dataset.mv.split(',').map(Number); repeat(b, () => change(moved(pts, x * f() * 2, y * f() * 2))); });
-  document.querySelectorAll('[data-rot]').forEach(b => repeat(b, () => change(turned(pts, center(), Number(b.dataset.rot) * f() * Math.PI / 180, 1))));
-  document.querySelectorAll('[data-sc]').forEach(b => repeat(b, () => change(turned(pts, center(), 0, 1 + (Number(b.dataset.sc) - 1) * f()))));
-
-  // Clavier (PC) : flèches = déplacer (Maj x10), [ ] = tourner, - + = taille, Ctrl+Z = annuler.
+  document.querySelectorAll('[data-mv]').forEach(b => { const [x, y] = b.dataset.mv.split(',').map(Number); repeat(b, () => { ptr = [ptr[0] + x, ptr[1] + y]; sendPointer(); }); });
   addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT') return;
-    const m = f() * (e.shiftKey ? 10 : 1), mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-    let n = null;
-    if (mv) n = moved(pts, mv[0] * m, mv[1] * m);
-    else if (e.key === '[' || e.key === ']') n = turned(pts, center(), (e.key === ']' ? 1 : -1) * .25 * m * Math.PI / 180, 1);
-    else if (e.key === '-' || e.key === '+' || e.key === '=') n = turned(pts, center(), 0, 1 + (e.key === '-' ? -1 : 1) * .005 * m);
-    else if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); return $('undo').click(); }
-    if (!n) return;
-    e.preventDefault(); remember(); change(n, true);
+    if (tab !== 'points' || e.target.tagName === 'INPUT') return;
+    const s = e.shiftKey ? 10 : 1, mv = { ArrowLeft: [-s, 0], ArrowRight: [s, 0], ArrowUp: [0, -s], ArrowDown: [0, s] }[e.key];
+    if (mv) { e.preventDefault(); ptr = [ptr[0] + mv[0], ptr[1] + mv[1]]; sendPointer(); }
+    if (e.key === 'Enter') { e.preventDefault(); $('ok').click(); }
   });
-
   $('fine').onclick = () => { fine = !fine; $('fine').setAttribute('aria-pressed', String(fine)); };
-  $('undo').onclick = () => { if (!undo.length) return; change(undo.pop(), true); $('undo').disabled = !undo.length; };
-  $('reset').onclick = () => { remember(); proj = { ...DEF_PROJ }; showProj(); change(defPts(), true); };
-  $('pattern').onchange = () => live();
-  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
-    $('pattern').checked = false; post(false);
-    fetch('/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: b.dataset.t }) });
-  });
-  function showProj() { $('prx').value = proj.x; $('pry').value = proj.y; $('prz').value = proj.z; }
-  ['prx', 'pry', 'prz'].forEach((id, i) => $(id).onchange = () => { const v = Number($(id).value); if (isFinite(v)) { proj['xyz'[i]] = v; live(); save(); } });
 
-  addEventListener('resize', size);
+  // Vérifier.
+  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+    saveCalib(false).then(() => post('/test', { kind: b.dataset.t }));
+  });
+  $('redo').onclick = () => { pairs = {}; skipped = {}; cur = 0; show('points'); };
+  $('reset').onclick = () => { pairs = {}; skipped = {}; base = defPts(); proj = { ...DEF_PROJ }; showProj(); saveCalib(true).then(() => msg('Valeurs par défaut', 'ok')); };
+  function showProj() { $('prx').value = proj.x; $('pry').value = proj.y; $('prz').value = proj.z; }
+  ['prx', 'pry', 'prz'].forEach((id, i) => $(id).onchange = () => { const v = Number($(id).value); if (isFinite(v)) { proj['xyz'[i]] = v; saveCalib(tab === 'check'); } });
+
+  // En quittant la page, le projecteur revient à l'image normale.
+  addEventListener('pagehide', () => navigator.sendBeacon && navigator.sendBeacon('/pointer', new Blob([JSON.stringify({ off: true })], { type: 'application/json' })));
+
   fetch('/calib.json').then(r => r.json()).then(d => {
     if (d && Array.isArray(d.screen)) [W, H] = d.screen;
-    pts = d && d.points ? d.points : defPts();
+    if (d && d.points) base = d.points;
     if (d && d.projector) proj = d.projector;
-  }).catch(() => { pts = defPts(); msg('Pi 5 injoignable', 'err'); }).finally(() => { showProj(); size(); live(); });
+    if (d && Array.isArray(d.pairs)) d.pairs.forEach(p => { if (TARGETS.some(t => t.id === p.id)) pairs[p.id] = { mm: p.mm, px: p.px }; });
+  }).catch(() => msg('Pi 5 injoignable', 'err')).finally(() => {
+    showProj();
+    const first = TARGETS.findIndex(t => !pairs[t.id]);
+    cur = first < 0 ? 0 : first;
+    show(Object.keys(pairs).length >= 4 ? 'check' : 'frame');
+  });
 })();
 </script>
 </body>

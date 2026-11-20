@@ -8,10 +8,12 @@
 @font-face{font-family:"Permanent Marker";src:local("Permanent Marker"),url(/fonts/PermanentMarker.woff2) format("woff2")}
 html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
 #c{position:absolute;left:0;top:0;transform-origin:0 0}
+#ptr{position:absolute;left:0;top:0;display:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<canvas id="ptr"></canvas>
 <script src="/fx.js"></script>
 <script>
 // Image du vidéoprojecteur : le canevas FX (en mm de cible) est posé sur l'écran par une homographie
@@ -64,7 +66,38 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
     fetch('/light', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ms: Math.round(left * 1000) + 300 }) }).catch(() => {});
   }
 
+  // Calibration guidée : un pointeur en pixels d'écran (sans homographie), seul sur fond noir.
+  const pc = document.getElementById('ptr'), pg = pc.getContext('2d');
+  function pointer(d) {
+    const on = d && !d.off && (d.grid || typeof d.x === 'number');
+    pc.style.display = on ? 'block' : 'none'; cv.style.visibility = on ? 'hidden' : 'visible';
+    if (!on) return;
+    const W = pc.width = innerWidth, H = pc.height = innerHeight;
+    pg.clearRect(0, 0, W, H);
+    if (d.grid) {
+      // Mire plein écran : bord, quadrillage de 40 px, axes, diagonales, cercle centré.
+      pg.lineWidth = 1;
+      for (let x = W / 2 % 40; x < W; x += 40) { pg.strokeStyle = Math.abs(x - W / 2) < 1 ? '#FFE14D' : 'rgba(255,255,255,.22)'; pg.beginPath(); pg.moveTo(Math.round(x) + .5, 0); pg.lineTo(Math.round(x) + .5, H); pg.stroke(); }
+      for (let y = H / 2 % 40; y < H; y += 40) { pg.strokeStyle = Math.abs(y - H / 2) < 1 ? '#FFE14D' : 'rgba(255,255,255,.22)'; pg.beginPath(); pg.moveTo(0, Math.round(y) + .5); pg.lineTo(W, Math.round(y) + .5); pg.stroke(); }
+      pg.strokeStyle = 'rgba(255,122,47,.6)'; pg.beginPath(); pg.moveTo(0, 0); pg.lineTo(W, H); pg.moveTo(W, 0); pg.lineTo(0, H); pg.stroke();
+      pg.strokeStyle = '#FF4D8D'; pg.lineWidth = 4; pg.strokeRect(2, 2, W - 4, H - 4);
+      pg.lineWidth = 2; pg.beginPath(); pg.arc(W / 2, H / 2, Math.min(W, H) * .27, 0, Math.PI * 2); pg.stroke();
+      pg.fillStyle = '#FFE14D'; pg.font = '600 16px system-ui'; pg.textAlign = 'left'; pg.textBaseline = 'top';
+      pg.fillText(`${W} x ${H}`, 12, 12);
+      return;
+    }
+    (d.done || []).forEach(([x, y]) => { pg.fillStyle = '#FF4D8D'; pg.beginPath(); pg.arc(x, y, 3, 0, Math.PI * 2); pg.fill(); });
+    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, gap = 7, len = 70;
+    pg.strokeStyle = '#FFE14D'; pg.lineWidth = 1;
+    pg.beginPath();
+    pg.moveTo(x - len, y); pg.lineTo(x - gap, y); pg.moveTo(x + gap, y); pg.lineTo(x + len, y);
+    pg.moveTo(x, y - len); pg.lineTo(x, y - gap); pg.moveTo(x, y + gap); pg.lineTo(x, y + len);
+    pg.stroke();
+    pg.strokeStyle = 'rgba(255,225,77,.5)'; pg.beginPath(); pg.arc(x, y, 18, 0, Math.PI * 2); pg.stroke();
+  }
+
   const es = new EventSource('/events');
+  es.addEventListener('pointer', e => pointer(JSON.parse(e.data)));
   es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); });
   es.addEventListener('state', e => { FX.setPlaying(JSON.parse(e.data).playing); });
   es.addEventListener('dart', e => {

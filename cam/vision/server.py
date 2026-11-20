@@ -42,6 +42,10 @@ PREVIEW_FPS = 12
 VIEW_EVERY = 30
 MOTION_TOPIC = "thibsdarts/cam/motion"
 CMD_TOPIC = "thibsdarts/cam/cmd"
+# Le vidéoprojecteur annonce ses animations : la détection attend que l'image redevienne fixe,
+# plus le temps que l'exposition des caméras se recale.
+LIGHT_TOPIC = "thibsdarts/projector/light"
+LIGHT_SETTLE_MS = int(os.environ.get("LIGHT_SETTLE_MS", "800"))
 # DARTOS_DRY_POWER=1 : on note la demande d'extinction sans éteindre (tests).
 DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
 # Une caméra en bas (6 h), les deux autres à un tiers du tour de chaque côté (10 h et 2 h).
@@ -212,6 +216,7 @@ class Registry:
         self.client = None
         self.playing = False
         self.test_until = 0.0
+        self.light_until = 0  # ms epoch : animation du projecteur en cours jusque-là
         self.events = []  # dernières fléchettes et retraits, pour la page /calib
         self.detector = detector.Detector(self.on_dart, self.on_takeout, log=lambda m: print(m, flush=True))
 
@@ -265,6 +270,9 @@ class Registry:
             if not was:
                 self.detector.reset()
                 was = True
+            if time.time() * 1000 < self.light_until + LIGHT_SETTLE_MS:
+                # Image projetée en mouvement : on ne regarde pas, le fond reste celui d'avant.
+                continue
             frames, cals = {}, {}
             for cam in self.ordered():
                 cal = self.calibs.get(cam.label)
@@ -628,6 +636,7 @@ def main():
         c.subscribe(CMD_TOPIC, qos=1)
         c.subscribe(STATE_TOPIC, qos=1)
         c.subscribe(TURN_TOPIC, qos=1)
+        c.subscribe(LIGHT_TOPIC, qos=0)
         registry.publish_status("online")
 
     def on_state(c, userdata, msg):
@@ -639,6 +648,14 @@ def main():
             print(f"hub : partie {'en cours' if on else 'arrêtée'}", flush=True)
             registry.playing = on
             registry.publish_status("online")
+
+    def on_light(c, userdata, msg):
+        try:
+            until = int(json.loads(msg.payload).get("until", 0))
+        except (ValueError, AttributeError, TypeError):
+            return
+        # Jamais plus de 10 s de pause d'un coup, même si le message est faux.
+        registry.light_until = min(until, int(time.time() * 1000) + 10000)
 
     def on_turn(c, userdata, msg):
         registry.detector.end_turn()
@@ -672,6 +689,7 @@ def main():
     client.message_callback_add(CMD_TOPIC, on_power)
     client.message_callback_add(STATE_TOPIC, on_state)
     client.message_callback_add(TURN_TOPIC, on_turn)
+    client.message_callback_add(LIGHT_TOPIC, on_light)
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()

@@ -15,6 +15,7 @@ QoS 1 partout. Coordonnées en mm, centre de la cible en (0, 0), x vers la droit
 | `thibsdarts/cam/status` | cam → hub | retenu, publié par le service caméras : `{"state": "online"/"offline", "mode": "sim"/"vision", "detecting": bool, "version": "...", "preview": "http://ip:8081", "cams": {"<id>": "Bas" ou null, ...}}`, "offline" aussi en dernière volonté MQTT |
 | `thibsdarts/hub/state` | hub → cam | retenu : `{"playing": bool, "ts": ms}` |
 | `thibsdarts/hub/turn` | hub → cam | joueur suivant (fin de tour) : `{"ts": ms}` |
+| `thibsdarts/projector/light` | cam → cam | `{"until": ms epoch}` : le vidéoprojecteur joue une animation, la détection attend la fin (plus `LIGHT_SETTLE_MS`, 800 ms) |
 | `thibsdarts/cam/cmd` | hub → cam | `{"action": "poweroff"/"reboot"/"update"/"factory-reset"}` (update : `thibsdarts-update --force`) |
 
 Le hub ignore une fléchette dont l'`id` a déjà été reçu.
@@ -64,6 +65,23 @@ voit bouger quelque chose (main passée devant pour la repérer). Le hub relaie 
 Dès qu'une caméra est calibrée, le statut passe en `"mode": "vision"` et le simulateur se tait.
 `GET /detect` donne l'état et les 20 derniers événements, `POST /detect {"test": true}` lance le test.
 Test sans caméra (cible et fléchettes de synthèse) : `python3 cam/vision/tests/test_detector.py`.
+
+## Vidéoprojecteur
+
+`projector/server.py` (service `thibsdarts-projector`, port 8082) sert la page projetée et la relie au MQTT.
+La page tourne en plein écran sur la sortie HDMI du Pi 5 : Chromium sous `cage` (service `thibsdarts-kiosk`,
+sur tty1). Installation une fois : `os/quick/install-projector.sh`, puis `os/quick/deploy-cam.sh` comme d'habitude.
+
+- **Calibration** : `http://<ip du Pi 5>:8082/calib` depuis l'iPhone ou le Mac. La mire s'affiche sur la cible :
+  poser chacune des 4 croix roses sur le fil extérieur du double (haut du 20, droite du 6, bas du 3, gauche du 11),
+  au pixel près, puis "Enregistrer" (`/data/thibsdarts/projector.json`). La position du projecteur (mm depuis le
+  centre de la cible) sert à laisser l'ombre de l'arceau et des caméras dans le noir.
+- **Image** : entre deux animations, l'image ne bouge pas (cible éclairée, pourtour, deux arcs). Les caméras la
+  prennent comme fond. Chaque fléchette (`thibsdarts/cam/dart`) lance son animation là où elle est tombée,
+  puis l'image redevient exactement la même.
+- **Pause des caméras** : pendant une animation, la page publie `thibsdarts/projector/light` et la détection ne
+  regarde pas. Une fléchette lancée pendant ce temps est vue juste après.
+- **Essais** sur `/calib` : Triple 20, Double 16, Bull, Miss, 180. Joués sur l'image seulement, rien ne part au hub.
 
 ## Appairage Wi-Fi avec le hub
 

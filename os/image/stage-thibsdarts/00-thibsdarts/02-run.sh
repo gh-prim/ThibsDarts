@@ -16,7 +16,8 @@ sed -i 's/ resize//' "${ROOTFS_DIR}/boot/firmware/cmdline.txt"
 case "${TD_ROLE}" in
 # Hub : l'ecran passe directement de la tete de Thibs a l'app, sans invite de connexion.
 hub) UNITS="thibsdarts-hub mosquitto"; MASK="getty@tty1" ;;
-cam) UNITS="thibsdarts-cam thibsdarts-vision thibsdarts-pair" ;;
+# Cam : le vidéoprojecteur prend tty1 (page plein écran sur le HDMI).
+cam) UNITS="thibsdarts-cam thibsdarts-vision thibsdarts-pair thibsdarts-projector thibsdarts-kiosk" ;;
 esac
 
 on_chroot <<- CHROOT

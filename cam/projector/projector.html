@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>ThibsDarts projecteur</title>
+<style>
+@font-face{font-family:"Permanent Marker";src:local("Permanent Marker"),url(/fonts/PermanentMarker.woff2) format("woff2")}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+#c{position:absolute;left:0;top:0;transform-origin:0 0}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="/fx.js"></script>
+<script>
+// Image du vidéoprojecteur : le canevas FX (en mm de cible) est posé sur l'écran par une homographie
+// calculée à partir de 4 points réglés depuis /calib. Les événements arrivent du serveur en SSE.
+(() => {
+  const cv = document.getElementById('c');
+  FX.init(cv, '/heads/');
+  if (document.fonts && document.fonts.load) document.fonts.load('40px "Permanent Marker"').catch(() => {});
+  let mode = 'show', H = null;
+
+  // Homographie qui envoie 4 points src sur 4 points dst (système 8 x 8).
+  function homography(src, dst) {
+    const A = [], b = [];
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = src[i], [u, v] = dst[i];
+      A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+      A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+    }
+    for (let c = 0; c < 8; c++) {
+      let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+      for (let r = 0; r < 8; r++) { if (r === c) continue; const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+    }
+    return b.map((v, i) => v / A[i][i]);
+  }
+  // Points d'écran par défaut : cible au centre, 514 px de diamètre (projecteur sur la baie).
+  function defaultPoints() {
+    const s = 514 / 451, cx = innerWidth / 2, cy = innerHeight / 2;
+    return FX.CAL_MM.map(([x, y]) => [cx + x * s, cy - y * s]);
+  }
+  function apply(points) {
+    const src = FX.CAL_MM.map(([x, y]) => [FX.CX + x * FX.K, FX.CY - y * FX.K]);
+    const h = homography(src, points);
+    cv.style.transform = `matrix3d(${h[0]},${h[3]},0,${h[6]},${h[1]},${h[4]},0,${h[7]},0,0,1,0,${h[2]},${h[5]},0,1)`;
+    H = h;
+  }
+  apply(defaultPoints());
+
+  // Pause des caméras pendant les animations : on prévient avant, et tant que ça bouge.
+  let lightUntil = 0;
+  function light(force) {
+    const left = FX.busyFor();
+    const until = performance.now() + left * 1000;
+    if (left <= 0 && !force) return;
+    if (!force && until < lightUntil - 200) return;
+    lightUntil = until;
+    fetch('/light', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ms: Math.round(left * 1000) + 300 }) }).catch(() => {});
+  }
+
+  const es = new EventSource('/events');
+  es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); });
+  es.addEventListener('state', e => { FX.setPlaying(JSON.parse(e.data).playing); });
+  es.addEventListener('dart', e => {
+    const d = JSON.parse(e.data), m = d.multiplier | 0, n = d.number | 0;
+    // MQTT : y vers le bas. Ici : y vers le haut. Sans position, on prend le centre du segment.
+    let x = d.x, y = d.y;
+    if (typeof x !== 'number' || typeof y !== 'number') {
+      const ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+      const a = ORDER.indexOf(n) * 18 * Math.PI / 180, r = n === 25 ? 0 : m === 3 ? 103 : m === 2 ? 166 : 135;
+      x = Math.sin(a) * r; y = Math.cos(a) * r;
+    } else y = -y;
+    FX.dart({ n, m, x, y });
+    light(true);
+  });
+  es.addEventListener('test', e => { const d = JSON.parse(e.data); if (d.kind === '180') { FX.big180(); light(true); } });
+
+  let last = performance.now(), lastPing = 0;
+  (function loop(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    FX.frame(dt, now, mode);
+    // Une animation peut en lancer d'autres (feux d'artifice) : on prolonge la pause si besoin.
+    if (now - lastPing > 500) { lastPing = now; if (FX.busyFor() > 0) light(false); }
+    requestAnimationFrame(loop);
+  })(performance.now());
+  window.__proj = { apply, homography };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Projecteur · calibration</title>
+<style>
+:root{--beton:#121214;--asphalte:#1E1F24;--line:rgba(255,255,255,.12);--txt:#F2EEE9;--mute:#9A978F;--sunset:#FF7A2F;--fluo:#FFE14D;--crep:#FF4D8D}
+*{box-sizing:border-box}
+body{margin:0;background:var(--beton);color:var(--txt);font:15px system-ui,sans-serif;padding:16px;max-width:520px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 4px}
+.mute{color:var(--mute);font-size:13px}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);margin:18px 0 8px}
+.pts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+button{all:unset;cursor:pointer;text-align:center;padding:12px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:15px}
+button[aria-pressed="true"]{border-color:var(--sunset);background:rgba(255,122,47,.15)}
+button:focus-visible{outline:2px solid var(--fluo);outline-offset:2px}
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.pad .c{grid-column:3}
+.row{display:flex;gap:8px;align-items:center}
+.row label{flex:1;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mute)}
+input[type=number]{width:100%;background:var(--asphalte);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px}
+.go{background:var(--sunset);color:#121214;font-weight:600;border-color:var(--sunset)}
+#xy{font-variant-numeric:tabular-nums}
+.tog{display:flex;gap:8px;align-items:center;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>Projecteur</h1>
+<div class="mute">Pose chaque croix rose sur le fil extérieur du double.</div>
+
+<label class="tog"><input type="checkbox" id="pattern" checked> Mire sur la cible</label>
+
+<div class="lbl">Point</div>
+<div class="pts" id="pts"></div>
+
+<div class="lbl">Déplacer <span id="xy"></span></div>
+<div class="pad">
+  <button data-d="0,-10">↑ 10</button><button data-d="0,-1">↑ 1</button><span></span><button data-d="0,1">↓ 1</button><button data-d="0,10">↓ 10</button>
+  <button data-d="-10,0">← 10</button><button data-d="-1,0">← 1</button><span></span><button data-d="1,0">→ 1</button><button data-d="10,0">→ 10</button>
+</div>
+
+<div class="lbl">Position du projecteur (mm, depuis le centre de la cible)</div>
+<div class="row">
+  <label>X <input type="number" id="prx" step="10"></label>
+  <label>Y <input type="number" id="pry" step="10"></label>
+  <label>Mur <input type="number" id="prz" step="10"></label>
+</div>
+<div class="mute" style="margin-top:6px">Sert à laisser l'arceau et les caméras dans le noir. X à droite, Y vers le haut.</div>
+
+<div class="lbl">Essai</div>
+<div class="pts">
+  <button data-t="T20">Triple 20</button><button data-t="D16">Double 16</button>
+  <button data-t="DB">Bull</button><button data-t="MISS">Miss</button>
+  <button data-t="180" style="grid-column:span 2">180</button>
+</div>
+
+<div class="lbl"></div>
+<div class="pts">
+  <button id="reset">Par défaut</button>
+  <button id="save" class="go">Enregistrer</button>
+</div>
+<div class="mute" id="msg" style="margin-top:10px"></div>
+
+<script>
+(() => {
+  const NAMES = ['Haut du 20', 'Droite du 6', 'Bas du 3', 'Gauche du 11'];
+  const W = 1280, H = 800, DOUT = 170;
+  const MM = [[0, DOUT], [DOUT, 0], [0, -DOUT], [-DOUT, 0]];
+  const def = () => { const s = 514 / 451; return MM.map(([x, y]) => [W / 2 + x * s, H / 2 - y * s]); };
+  const $ = id => document.getElementById(id);
+  let pts = def(), sel = 0, proj = { x: -700, y: -530, z: 1550 }, timer = null;
+
+  const box = $('pts');
+  NAMES.forEach((n, i) => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { sel = i; show(); }; box.appendChild(b); });
+  function show() {
+    [...box.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === sel)));
+    $('xy').textContent = `· ${Math.round(pts[sel][0])}, ${Math.round(pts[sel][1])} px`;
+    $('prx').value = proj.x; $('pry').value = proj.y; $('prz').value = proj.z;
+  }
+  function body(save) { return JSON.stringify({ points: pts, pattern: $('pattern').checked, projector: proj, save }); }
+  function push(save) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fetch('/calib.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(save) })
+      .then(r => r.ok ? (save ? $('msg').textContent = 'Enregistré.' : 0) : $('msg').textContent = 'Refusé par le Pi 5.')
+      .catch(() => $('msg').textContent = 'Pi 5 injoignable.'), save ? 0 : 60);
+  }
+  document.querySelectorAll('[data-d]').forEach(b => b.onclick = () => {
+    const [dx, dy] = b.dataset.d.split(',').map(Number); pts[sel] = [pts[sel][0] + dx, pts[sel][1] + dy]; $('msg').textContent = ''; show(); push(false);
+  });
+  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+    $('pattern').checked = false; push(false);
+    fetch('/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: b.dataset.t }) });
+  });
+  ['prx', 'pry', 'prz'].forEach((id, i) => $(id).onchange = () => { const v = Number($(id).value); if (isFinite(v)) { proj['xyz'[i]] = v; push(false); } });
+  $('pattern').onchange = () => push(false);
+  $('reset').onclick = () => { pts = def(); proj = { x: -700, y: -530, z: 1550 }; show(); push(false); $('msg').textContent = 'Valeurs par défaut, pas encore enregistrées.'; };
+  $('save').onclick = () => push(true);
+  fetch('/calib.json').then(r => r.json()).then(d => { if (d && d.points) pts = d.points; if (d && d.projector) proj = d.projector; show(); push(false); }).catch(() => { show(); });
+  show();
+})();
+</script>
+</body>
+</html>

@@ -40,6 +40,7 @@ struct ProjectorCalibView: View {
     @State private var seq = 0
     @State private var inFlight = 0
     @State private var dirty = false
+    @State private var confirmReset = false
 
     var body: some View {
         Stage {
@@ -203,13 +204,24 @@ struct ProjectorCalibView: View {
                     }
                 }
             }
+            Text("La calibration est enregistrée à chaque point validé.").font(.td(14)).foregroundStyle(Td.ink3)
             Spacer()
             HStack(spacing: Td.s2) {
                 TdButton(title: "Refaire les points", variant: .secondary, block: true) { Task { await send(["action": "redo"]) } }
-                TdButton(title: "Par défaut", variant: .tertiary, block: true) { Task { await send(["action": "reset"]) } }
+                TdButton(title: "Par défaut", variant: .tertiary, block: true) { confirmReset = true }
+            }
+            TdButton(title: "Terminer", icon: .check, block: true) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                leave()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .confirmationDialog("Effacer la calibration ?", isPresented: $confirmReset, titleVisibility: .visible) {
+            Button("Revenir au réglage par défaut", role: .destructive) { Task { await send(["action": "reset"]) } }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Tous les points validés seront perdus.")
+        }
     }
 
     private func fmt(_ v: Double) -> String { String(format: "%.1f", v).replacingOccurrences(of: ".", with: ",") }

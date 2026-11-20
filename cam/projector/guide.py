@@ -276,8 +276,10 @@ class Guide:
                 self._store(self.tab == "check")
                 self._goto(0)
             elif a == "leave":
+                # Fin de calibration : on enregistre et on quitte la mire pour revenir au jeu.
                 self.tab = "check"
                 self.hub.send("pointer", {"off": True}, keep=True)
+                self._store(False)
                 return self._state()
             self._pointer()
             st = self._state()

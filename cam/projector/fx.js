@@ -247,7 +247,7 @@
     // Mire de calibration : anneaux officiels, fils des secteurs, croix aux 4 points de réglage.
     g2.fillStyle = '#000'; g2.fillRect(0, 0, LCW, LCH);
     g2.strokeStyle = '#FFE14D'; g2.lineWidth = 2;
-    [RB.bull, RB.obull, RB.tIn, RB.tOut, RB.dIn, RB.dOut, RB.sur].forEach(r => { g2.beginPath(); g2.arc(CX, CY, r * K, 0, TAU); g2.stroke(); });
+    [RB.bull, RB.obull, RB.tIn, RB.tOut, RB.dIn, RB.dOut, RB.board, RB.sur].forEach(r => { g2.beginPath(); g2.arc(CX, CY, r * K, 0, TAU); g2.stroke(); });
     for (let i = 0; i < 20; i++) { const a = (i * 18 - 9) * Math.PI / 180, [x0, y0] = P2(Math.sin(a) * RB.obull, Math.cos(a) * RB.obull), [x1, y1] = P2(Math.sin(a) * RB.dOut, Math.cos(a) * RB.dOut); g2.beginPath(); g2.moveTo(x0, y0); g2.lineTo(x1, y1); g2.stroke(); }
     g2.strokeStyle = '#FF4D8D'; g2.lineWidth = 3;
     CAL_MM.forEach(([x, y]) => { const [X, Y] = P2(x, y); g2.beginPath(); g2.moveTo(X - 25, Y); g2.lineTo(X + 25, Y); g2.moveTo(X, Y - 25); g2.lineTo(X, Y + 25); g2.stroke(); });
@@ -297,6 +297,12 @@
   window.FX = {
     MMW, MMH, K, LCW, LCH, CX, CY, CAL_MM, init, frame, dart, busyFor,
     setPlaying(v) { playing = !!v; },
+    // Rayons mesurés en calibration (mm). Le fil extérieur du double reste la référence (170).
+    setRings(r) {
+      if (!r) return;
+      const D = { tIn: 99, tOut: 107, dIn: 162, board: 225.5, sur: 380 };
+      Object.keys(D).forEach(k => { RB[k] = typeof r[k] === 'number' && r[k] > 20 && r[k] < 600 ? r[k] : D[k]; });
+    },
     setProjector(p) { if (p && isFinite(p.x) && isFinite(p.y) && isFinite(p.z)) PROJ = p; },
     // Démonstration complète d'un 180 (fin de tour, pas de fléchette attendue juste après).
     big180() {

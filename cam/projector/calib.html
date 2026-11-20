@@ -38,7 +38,7 @@ section{display:none}section.on{display:block}
 input[type=number]{width:100%;background:var(--asphalte);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;-webkit-user-select:text;user-select:text}
 details{margin-top:18px;border-top:1px solid var(--line);padding-top:8px}
 summary{cursor:pointer;color:var(--mute);font-size:13px}
-#msg{margin-top:10px;font-variant-numeric:tabular-nums}
+#msg{margin-top:10px;font-variant-numeric:tabular-nums;white-space:pre-line}
 #msg.ok{color:var(--ok)}#msg.err{color:var(--crep)}
 </style>
 </head>
@@ -113,6 +113,22 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
     return { id: `${ORDER[i]}-${ORDER[(i + 1) % 20]}`, mm: [Math.sin(a) * DOUT, Math.cos(a) * DOUT],
       where: `Entre le ${ORDER[i]} et le ${ORDER[(i + 1) % 20]}`, hint: 'Fil extérieur du double, sur le fil qui sépare les deux' };
   }).concat([{ id: 'bull', mm: [0, 0], where: 'Centre du bull', hint: 'Milieu du 50' }]);
+  // Mesures de rayons (après la cible) : ne servent pas à l'homographie, on en déduit le rayon réel en mm.
+  const NOM = { dIn: 162, tOut: 107, tIn: 99, board: 225.5, sur: 380 };
+  const RING_TXT = {
+    dIn: ['Double, fil intérieur', 'Bord intérieur de la bande des doubles'],
+    tOut: ['Triple, fil extérieur', 'Bord extérieur de la bande des triples'],
+    tIn: ['Triple, fil intérieur', 'Bord intérieur de la bande des triples'],
+    board: ['Bord de la cible', 'Limite entre la cible noire et le surround gris'],
+    sur: ['Bord du surround', 'Bord extérieur du surround gris'],
+  };
+  const SECT = n => ORDER.indexOf(n) * 18;
+  [['dIn', [20, 3]], ['tOut', [6, 11]], ['tIn', [20, 3]], ['board', [20, 6, 3, 11]], ['sur', [20, 6, 3, 11]]].forEach(([ring, nums]) => nums.forEach(n => {
+    const a = SECT(n) * Math.PI / 180;
+    TARGETS.push({ id: `${ring}-${n}`, ring, mm: [Math.sin(a) * NOM[ring], Math.cos(a) * NOM[ring]],
+      where: `${RING_TXT[ring][0]}, face au ${n}`, hint: RING_TXT[ring][1] });
+  }));
+  const FIX = id => !TARGETS.find(t => t.id === id).ring;
 
   let W = 1280, H = 720, proj = { ...DEF_PROJ }, base = null, pairs = {}, skipped = {}, cur = 0, ptr = [W / 2, H / 2], fine = true;
 
@@ -137,9 +153,24 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
   }
   const defPts = () => { const s = 514 / 451; return CAL.map(([x, y]) => [W / 2 + x * s, H / 2 - y * s]); };
   function model() {
-    const ids = Object.keys(pairs);
+    const ids = Object.keys(pairs).filter(FIX);
     if (ids.length >= 4) return fit(ids.map(i => pairs[i].mm), ids.map(i => pairs[i].px));
     return fit(CAL, base || defPts());
+  }
+
+  // Rayons réels (mm) mesurés : homographie inverse, moyenne par anneau.
+  function rings() {
+    const ids = Object.keys(pairs).filter(FIX);
+    if (ids.length < 4) return {};
+    const inv = fit(ids.map(i => pairs[i].px.map(v => v / 4)), ids.map(i => pairs[i].mm));
+    const acc = {};
+    Object.keys(pairs).filter(i => !FIX(i)).forEach(i => {
+      const t = TARGETS.find(x => x.id === i), [x, y] = inv(...pairs[i].px.map(v => v / 4));
+      (acc[t.ring] = acc[t.ring] || []).push(Math.hypot(x, y));
+    });
+    const out = {};
+    Object.entries(acc).forEach(([k, v]) => { out[k] = Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10; });
+    return out;
   }
 
   // Réseau.
@@ -148,14 +179,15 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
   let ptrTimer = null, ptrLast = 0;
   function sendPointer() {
     const now = performance.now(); clearTimeout(ptrTimer);
+    if (tab !== 'points') return;
     if (now - ptrLast < 30) { ptrTimer = setTimeout(sendPointer, 30); return; }
     ptrLast = now;
-    post('/pointer', { x: ptr[0], y: ptr[1], done: Object.values(pairs).map(p => p.px) }).catch(() => msg('Pi 5 injoignable', 'err'));
+    post('/pointer', { x: ptr[0], y: ptr[1], done: Object.entries(pairs).filter(([id]) => id !== TARGETS[cur].id).map(([, p]) => p.px) }).catch(() => msg('Pi 5 injoignable', 'err'));
   }
   function saveCalib(pattern) {
     const m = model(), points = CAL.map(([x, y]) => m(x, y));
     const list = Object.entries(pairs).map(([id, p]) => ({ id, mm: p.mm, px: p.px }));
-    return post('/calib.json', { points, pattern, projector: proj, pairs: list, save: true })
+    return post('/calib.json', { points, pattern, projector: proj, pairs: list, rings: rings(), save: true })
       .then(r => { if (!r.ok) throw 0; base = points; })
       .catch(() => msg('Pi 5 injoignable', 'err'));
   }
@@ -192,18 +224,21 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
     });
   }
   function errText() {
-    const ids = Object.keys(pairs);
-    if (ids.length < 5) return `${ids.length} points relevés`;
+    const ids = Object.keys(pairs).filter(FIX), r = rings();
+    const rt = Object.entries(r).map(([k, v]) => `${RING_TXT[k][0]} ${String(v).replace('.', ',')} mm`).join(' · ');
+    if (ids.length < 5) return `${ids.length} points relevés` + (rt ? ' · ' + rt : '');
     const m = model(), e = ids.map(i => { const [x, y] = m(...pairs[i].mm); return Math.hypot(x - pairs[i].px[0], y - pairs[i].px[1]); });
-    return `${ids.length} points · écart moyen ${(e.reduce((a, b) => a + b, 0) / e.length).toFixed(1).replace('.', ',')} px · max ${Math.max(...e).toFixed(1).replace('.', ',')} px`;
+    return `${ids.length} points · écart moyen ${(e.reduce((a, b) => a + b, 0) / e.length).toFixed(1).replace('.', ',')} px · max ${Math.max(...e).toFixed(1).replace('.', ',')} px` + (rt ? '\n' + rt : '');
   }
   $('ok').onclick = () => {
-    const t = TARGETS[cur]; pairs[t.id] = { mm: t.mm, px: ptr.slice() }; delete skipped[t.id];
+    const t = TARGETS[cur];
+    if (t.ring && Object.keys(pairs).filter(FIX).length < 4) { msg('4 points de la cible avant les anneaux', 'err'); return; }
+    pairs[t.id] = { mm: t.mm, px: ptr.slice() }; delete skipped[t.id];
     next();
   };
   $('skip').onclick = () => { const t = TARGETS[cur]; delete pairs[t.id]; skipped[t.id] = 1; next(); };
   function next() {
-    const n = Object.keys(pairs).length;
+    const n = Object.keys(pairs).filter(FIX).length;
     if (n >= 4) saveCalib(false);
     const todo = TARGETS.findIndex((t, i) => i > cur && !pairs[t.id] && !skipped[t.id]);
     if (todo >= 0) { goTo(todo); msg(errText()); return; }
@@ -212,14 +247,15 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
 
   // Mini cible : le point à viser.
   function drawMini() {
-    const g = $('mini').getContext('2d'), S = 192, c = S / 2, k = (S / 2 - 8) / DOUT;
+    const t0 = TARGETS[cur], R = Math.max(DOUT, Math.hypot(...t0.mm)), g = $('mini').getContext('2d'), S = 192, c = S / 2, k = (S / 2 - 8) / R;
     g.clearRect(0, 0, S, S);
     g.fillStyle = '#1E1F24'; g.beginPath(); g.arc(c, c, DOUT * k, 0, Math.PI * 2); g.fill();
     g.strokeStyle = 'rgba(242,238,233,.35)'; g.lineWidth = 1.5;
+    if (R > DOUT) { g.strokeStyle = 'rgba(154,151,143,.5)'; [225.5, 380].filter(r => r <= R + 1).forEach(r => { g.beginPath(); g.arc(c, c, r * k, 0, Math.PI * 2); g.stroke(); }); g.strokeStyle = 'rgba(242,238,233,.35)'; }
     [6.35, 15.9, 99, 107, 162, 170].forEach(r => { g.beginPath(); g.arc(c, c, r * k, 0, Math.PI * 2); g.stroke(); });
     for (let i = 0; i < 20; i++) { const a = (i * 18 + 9) * Math.PI / 180; g.beginPath(); g.moveTo(c + Math.sin(a) * 15.9 * k, c - Math.cos(a) * 15.9 * k); g.lineTo(c + Math.sin(a) * DOUT * k, c - Math.cos(a) * DOUT * k); g.stroke(); }
     g.fillStyle = 'rgba(242,238,233,.6)'; g.font = '600 14px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('20', c, c - 135 * k);
+    if (R <= DOUT) g.fillText('20', c, c - 135 * k);
     TARGETS.forEach(t => { if (pairs[t.id]) { g.fillStyle = '#7BD88F'; g.beginPath(); g.arc(c + t.mm[0] * k, c - t.mm[1] * k, 4, 0, Math.PI * 2); g.fill(); } });
     const t = TARGETS[cur], x = c + t.mm[0] * k, y = c - t.mm[1] * k;
     g.strokeStyle = '#FFE14D'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.stroke();

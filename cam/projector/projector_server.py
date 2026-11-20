@@ -152,6 +152,12 @@ class Handler(BaseHTTPRequestHandler):
                 # Correspondances relevées en calibration guidée (point de la cible en mm, pixel visé).
                 data["pairs"] = [{"id": str(q.get("id", "")), "mm": [float(v) for v in q["mm"]],
                                   "px": [float(v) for v in q["px"]]} for q in pairs[:64]]
+            rings = body.get("rings")
+            if isinstance(rings, dict):
+                # Rayons réels mesurés (mm) : fil intérieur du double, fils du triple, bord de cible, surround.
+                ok = {k: float(v) for k, v in rings.items()
+                      if k in ("dIn", "tOut", "tIn", "board", "sur") and isinstance(v, (int, float)) and 20 < v < 600}
+                data["rings"] = ok
             pr = body.get("projector")
             if isinstance(pr, dict) and all(isinstance(pr.get(k), (int, float)) for k in "xyz"):
                 data["projector"] = {k: float(pr[k]) for k in "xyz"}

@@ -95,7 +95,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
 
   const es = new EventSource('/events');
   es.addEventListener('pointer', e => pointer(JSON.parse(e.data)));
-  es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); });
+  es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); FX.setRings(d.rings); });
   es.addEventListener('state', e => { FX.setPlaying(JSON.parse(e.data).playing); });
   es.addEventListener('dart', e => {
     const d = JSON.parse(e.data), m = d.multiplier | 0, n = d.number | 0;

@@ -9,7 +9,8 @@
   const C = { fluo: '#FFE14D', sunset: '#FF7A2F', crep: '#FF4D8D', ciel: '#4FA3FF' };
   const HAPPY = ['p01', 'p04', 'p05', 'p08', 'p11'];
   // Zones libres autour de la cible (projecteur sur la baie, à gauche) : score, têtes, tags.
-  const LAY = { score: { x: -470, y: 180, w: 150, h: 120 }, left: { x: -470, y: -170, w: 150, h: 150 }, tag: { x: 300, y: 0, w: 150, h: 150 } };
+  // Tout reste sur le surround (anneau gris entre le bord de la cible et son bord extérieur) : rien sur le mur.
+  const LAY = { score: { x: -255, y: 150, w: 110, h: 100 }, left: { x: -255, y: -150, w: 110, h: 110 }, tag: { x: 300, y: 0, w: 120, h: 110 } };
   const TAU = Math.PI * 2;
   const rnd = (a, b) => a + Math.random() * (b - a);
   const ease = t => 1 - Math.pow(1 - t, 3);
@@ -283,7 +284,12 @@
     });
     g2.restore();
     g2.setTransform(1, 0, 0, 1, 0, 0);
+    clipSurround();
     drawMask();
+  }
+  // Noir hors du bord extérieur du surround : le mur n'est jamais éclairé (image penchée sinon visible).
+  function clipSurround() {
+    g2.fillStyle = '#000'; g2.beginPath(); g2.rect(0, 0, LCW, LCH); g2.arc(CX, CY, RB.sur * K, 0, TAU); g2.fill('evenodd');
   }
 
   // Temps restant avant que l'image redevienne fixe (s), pour mettre les caméras en pause.

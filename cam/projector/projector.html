@@ -87,13 +87,10 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
       return;
     }
     (d.done || []).forEach(([x, y]) => { pg.fillStyle = '#FF4D8D'; pg.beginPath(); pg.arc(x, y, 3, 0, Math.PI * 2); pg.fill(); });
-    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, gap = 7, len = 70;
+    // Vraie croix : deux traits continus d'1 px qui se coupent pile sur le point visé.
+    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, len = 120;
     pg.strokeStyle = '#FFE14D'; pg.lineWidth = 1;
-    pg.beginPath();
-    pg.moveTo(x - len, y); pg.lineTo(x - gap, y); pg.moveTo(x + gap, y); pg.lineTo(x + len, y);
-    pg.moveTo(x, y - len); pg.lineTo(x, y - gap); pg.moveTo(x, y + gap); pg.lineTo(x, y + len);
-    pg.stroke();
-    pg.strokeStyle = 'rgba(255,225,77,.5)'; pg.beginPath(); pg.arc(x, y, 18, 0, Math.PI * 2); pg.stroke();
+    pg.beginPath(); pg.moveTo(x - len, y); pg.lineTo(x + len, y); pg.moveTo(x, y - len); pg.lineTo(x, y + len); pg.stroke();
   }
 
   const es = new EventSource('/events');

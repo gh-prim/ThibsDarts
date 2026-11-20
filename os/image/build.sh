@@ -71,7 +71,10 @@ CONF
 cd "$WORK/pi-gen"
 if [ $USE_DOCKER = 1 ]; then
   docker rm -v "pigen_$ROLE" >/dev/null 2>&1 || true
-  CONTAINER_NAME="pigen_$ROLE" ./build-docker.sh -c "$WORK/config"
+  # Pas de -c : build-docker.sh le reecrit avec `sed \s`, que le sed du Mac ne connait pas, et le
+  # conteneur recevait alors le chemin du Mac. Un fichier config a la racine est copie dans l'image.
+  cp "$WORK/config" config
+  CONTAINER_NAME="pigen_$ROLE" ./build-docker.sh
   cp deploy/*.img.xz "$OUT/"
 else
   sudo ./build.sh -c "$WORK/config"

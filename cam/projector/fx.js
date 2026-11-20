@@ -18,7 +18,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const P2 = (x, y) => [CX + x * K, CY - y * K];
 
-  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false;
+  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1;
   // Position du projecteur par rapport au centre de la cible (mm, z = distance au mur) : sert à placer
   // l'ombre de l'arceau et des caméras, qu'on laisse noires pour ne pas éclairer les objectifs.
   let PROJ = { x: -700, y: -530, z: 1550 };
@@ -266,6 +266,10 @@
     g2.fillStyle = '#000'; g2.fillRect(0, 0, LCW, LCH);
     live.forEach(e => { if (e.base) e.draw(e.t / e.dur, e.t); });
     if (shake > 0) { shake = Math.max(0, shake - dt * 1.1); g2.translate(rnd(-1, 1) * 18 * shake, rnd(-1, 1) * 18 * shake); }
+    // Pendant une animation, l'éclairage blanc de la cible baisse fortement : sinon il noie les couleurs.
+    const busy = live.some(e => !e.base) || parts.length > 0;
+    fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
+    boardLight = Math.min(boardLight, fxDim);
     if (boardLight > 0.01) steady(boardLight);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
@@ -295,6 +299,7 @@
   // Temps restant avant que l'image redevienne fixe (s), pour mettre les caméras en pause.
   function busyFor() {
     let t = shake > 0 ? shake / 1.1 : 0;
+    if (fxDim < .98) t = Math.max(t, .7);  // l'éclairage de la cible remonte encore
     effects.forEach(e => { t = Math.max(t, e.dur - e.t); });
     parts.forEach(p => { t = Math.max(t, p.max - p.life); });
     return t;

@@ -8,7 +8,9 @@ hub)
 		fontconfig libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 gstreamer1.0-plugins-base
 	;;
 cam)
-	apt-get install -y --no-install-recommends python3-opencv python3-numpy python3-paho-mqtt v4l-utils
+	apt-get install -y --no-install-recommends python3-opencv python3-numpy python3-paho-mqtt v4l-utils \
+		cage chromium
+	usermod -aG video,render,input thibs || true
 	;;
 *)
 	echo "TD_ROLE inconnu : ${TD_ROLE}" >&2

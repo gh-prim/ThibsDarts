@@ -9,3 +9,5 @@ ssh "$HOST" 'sudo mkdir -p /opt/thibsdarts-cam && sudo chown thibs:thibs /opt/th
 rsync -az --delete --exclude __pycache__ --exclude captures ../../cam/ "$HOST":/opt/thibsdarts-cam/
 rsync -az thibsdarts-cam.service thibsdarts-vision.service thibsdarts-pair.service "$HOST":/tmp/
 ssh "$HOST" "for u in $UNITS; do sudo mv /tmp/\$u.service /etc/systemd/system/; done && sudo systemctl daemon-reload && sudo systemctl enable $UNITS && sudo systemctl restart $UNITS && systemctl is-active $UNITS"
+# Vidéoprojecteur : la page plein écran est rechargée si elle est installée (os/quick/install-projector.sh).
+ssh "$HOST" 'if systemctl is-enabled --quiet thibsdarts-kiosk 2>/dev/null; then sudo systemctl restart thibsdarts-kiosk; fi'

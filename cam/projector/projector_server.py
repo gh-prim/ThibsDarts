@@ -47,6 +47,7 @@ class Hub:
         self.clients = []
         self.last = {}
         self.client = None
+        self.screen = [1280, 720]  # taille de la page projetée, envoyée par elle au chargement
 
     def send(self, kind, data, keep=False):
         msg = f"event: {kind}\ndata: {json.dumps(data)}\n\n".encode()
@@ -128,7 +129,7 @@ class Handler(BaseHTTPRequestHandler):
                     with open(p, "rb") as f:
                         return self._send(200, f.read(), ctype)
         if path == "/calib.json":
-            return self._send(200, load_calib())
+            return self._send(200, dict(load_calib() or {}, screen=hub.screen))
         if path == "/events":
             return self._events()
         self._send(404, {"error": "inconnu"})
@@ -159,6 +160,11 @@ class Handler(BaseHTTPRequestHandler):
                 n, m = SEGMENTS.get(kind, (20, 3))
                 hub.send("dart", {"number": n, "multiplier": m, "test": True})
             return self._send(200, {"ok": True})
+        if path == "/screen":
+            w, h = body.get("w"), body.get("h")
+            if isinstance(w, (int, float)) and isinstance(h, (int, float)) and 100 < w < 10000 and 100 < h < 10000:
+                hub.screen = [int(w), int(h)]
+            return self._send(200, {"screen": hub.screen})
         if path == "/light":
             ms = max(0, min(int(body.get("ms", 0)), MAX_BUSY_MS))
             until = int(time.time() * 1000) + ms

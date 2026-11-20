@@ -1,103 +1,283 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" translate="no">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Projecteur · calibration</title>
 <style>
 :root{--beton:#121214;--asphalte:#1E1F24;--line:rgba(255,255,255,.12);--txt:#F2EEE9;--mute:#9A978F;--sunset:#FF7A2F;--fluo:#FFE14D;--crep:#FF4D8D}
 *{box-sizing:border-box}
-body{margin:0;background:var(--beton);color:var(--txt);font:15px system-ui,sans-serif;padding:16px;max-width:520px;margin-inline:auto}
-h1{font-size:20px;margin:0 0 4px}
+body{margin:0;background:var(--beton);color:var(--txt);font:15px system-ui,sans-serif;padding:16px;max-width:760px;margin-inline:auto}
+h1{font-size:20px;margin:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .mute{color:var(--mute);font-size:13px}
-.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);margin:18px 0 8px}
-.pts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-button{all:unset;cursor:pointer;text-align:center;padding:12px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:15px}
-button[aria-pressed="true"]{border-color:var(--sunset);background:rgba(255,122,47,.15)}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);margin:16px 0 8px}
+#stage{position:relative;width:100%;border:1px solid var(--line);border-radius:12px;background:#000;touch-action:none;overflow:hidden}
+#cv{display:block;width:100%;touch-action:none;cursor:grab}
+#cv.drag{cursor:grabbing}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:12px;color:var(--mute)}
+.legend b{color:var(--txt);font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+button{all:unset;cursor:pointer;text-align:center;padding:12px 6px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:15px;user-select:none;-webkit-user-select:none}
+button:active{background:rgba(255,122,47,.18)}
 button:focus-visible{outline:2px solid var(--fluo);outline-offset:2px}
-.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.pad .c{grid-column:3}
+button[aria-pressed="true"]{border-color:var(--sunset);background:rgba(255,122,47,.15)}
+button:disabled{opacity:.35;cursor:default}
+.tog{display:flex;gap:8px;align-items:center;font-size:14px}
 .row{display:flex;gap:8px;align-items:center}
 .row label{flex:1;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mute)}
 input[type=number]{width:100%;background:var(--asphalte);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px}
-.go{background:var(--sunset);color:#121214;font-weight:600;border-color:var(--sunset)}
-#xy{font-variant-numeric:tabular-nums}
-.tog{display:flex;gap:8px;align-items:center;margin-top:8px}
+details{margin-top:16px;border-top:1px solid var(--line);padding-top:8px}
+summary{cursor:pointer;color:var(--mute);font-size:13px}
+#state{font-variant-numeric:tabular-nums}
+#msg.ok{color:#7BD88F}#msg.err{color:var(--crep)}
 </style>
 </head>
 <body>
-<h1>Projecteur</h1>
-<div class="mute">Pose chaque croix rose sur le fil extérieur du double.</div>
-
-<label class="tog"><input type="checkbox" id="pattern" checked> Mire sur la cible</label>
-
-<div class="lbl">Point</div>
-<div class="pts" id="pts"></div>
-
-<div class="lbl">Déplacer <span id="xy"></span></div>
-<div class="pad">
-  <button data-d="0,-10">↑ 10</button><button data-d="0,-1">↑ 1</button><span></span><button data-d="0,1">↓ 1</button><button data-d="0,10">↓ 10</button>
-  <button data-d="-10,0">← 10</button><button data-d="-1,0">← 1</button><span></span><button data-d="1,0">→ 1</button><button data-d="10,0">→ 10</button>
+<div class="top">
+  <h1>Projecteur</h1>
+  <label class="tog"><input type="checkbox" id="pattern" checked> Mire</label>
 </div>
 
-<div class="lbl">Position du projecteur (mm, depuis le centre de la cible)</div>
-<div class="row">
-  <label>X <input type="number" id="prx" step="10"></label>
-  <label>Y <input type="number" id="pry" step="10"></label>
-  <label>Mur <input type="number" id="prz" step="10"></label>
-</div>
-<div class="mute" style="margin-top:6px">Sert à laisser l'arceau et les caméras dans le noir. X à droite, Y vers le haut.</div>
-
-<div class="lbl">Essai</div>
-<div class="pts">
-  <button data-t="T20">Triple 20</button><button data-t="D16">Double 16</button>
-  <button data-t="DB">Bull</button><button data-t="MISS">Miss</button>
-  <button data-t="180" style="grid-column:span 2">180</button>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div class="legend">
+  <span><b>Glisser la cible</b> déplacer</span>
+  <span><b>Poignée orange</b> tourner et agrandir</span>
+  <span><b>Points 20, 6, 3, 11</b> déformer</span>
+  <span><b>2 doigts</b> tout à la fois</span>
 </div>
 
-<div class="lbl"></div>
-<div class="pts">
+<div class="lbl">Réglage fin <span id="state" class="mute"></span></div>
+<div class="grid">
+  <button data-mv="-1,0" aria-label="Gauche">←</button>
+  <button data-mv="0,-1" aria-label="Haut">↑</button>
+  <button data-mv="0,1" aria-label="Bas">↓</button>
+  <button data-mv="1,0" aria-label="Droite">→</button>
+  <button data-rot="-0.25">↺ 0,25°</button>
+  <button data-rot="0.25">↻ 0,25°</button>
+  <button data-sc="0.995">− taille</button>
+  <button data-sc="1.005">+ taille</button>
+</div>
+<div class="grid3" style="margin-top:6px">
+  <button id="fine" aria-pressed="false">Précis</button>
+  <button id="undo" disabled>Annuler</button>
   <button id="reset">Par défaut</button>
-  <button id="save" class="go">Enregistrer</button>
 </div>
 <div class="mute" id="msg" style="margin-top:10px"></div>
 
+<div class="lbl">Essai</div>
+<div class="grid">
+  <button data-t="T20">T20</button><button data-t="D16">D16</button>
+  <button data-t="DB">Bull</button><button data-t="180">180</button>
+</div>
+
+<details>
+  <summary>Position du projecteur (mm depuis le centre de la cible)</summary>
+  <div class="row" style="margin-top:8px">
+    <label>X <input type="number" id="prx" step="10"></label>
+    <label>Y <input type="number" id="pry" step="10"></label>
+    <label>Mur <input type="number" id="prz" step="10"></label>
+  </div>
+  <div class="mute" style="margin-top:6px">X vers la droite, Y vers le haut. Sert au masque de l'arceau et des caméras.</div>
+</details>
+
 <script>
 (() => {
-  const NAMES = ['Haut du 20', 'Droite du 6', 'Bas du 3', 'Gauche du 11'];
-  const W = 1280, H = 800, DOUT = 170;
-  const MM = [[0, DOUT], [DOUT, 0], [0, -DOUT], [-DOUT, 0]];
-  const def = () => { const s = 514 / 451; return MM.map(([x, y]) => [W / 2 + x * s, H / 2 - y * s]); };
   const $ = id => document.getElementById(id);
-  let pts = def(), sel = 0, proj = { x: -700, y: -530, z: 1550 }, timer = null;
+  // Fil extérieur du double (mm) : haut du 20, droite du 6, bas du 3, gauche du 11.
+  const DOUT = 170, CAL = [[0, DOUT], [DOUT, 0], [0, -DOUT], [-DOUT, 0]], NAMES = ['20', '6', '3', '11'];
+  const RINGS = [6.35, 15.9, 99, 107, 162, 170];
+  const DEF_PROJ = { x: -700, y: -530, z: 1550 };
+  let W = 1280, H = 720, pts = null, proj = { ...DEF_PROJ }, fine = false;
+  const undo = [];
 
-  const box = $('pts');
-  NAMES.forEach((n, i) => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { sel = i; show(); }; box.appendChild(b); });
-  function show() {
-    [...box.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === sel)));
-    $('xy').textContent = `· ${Math.round(pts[sel][0])}, ${Math.round(pts[sel][1])} px`;
-    $('prx').value = proj.x; $('pry').value = proj.y; $('prz').value = proj.z;
+  const defPts = () => { const s = 514 / 451; return CAL.map(([x, y]) => [W / 2 + x * s, H / 2 - y * s]); };
+
+  // Homographie mm (y vers le haut) -> pixels de l'image projetée.
+  function homography(src, dst) {
+    const A = [], b = [];
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = src[i], [u, v] = dst[i];
+      A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+      A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+    }
+    for (let c = 0; c < 8; c++) {
+      let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+      for (let r = 0; r < 8; r++) { if (r === c) continue; const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+    }
+    return b.map((v, i) => v / A[i][i]);
   }
-  function body(save) { return JSON.stringify({ points: pts, pattern: $('pattern').checked, projector: proj, save }); }
-  function push(save) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fetch('/calib.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(save) })
-      .then(r => r.ok ? (save ? $('msg').textContent = 'Enregistré.' : 0) : $('msg').textContent = 'Refusé par le Pi 5.')
-      .catch(() => $('msg').textContent = 'Pi 5 injoignable.'), save ? 0 : 60);
+  const mapH = (h, x, y) => { const w = h[6] * x + h[7] * y + 1; return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w]; };
+  const center = () => mapH(homography(CAL, pts), 0, 0);
+
+  // Transformations de toute la cible (sur une copie des points).
+  const moved = (src, dx, dy) => src.map(([x, y]) => [x + dx, y + dy]);
+  function turned(src, c, ang, s) {
+    const co = Math.cos(ang) * s, si = Math.sin(ang) * s;
+    return src.map(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return [c[0] + dx * co - dy * si, c[1] + dx * si + dy * co]; });
   }
-  document.querySelectorAll('[data-d]').forEach(b => b.onclick = () => {
-    const [dx, dy] = b.dataset.d.split(',').map(Number); pts[sel] = [pts[sel][0] + dx, pts[sel][1] + dy]; $('msg').textContent = ''; show(); push(false);
+
+  // Dessin : cadre de l'image projetée, cible déformée, poignées.
+  const cv = $('cv'), g = cv.getContext('2d');
+  let dpr = 1, cw = 0, ch = 0, k = 1; // k : pixels projetés par pixel de l'aperçu
+  function size() {
+    dpr = devicePixelRatio || 1; cw = $('stage').clientWidth; ch = Math.round(cw * H / W); k = W / cw;
+    cv.width = cw * dpr; cv.height = ch * dpr; cv.style.height = ch + 'px'; draw();
+  }
+  const toC = ([x, y]) => [x / k, y / k];
+  function rotHandle() {
+    const h = homography(CAL, pts), c = mapH(h, 0, 0), t = mapH(h, 0, DOUT * 1.32);
+    return toC(t).concat(toC(c));
+  }
+  function draw() {
+    if (!pts) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
+    g.strokeStyle = 'rgba(255,255,255,.25)'; g.setLineDash([4, 4]); g.strokeRect(.5, .5, cw - 1, ch - 1); g.setLineDash([]);
+    const h = homography(CAL, pts), P = (x, y) => toC(mapH(h, x, y));
+    g.fillStyle = 'rgba(255,225,77,.07)'; g.beginPath();
+    for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2, [X, Y] = P(Math.sin(a) * DOUT, Math.cos(a) * DOUT); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
+    g.fill();
+    g.strokeStyle = '#FFE14D'; g.lineWidth = 1.2;
+    RINGS.forEach(r => { g.beginPath(); for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2, [X, Y] = P(Math.sin(a) * r, Math.cos(a) * r); i ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); });
+    for (let i = 0; i < 20; i++) { const a = (i * 18 - 9) * Math.PI / 180, [x0, y0] = P(Math.sin(a) * 15.9, Math.cos(a) * 15.9), [x1, y1] = P(Math.sin(a) * DOUT, Math.cos(a) * DOUT); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+    // Poignée de rotation, dans l'axe du 20.
+    const [rx, ry, cx, cy] = rotHandle();
+    g.strokeStyle = 'rgba(255,122,47,.7)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(rx, ry); g.stroke();
+    g.fillStyle = '#FF7A2F'; g.beginPath(); g.arc(rx, ry, 11, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#121214'; g.lineWidth = 2; g.beginPath(); g.arc(rx, ry, 5, -.3, Math.PI * 1.5); g.stroke();
+    // Points de réglage.
+    g.font = '600 11px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    pts.forEach((p, i) => {
+      const [X, Y] = toC(p), on = drag && drag.kind === 'pt' && drag.i === i;
+      g.fillStyle = on ? '#FFE14D' : '#FF4D8D'; g.beginPath(); g.arc(X, Y, 10, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#121214'; g.fillText(NAMES[i], X, Y + .5);
+    });
+    const c = center(), ang = Math.atan2(pts[0][0] - c[0], c[1] - pts[0][1]) * 180 / Math.PI;
+    const diam = Math.hypot(pts[1][0] - pts[3][0], pts[1][1] - pts[3][1]);
+    $('state').textContent = `· centre ${Math.round(c[0])}, ${Math.round(c[1])} · ${ang.toFixed(1).replace('.', ',')}° · ${Math.round(diam)} px`;
+  }
+
+  // Envoi au Pi : en direct pendant le geste (au plus toutes les 50 ms), enregistré au relâcher.
+  let lastSend = 0, sendTimer = null, saveTimer = null;
+  const body = save => JSON.stringify({ points: pts, pattern: $('pattern').checked, projector: proj, save });
+  function post(save) {
+    return fetch('/calib.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(save) })
+      .then(r => { if (!r.ok) throw 0; if (save) msg('Enregistré', 'ok'); })
+      .catch(() => msg('Pi 5 injoignable', 'err'));
+  }
+  function live() {
+    const now = performance.now(); clearTimeout(sendTimer);
+    if (now - lastSend > 50) { lastSend = now; post(false); } else sendTimer = setTimeout(live, 50 - (now - lastSend));
+  }
+  function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => post(true), 400); }
+  function msg(t, cls) { $('msg').textContent = t; $('msg').className = cls || 'mute'; }
+  function change(next, final) { pts = next; draw(); live(); if (final) save(); }
+  function remember() { undo.push(pts.map(p => p.slice())); if (undo.length > 60) undo.shift(); $('undo').disabled = false; }
+
+  // Gestes sur l'aperçu.
+  const touches = new Map();
+  let lastWheel = 0;
+  let drag = null;
+  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const f = () => fine ? .25 : 1;
+  function hit(p) {
+    const [rx, ry] = rotHandle();
+    if (Math.hypot(p[0] - rx, p[1] - ry) < 22) return { kind: 'rot' };
+    let best = -1, bd = 22;
+    pts.forEach((q, i) => { const [X, Y] = toC(q), d = Math.hypot(p[0] - X, p[1] - Y); if (d < bd) { bd = d; best = i; } });
+    return best >= 0 ? { kind: 'pt', i: best } : { kind: 'move' };
+  }
+  function startPinch() {
+    const [a, b] = [...touches.values()];
+    drag = { kind: 'pinch', a0: a.slice(), b0: b.slice(), src: pts.map(p => p.slice()), c: center() };
+  }
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId); touches.set(e.pointerId, pos(e));
+    remember();
+    if (touches.size === 2) startPinch();
+    else if (touches.size === 1) { const p = pos(e); drag = Object.assign(hit(p), { p0: p, src: pts.map(q => q.slice()), c: center() }); }
+    cv.classList.add('drag'); draw();
   });
+  cv.addEventListener('pointermove', e => {
+    if (!touches.has(e.pointerId) || !drag) return;
+    touches.set(e.pointerId, pos(e));
+    const m = f();
+    if (drag.kind === 'pinch' && touches.size >= 2) {
+      const [a, b] = [...touches.values()];
+      const d0 = [drag.b0[0] - drag.a0[0], drag.b0[1] - drag.a0[1]], d1 = [b[0] - a[0], b[1] - a[1]];
+      const s = 1 + (Math.hypot(...d1) / Math.hypot(...d0) - 1) * m, ang = (Math.atan2(d1[1], d1[0]) - Math.atan2(d0[1], d0[0])) * m;
+      const mx = ((a[0] + b[0]) - (drag.a0[0] + drag.b0[0])) / 2 * k * m, my = ((a[1] + b[1]) - (drag.a0[1] + drag.b0[1])) / 2 * k * m;
+      return change(moved(turned(drag.src, drag.c, ang, s), mx, my));
+    }
+    const p = pos(e), dx = (p[0] - drag.p0[0]) * k * m, dy = (p[1] - drag.p0[1]) * k * m;
+    if (drag.kind === 'move') return change(moved(drag.src, dx, dy));
+    if (drag.kind === 'pt') { const n = drag.src.map(q => q.slice()); n[drag.i] = [n[drag.i][0] + dx, n[drag.i][1] + dy]; return change(n); }
+    if (drag.kind === 'rot') {
+      const c = toC(drag.c), v0 = [drag.p0[0] - c[0], drag.p0[1] - c[1]], v1 = [p[0] - c[0], p[1] - c[1]];
+      const s = 1 + (Math.hypot(...v1) / Math.hypot(...v0) - 1) * m, ang = (Math.atan2(v1[1], v1[0]) - Math.atan2(v0[1], v0[0])) * m;
+      return change(turned(drag.src, drag.c, ang, s));
+    }
+  });
+  function end(e) {
+    touches.delete(e.pointerId);
+    if (touches.size === 1 && drag && drag.kind === 'pinch') {
+      const p = [...touches.values()][0]; drag = { kind: 'move', p0: p, src: pts.map(q => q.slice()), c: center() }; return;
+    }
+    if (touches.size) return;
+    if (drag) { drag = null; cv.classList.remove('drag'); draw(); save(); }
+  }
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault(); if (performance.now() - lastWheel > 600) remember(); lastWheel = performance.now();
+    const m = f(), d = Math.sign(e.deltaY);
+    change(e.shiftKey ? turned(pts, center(), -d * .5 * m * Math.PI / 180, 1) : turned(pts, center(), 0, 1 - d * .01 * m), true);
+  }, { passive: false });
+
+  // Boutons de réglage fin : un appui = un pas, maintenu = ça continue.
+  function repeat(btn, fn) {
+    let t = null;
+    const stop = () => { clearTimeout(t); t = null; };
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); remember(); fn(); t = setTimeout(function go() { fn(); t = setTimeout(go, 60); }, 400); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, () => { if (t) { stop(); save(); } }));
+    btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remember(); fn(); save(); } });
+  }
+  document.querySelectorAll('[data-mv]').forEach(b => { const [x, y] = b.dataset.mv.split(',').map(Number); repeat(b, () => change(moved(pts, x * f() * 2, y * f() * 2))); });
+  document.querySelectorAll('[data-rot]').forEach(b => repeat(b, () => change(turned(pts, center(), Number(b.dataset.rot) * f() * Math.PI / 180, 1))));
+  document.querySelectorAll('[data-sc]').forEach(b => repeat(b, () => change(turned(pts, center(), 0, 1 + (Number(b.dataset.sc) - 1) * f()))));
+
+  // Clavier (PC) : flèches = déplacer (Maj x10), [ ] = tourner, - + = taille, Ctrl+Z = annuler.
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    const m = f() * (e.shiftKey ? 10 : 1), mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    let n = null;
+    if (mv) n = moved(pts, mv[0] * m, mv[1] * m);
+    else if (e.key === '[' || e.key === ']') n = turned(pts, center(), (e.key === ']' ? 1 : -1) * .25 * m * Math.PI / 180, 1);
+    else if (e.key === '-' || e.key === '+' || e.key === '=') n = turned(pts, center(), 0, 1 + (e.key === '-' ? -1 : 1) * .005 * m);
+    else if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); return $('undo').click(); }
+    if (!n) return;
+    e.preventDefault(); remember(); change(n, true);
+  });
+
+  $('fine').onclick = () => { fine = !fine; $('fine').setAttribute('aria-pressed', String(fine)); };
+  $('undo').onclick = () => { if (!undo.length) return; change(undo.pop(), true); $('undo').disabled = !undo.length; };
+  $('reset').onclick = () => { remember(); proj = { ...DEF_PROJ }; showProj(); change(defPts(), true); };
+  $('pattern').onchange = () => live();
   document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
-    $('pattern').checked = false; push(false);
+    $('pattern').checked = false; post(false);
     fetch('/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: b.dataset.t }) });
   });
-  ['prx', 'pry', 'prz'].forEach((id, i) => $(id).onchange = () => { const v = Number($(id).value); if (isFinite(v)) { proj['xyz'[i]] = v; push(false); } });
-  $('pattern').onchange = () => push(false);
-  $('reset').onclick = () => { pts = def(); proj = { x: -700, y: -530, z: 1550 }; show(); push(false); $('msg').textContent = 'Valeurs par défaut, pas encore enregistrées.'; };
-  $('save').onclick = () => push(true);
-  fetch('/calib.json').then(r => r.json()).then(d => { if (d && d.points) pts = d.points; if (d && d.projector) proj = d.projector; show(); push(false); }).catch(() => { show(); });
-  show();
+  function showProj() { $('prx').value = proj.x; $('pry').value = proj.y; $('prz').value = proj.z; }
+  ['prx', 'pry', 'prz'].forEach((id, i) => $(id).onchange = () => { const v = Number($(id).value); if (isFinite(v)) { proj['xyz'[i]] = v; live(); save(); } });
+
+  addEventListener('resize', size);
+  fetch('/calib.json').then(r => r.json()).then(d => {
+    if (d && Array.isArray(d.screen)) [W, H] = d.screen;
+    pts = d && d.points ? d.points : defPts();
+    if (d && d.projector) proj = d.projector;
+  }).catch(() => { pts = defPts(); msg('Pi 5 injoignable', 'err'); }).finally(() => { showProj(); size(); live(); });
 })();
 </script>
 </body>

@@ -12,6 +12,11 @@ touch "${ROOTFS_DIR}/etc/thibsdarts/firstboot"
 # La partition /data est creee au premier demarrage dans la place libre :
 # on ne laisse pas Raspberry Pi OS agrandir le systeme sur toute la carte.
 sed -i 's/ resize//' "${ROOTFS_DIR}/boot/firmware/cmdline.txt"
+# Cam : le vidéoprojecteur (Acer) ne signale pas sa présence (HPD) : sortie HDMI 0 forcée, en
+# 1280x720 car il n'affiche rien dans son 1280x800 natif (le kiosk reprend ce mode).
+if [ "${TD_ROLE}" = cam ]; then
+	sed -i '1 s/$/ video=HDMI-A-1:1280x720@60D/' "${ROOTFS_DIR}/boot/firmware/cmdline.txt"
+fi
 
 case "${TD_ROLE}" in
 # Hub : l'ecran passe directement de la tete de Thibs a l'app, sans invite de connexion.

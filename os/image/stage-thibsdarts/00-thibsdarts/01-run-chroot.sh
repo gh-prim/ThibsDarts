@@ -9,7 +9,7 @@ hub)
 	;;
 cam)
 	apt-get install -y --no-install-recommends python3-opencv python3-numpy python3-paho-mqtt v4l-utils \
-		cage chromium
+		cage chromium wlr-randr
 	usermod -aG video,render,input thibs || true
 	;;
 *)

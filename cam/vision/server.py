@@ -217,6 +217,7 @@ class Registry:
         self.playing = False
         self.test_until = 0.0
         self.light_until = 0  # ms epoch : animation du projecteur en cours jusque-là
+        self.rebase = False  # l'image projetée a changé pour de bon : nouveau fond après la pause
         self.events = []  # dernières fléchettes et retraits, pour la page /calib
         self.detector = detector.Detector(self.on_dart, self.on_takeout, log=lambda m: print(m, flush=True))
 
@@ -272,6 +273,10 @@ class Registry:
                 was = True
             if time.time() * 1000 < self.light_until + LIGHT_SETTLE_MS:
                 # Image projetée en mouvement : on ne regarde pas, le fond reste celui d'avant.
+                continue
+            if self.rebase:
+                self.rebase = False
+                self.detector.reset()
                 continue
             frames, cals = {}, {}
             for cam in self.ordered():
@@ -651,9 +656,12 @@ def main():
 
     def on_light(c, userdata, msg):
         try:
-            until = int(json.loads(msg.payload).get("until", 0))
+            d = json.loads(msg.payload)
+            until = int(d.get("until", 0))
         except (ValueError, AttributeError, TypeError):
             return
+        if d.get("rebase"):
+            registry.rebase = True
         # Jamais plus de 10 s de pause d'un coup, même si le message est faux.
         registry.light_until = min(until, int(time.time() * 1000) + 10000)
 

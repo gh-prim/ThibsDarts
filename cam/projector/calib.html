@@ -111,7 +111,7 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
   const TARGETS = [0, 5, 10, 15, 2, 7, 12, 17].map(i => {
     const a = (i * 18 + 9) * Math.PI / 180;
     return { id: `${ORDER[i]}-${ORDER[(i + 1) % 20]}`, mm: [Math.sin(a) * DOUT, Math.cos(a) * DOUT],
-      where: `Entre le ${ORDER[i]} et le ${ORDER[(i + 1) % 20]}`, hint: 'Fil extérieur du double, sur le fil qui sépare les deux' };
+      where: `Entre le ${ORDER[i]} et le ${ORDER[(i + 1) % 20]}`, hint: 'Superpose les traits cyan aux fils : double et fil de séparation' };
   }).concat([{ id: 'bull', mm: [0, 0], where: 'Centre du bull', hint: 'Milieu du 50' }]);
   // Mesures de rayons (après la cible) : ne servent pas à l'homographie, on en déduit le rayon réel en mm.
   const NOM = { dIn: 162, tOut: 107, tIn: 99, board: 225.5, sur: 380 };
@@ -177,12 +177,29 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
   const post = (url, b) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
   function msg(t, cls) { $('msg').textContent = t; $('msg').className = cls || 'mute'; }
   let ptrTimer = null, ptrLast = 0;
+  // Morceau de fils autour du point visé (en pixels, relatif au pointeur) : on superpose ces
+  // traits projetés aux vrais fils, plus facile à juger de loin qu'une croix.
+  let shape = [];
+  function makeShape(t) {
+    const m = model(), o = m(...t.mm), D = Math.PI / 180, ang = Math.atan2(t.mm[0], t.mm[1]);
+    const line = (r0, r1, a) => [r0, r1].map(r => [Math.sin(a) * r, Math.cos(a) * r]);
+    const arc = (r, a0, a1) => { const out = []; for (let k = 0; k <= 24; k++) { const a = a0 + (a1 - a0) * k / 24; out.push([Math.sin(a) * r, Math.cos(a) * r]); } return out; };
+    let polys;
+    if (t.id === 'bull') polys = [arc(6.35, 0, 2 * Math.PI), arc(15.9, 0, 2 * Math.PI)];
+    else if (!t.ring) polys = [line(100, 172, ang), arc(170, ang - 14 * D, ang + 14 * D), arc(162, ang - 14 * D, ang + 14 * D)];
+    else {
+      const r = Math.hypot(...t.mm);
+      polys = [arc(r, ang - (r > 200 ? 22 : 14) * D, ang + (r > 200 ? 22 : 14) * D)];
+      if (r < 172) polys.push(line(r - 18, r + 18, ang - 9 * D), line(r - 18, r + 18, ang + 9 * D));
+    }
+    return polys.map(pl => pl.map(q => { const [x, y] = m(...q); return [Math.round((x - o[0]) * 10) / 10, Math.round((y - o[1]) * 10) / 10]; }));
+  }
   function sendPointer() {
     const now = performance.now(); clearTimeout(ptrTimer);
     if (tab !== 'points') return;
     if (now - ptrLast < 30) { ptrTimer = setTimeout(sendPointer, 30); return; }
     ptrLast = now;
-    post('/pointer', { x: ptr[0], y: ptr[1], done: Object.entries(pairs).filter(([id]) => id !== TARGETS[cur].id).map(([, p]) => p.px) }).catch(() => msg('Pi 5 injoignable', 'err'));
+    post('/pointer', { x: ptr[0], y: ptr[1], shape, done: Object.entries(pairs).filter(([id]) => id !== TARGETS[cur].id).map(([, p]) => p.px) }).catch(() => msg('Pi 5 injoignable', 'err'));
   }
   function saveCalib(pattern) {
     const m = model(), points = CAL.map(([x, y]) => m(x, y));
@@ -210,6 +227,7 @@ summary{cursor:pointer;color:var(--mute);font-size:13px}
     cur = Math.max(0, Math.min(TARGETS.length - 1, i));
     const t = TARGETS[cur];
     ptr = pairs[t.id] ? pairs[t.id].px.slice() : model()(...t.mm);
+    shape = makeShape(t);
     $('num').textContent = `${cur + 1} / ${TARGETS.length}`;
     $('where').textContent = t.where; $('hint').textContent = t.hint;
     drawMini(); dots(); sendPointer();

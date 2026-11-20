@@ -87,9 +87,15 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
       return;
     }
     (d.done || []).forEach(([x, y]) => { pg.fillStyle = '#FF4D8D'; pg.beginPath(); pg.arc(x, y, 3, 0, Math.PI * 2); pg.fill(); });
-    // Viseur lisible de loin : 4 branches épaisses cyan qui pointent vers le centre, puis un trait
-    // fin d'1 px jusqu'au point exact (l'oeil prolonge les branches, le trait fin donne la précision).
-    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, gap = 26, len = 260, w = 7;
+    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5;
+    if (d.shape && d.shape.length) {
+      // Fils projetés à superposer aux vrais fils de la cible (épais pour être vus du pas de tir).
+      pg.strokeStyle = '#00F0FF'; pg.lineWidth = 3; pg.lineJoin = 'round';
+      d.shape.forEach(pl => { pg.beginPath(); pl.forEach(([dx, dy], k) => k ? pg.lineTo(x + dx, y + dy) : pg.moveTo(x + dx, y + dy)); pg.stroke(); });
+      return;
+    }
+    // Sans forme : viseur à 4 branches épaisses et centre fin.
+    const gap = 26, len = 260, w = 7;
     pg.strokeStyle = '#00F0FF'; pg.lineCap = 'butt';
     pg.lineWidth = w; pg.beginPath();
     [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { pg.moveTo(x + dx * gap, y + dy * gap); pg.lineTo(x + dx * len, y + dy * len); });

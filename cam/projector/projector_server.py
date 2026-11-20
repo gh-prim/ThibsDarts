@@ -182,7 +182,9 @@ class Handler(BaseHTTPRequestHandler):
                 data = {"off": True}
             else:
                 done = [p for p in body.get("done", []) if isinstance(p, list) and len(p) == 2][:64]
-                data = {"x": float(body["x"]), "y": float(body["y"]), "done": done}
+                shape = [[[float(v) for v in q] for q in pl if isinstance(q, list) and len(q) == 2][:80]
+                         for pl in body.get("shape", []) if isinstance(pl, list)][:8]
+                data = {"x": float(body["x"]), "y": float(body["y"]), "done": done, "shape": shape}
             hub.send("pointer", data, keep=True)
             return self._send(200, data)
         if path == "/screen":

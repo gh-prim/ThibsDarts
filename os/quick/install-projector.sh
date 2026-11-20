@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prépare le Pi 5 pour le vidéoprojecteur (une fois) : cage + Chromium, page plein écran sur le HDMI.
+# Voie rapide seulement (Pi OS installé à la main) : cage + Chromium, page plein écran sur le HDMI.
+# Un Pi 5 sur l'image Dart OS les a déjà (image cam à partir de la release qui ajoute le projecteur).
 # Usage : os/quick/install-projector.sh [hote]   (defaut : thibs@dartos-cam.local)
 # Le code (cam/projector) arrive avec os/quick/deploy-cam.sh.
 set -euo pipefail

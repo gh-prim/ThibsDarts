@@ -1,4 +1,5 @@
 """Vidéoprojecteur du Pi 5 : sert la page projetée (port 8082) et la relie au MQTT.
+Tourne dans le service caméras (vision/server.py appelle start()), ou seul : python3 projector_server.py.
 
 La page projector.html tourne en plein écran sur la sortie HDMI (Chromium sous cage, service
 thibsdarts-kiosk). Elle reçoit ici, en flux SSE (/events), les fléchettes, retraits et état du hub.
@@ -187,7 +188,9 @@ class Handler(BaseHTTPRequestHandler):
             hub.unsubscribe(q)
 
 
-def main():
+def start():
+    """Lance le projecteur (MQTT + HTTP) dans des fils de fond. Appelé par le service caméras :
+    une mise à jour OTA suffit, pas de nouveau service systemd à installer."""
     calib = load_calib()
     if calib:
         hub.send("calib", calib, keep=True)
@@ -216,11 +219,15 @@ def main():
     hub.client = client
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"projecteur sur le port {PORT}", flush=True)
-    try:
-        server.serve_forever()
-    finally:
-        client.loop_stop()
+    return server
+
+
+def main():
+    start()
+    while True:
+        time.sleep(3600)
 
 
 if __name__ == "__main__":

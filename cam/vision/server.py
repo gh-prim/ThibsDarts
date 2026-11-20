@@ -706,6 +706,13 @@ def main():
 
     threading.Thread(target=watch, daemon=True).start()
     threading.Thread(target=registry.detect_loop, daemon=True).start()
+    try:
+        # Vidéoprojecteur (page HDMI + /calib sur le port 8082) dans le même service : livré par OTA.
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "projector"))
+        import projector_server
+        projector_server.start()
+    except Exception as e:  # le projecteur ne doit jamais empêcher la détection de tourner
+        print(f"projecteur non démarré : {e}", flush=True)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     server.daemon_threads = True
     print(f"aperçu caméras sur {base_url()}", flush=True)

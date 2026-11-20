@@ -68,9 +68,9 @@ Test sans caméra (cible et fléchettes de synthèse) : `python3 cam/vision/test
 
 ## Vidéoprojecteur
 
-`projector/server.py` (service `thibsdarts-projector`, port 8082) sert la page projetée et la relie au MQTT.
+`projector/projector_server.py` (port 8082, lancé par le service caméras `thibsdarts-vision`) sert la page projetée et la relie au MQTT.
 La page tourne en plein écran sur la sortie HDMI du Pi 5 : Chromium sous `cage` (service `thibsdarts-kiosk`,
-sur tty1). Installation une fois : `os/quick/install-projector.sh`, puis `os/quick/deploy-cam.sh` comme d'habitude.
+sur tty1). Le serveur arrive avec les mises à jour. Chromium et `cage` sont dans l'image cam : un Pi 5 installé avant le projecteur doit être reflashé une fois (`os/quick/cam-data.sh save` avant, `restore` après, pour garder caméras, calibrations et Wi-Fi). Voie rapide (Pi OS à la main) : `os/quick/install-projector.sh`.
 
 - **Calibration** : `http://<ip du Pi 5>:8082/calib` depuis l'iPhone ou le Mac. La mire s'affiche sur la cible :
   poser chacune des 4 croix roses sur le fil extérieur du double (haut du 20, droite du 6, bas du 3, gauche du 11),

@@ -17,7 +17,7 @@ case "${TD_ROLE}" in
 # Hub : l'ecran passe directement de la tete de Thibs a l'app, sans invite de connexion.
 hub) UNITS="thibsdarts-hub mosquitto"; MASK="getty@tty1" ;;
 # Cam : le vidéoprojecteur prend tty1 (page plein écran sur le HDMI).
-cam) UNITS="thibsdarts-cam thibsdarts-vision thibsdarts-pair thibsdarts-projector thibsdarts-kiosk" ;;
+cam) UNITS="thibsdarts-cam thibsdarts-vision thibsdarts-pair thibsdarts-kiosk" ;;
 esac
 
 on_chroot <<- CHROOT

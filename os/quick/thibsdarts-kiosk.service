@@ -1,7 +1,6 @@
 [Unit]
 Description=ThibsDarts vidéoprojecteur : page projetée en plein écran sur la sortie HDMI (cage + Chromium)
-After=systemd-user-sessions.service thibsdarts-projector.service
-Wants=thibsdarts-projector.service
+After=systemd-user-sessions.service thibsdarts-vision.service
 Conflicts=getty@tty1.service
 ConditionPathExists=/dev/tty1
 

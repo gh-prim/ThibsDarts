@@ -90,6 +90,12 @@ def save_calib(data):
     os.replace(tmp, CALIB_FILE)
 
 
+from guide import Guide  # noqa: E402
+
+# Calibration guidée pilotée depuis l'app iOS (via le hub : /api/projector/guide).
+guide = Guide(hub, load_calib, save_calib)
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -130,6 +136,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(200, f.read(), ctype)
         if path == "/calib.json":
             return self._send(200, dict(load_calib() or {}, screen=hub.screen))
+        if path == "/guide":
+            return self._send(200, guide.state())
         if path == "/events":
             return self._events()
         self._send(404, {"error": "inconnu"})
@@ -174,6 +182,8 @@ class Handler(BaseHTTPRequestHandler):
                 n, m = SEGMENTS.get(kind, (20, 3))
                 hub.send("dart", {"number": n, "multiplier": m, "test": True})
             return self._send(200, {"ok": True})
+        if path == "/guide":
+            return self._send(200, guide.action(body))
         if path == "/pointer":
             # Pointeur de la calibration guidée, en pixels d'écran ; {"off": true} le retire.
             if body.get("grid"):

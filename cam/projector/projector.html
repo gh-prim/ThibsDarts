@@ -22,7 +22,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
   const cv = document.getElementById('c');
   FX.init(cv, '/heads/');
   if (document.fonts && document.fonts.load) document.fonts.load('40px "Permanent Marker"').catch(() => {});
-  let mode = 'show', H = null;
+  let mode = 'show', H = null, projOn = true;
 
   // Homographie qui envoie 4 points src sur 4 points dst (système 8 x 8).
   function homography(src, dst) {
@@ -58,6 +58,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
   // Pause des caméras pendant les animations : on prévient avant, et tant que ça bouge.
   let lightUntil = 0;
   function light(force) {
+    if (!projOn) return;
     const left = FX.busyFor();
     const until = performance.now() + left * 1000;
     if (left <= 0 && !force) return;
@@ -97,6 +98,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
   const es = new EventSource('/events');
   es.addEventListener('pointer', e => pointer(JSON.parse(e.data)));
   es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); FX.setRings(d.rings); });
+  // Mode Debug, projecteur éteint : image noire (sauf le pointeur de calibration), aucune animation.
+  es.addEventListener('debug', e => { const d = JSON.parse(e.data); projOn = d.projector !== false; cv.style.opacity = projOn ? '1' : '0'; });
   es.addEventListener('state', e => { FX.setPlaying(JSON.parse(e.data).playing); });
   es.addEventListener('dart', e => {
     const d = JSON.parse(e.data), m = d.multiplier | 0, n = d.number | 0;

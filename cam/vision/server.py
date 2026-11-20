@@ -26,6 +26,7 @@ import detector
 import identity
 import learning
 import traces
+import debugmode
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "simulator"))
 from dartlink import (  # noqa: E402
@@ -219,7 +220,25 @@ class Registry:
         self.light_until = 0  # ms epoch : animation du projecteur en cours jusque-là
         self.rebase = False  # l'image projetée a changé pour de bon : nouveau fond après la pause
         self.events = []  # dernières fléchettes et retraits, pour la page /calib
-        self.detector = detector.Detector(self.on_dart, self.on_takeout, log=lambda m: print(m, flush=True))
+        self.debug = None  # debugmode.DebugMode, créé au démarrage
+        self.detector = detector.Detector(self.on_dart, self.on_takeout, log=self.log)
+
+    def log(self, m):
+        print(m, flush=True)
+        ctx = self.detector.ctx
+        if self.debug and self.debug.on and ctx:
+            self.debug.capture(m, ctx["frames"], {"change": ctx["change"]})
+
+    def mark(self):
+        """Bouton Signaler du hub (mode Debug) : images du moment de chaque caméra."""
+        frames = {}
+        for cam in self.ordered():
+            frame = cam.frame if cam.plugged else None
+            if frame is not None:
+                frames[cam.label] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        last = [e for e in self.events[-5:]]
+        print("debug : signalé depuis le hub", flush=True)
+        self.debug.capture("signalé depuis le hub", frames, {"derniers": last}, kind="SIGNALE")
 
     @property
     def mode(self):
@@ -242,6 +261,12 @@ class Registry:
             self.client.publish(DART_TOPIC, dart_message(n, m, x, y, source="vision", dart_id=dart_id), qos=1)
         self.traces.save(dart_id, info)
         self.learner.add(dart_id, info["obs"], x, y)
+        if self.debug and self.debug.on:
+            seen = {o["cam"]: {"tip": [round(float(v), 1) for v in o["tip"]], "area": int(o.get("area", 0)),
+                               "length": round(float(o.get("length", 0)), 1)} for o in info["obs"]}
+            self.debug.capture(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}",
+                               info["frames"], {"id": dart_id, "change": {k: round(float(v), 4) for k, v in info["change"].items()},
+                                                "why": info.get("why"), "obs": seen}, kind="flechette")
 
     def correct(self, dart_id, number, multiplier, x=None, y=None):
         """Correction venue du Pi 4 : exemple juste pour l'apprentissage, modèle refait et validé."""
@@ -634,6 +659,7 @@ def main():
     registry.calibs = detector.CalibStore(DATA_DIR)
     registry.traces = traces.TraceStore(DATA_DIR, registry.segment)
     registry.learner = learning.Learner(DATA_DIR, detector.fuse, registry.segment)
+    registry.debug = debugmode.DebugMode(DATA_DIR)
     registry.detector.model = None if registry.learner.model.empty else registry.learner.model
     client = new_client("dartos-cam-vision")
     client.will_set(STATUS_TOPIC, registry.status("offline"), qos=1, retain=True)
@@ -642,7 +668,10 @@ def main():
         c.subscribe(STATE_TOPIC, qos=1)
         c.subscribe(TURN_TOPIC, qos=1)
         c.subscribe(LIGHT_TOPIC, qos=0)
+        c.subscribe(debugmode.SET_TOPIC, qos=1)
+        c.subscribe(debugmode.MARK_TOPIC, qos=1)
         registry.publish_status("online")
+        registry.debug.publish_state()
 
     def on_state(c, userdata, msg):
         try:
@@ -664,6 +693,18 @@ def main():
             registry.rebase = True
         # Jamais plus de 10 s de pause d'un coup, même si le message est faux.
         registry.light_until = min(until, int(time.time() * 1000) + 10000)
+
+    def on_debug_set(c, userdata, msg):
+        try:
+            d = json.loads(msg.payload)
+        except ValueError:
+            return
+        if isinstance(d, dict) and not msg.retain:
+            registry.debug.set(d)
+
+    def on_debug_mark(c, userdata, msg):
+        if not msg.retain:
+            registry.mark()
 
     def on_turn(c, userdata, msg):
         registry.detector.end_turn()
@@ -698,6 +739,9 @@ def main():
     client.message_callback_add(STATE_TOPIC, on_state)
     client.message_callback_add(TURN_TOPIC, on_turn)
     client.message_callback_add(LIGHT_TOPIC, on_light)
+    client.message_callback_add(debugmode.SET_TOPIC, on_debug_set)
+    client.message_callback_add(debugmode.MARK_TOPIC, on_debug_mark)
+    registry.debug.client = client
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()

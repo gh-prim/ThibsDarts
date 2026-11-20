@@ -22,6 +22,16 @@ class CamLink {
   static const stateTopic = 'thibsdarts/hub/state';
   static const turnTopic = 'thibsdarts/hub/turn';
   static const cmdTopic = 'thibsdarts/cam/cmd';
+  static const debugSetTopic = 'thibsdarts/debug/set';
+  static const debugStateTopic = 'thibsdarts/debug/state';
+  static const debugMarkTopic = 'thibsdarts/debug/mark';
+  static const debugEventTopic = 'thibsdarts/debug/event';
+
+  /// Mode Debug du Pi 5 : {on, projector}, retenu sur le broker (gardé après un redémarrage).
+  final ValueNotifier<Map<String, dynamic>?> debugState = ValueNotifier(null);
+
+  /// Dernières décisions de la détection en mode Debug (la plus récente en premier).
+  final ValueNotifier<List<Map<String, dynamic>>> debugEvents = ValueNotifier(const []);
 
   /// Écran de partie qui reçoit les fléchettes (position en unités plateau, en mm).
   void Function(DartThrow dart, Offset? position, String? traceId)? onDart;
@@ -66,7 +76,7 @@ class CamLink {
       await Future<void>.delayed(const Duration(seconds: 10));
     }
     debugPrint('CamLink: connecté à $host');
-    for (final t in [dartTopic, takeoutTopic, statusTopic]) {
+    for (final t in [dartTopic, takeoutTopic, statusTopic, debugStateTopic, debugEventTopic]) {
       client.subscribe(t, MqttQos.atLeastOnce);
     }
     client.updates!.listen((events) {
@@ -102,6 +112,23 @@ class CamLink {
     return true;
   }
 
+  /// Mode Debug : captures [on] et vidéoprojecteur [projector] (null : inchangé).
+  bool setDebug({bool? on, bool? projector}) => _publish(debugSetTopic, {
+    'on': ?on,
+    'projector': ?projector,
+  });
+
+  /// Bouton Signaler : le Pi 5 garde les images du moment.
+  bool debugMark() => _publish(debugMarkTopic, {'ts': DateTime.now().millisecondsSinceEpoch});
+
+  bool _publish(String topic, Map<String, dynamic> body) {
+    final client = _client;
+    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode(body));
+    client.publishMessage(topic, MqttQos.atLeastOnce, payload.payload!);
+    return true;
+  }
+
   void _publishState() {
     final client = _client;
     if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
@@ -120,6 +147,10 @@ class CamLink {
     switch (topic) {
       case statusTopic:
         camStatus.value = json;
+      case debugStateTopic:
+        debugState.value = json;
+      case debugEventTopic:
+        debugEvents.value = [json, ...debugEvents.value.take(59)];
       case takeoutTopic:
         onTakeout?.call();
       case dartTopic:

@@ -442,6 +442,7 @@ class Detector:
         self.last = None
         self.turn_over = False
         self.placed = []  # fléchettes en place : zone de chaque caméra et son image d'avant la fléchette
+        self.ctx = None
 
     def end_turn(self):
         """Le hub est passé au joueur suivant (bouton Fin de tour) : les fléchettes en place sont
@@ -455,6 +456,7 @@ class Detector:
 
     def step(self, frames, cals):
         """frames : {nom: image grise pleine résolution}, cals : {nom: Calibration}."""
+        self.ctx = None  # images avant / après de la décision en cours (mode Debug)
         smalls = {n: small_gray(g) for n, g in frames.items()}
         for n in list(self.bg):
             if n not in frames:
@@ -480,6 +482,8 @@ class Detector:
                 self._rebase(frames, smalls, empty=self.darts == 0)
             return
         self.quiet_since = time.monotonic()
+        self.ctx = {"frames": {n: (self.bg[n], frames[n]) for n in frames},
+                    "change": {n: round(float(c), 4) for n, c in change.items()}}
         # Cible redevenue comme au début du tour : fléchettes retirées.
         empty = max((changed_light(smalls[n], self.empty_small[n]) for n in frames if n in self.empty_small),
                     default=1)

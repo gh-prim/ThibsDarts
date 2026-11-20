@@ -13,6 +13,7 @@ import '../widgets/logo.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import '../history/history_store.dart';
+import 'debug_screen.dart';
 import 'mode_game_screen.dart';
 import 'salon_screen.dart';
 import 'trainer_screen.dart';
@@ -76,7 +77,17 @@ class PlayKindScreen extends StatelessWidget {
               _header(
                 context,
                 'On joue comment ?',
-                trailing: const Logo(variant: LogoVariant.icon, height: 40),
+                trailing: Row(
+                  spacing: Td.s3,
+                  children: [
+                    TdChip(
+                      label: 'Debug',
+                      icon: LucideIcons.bug,
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DebugScreen())),
+                    ),
+                    const Logo(variant: LogoVariant.icon, height: 40),
+                  ],
+                ),
               ),
               const SizedBox(height: Td.s4),
               Expanded(

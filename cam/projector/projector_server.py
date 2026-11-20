@@ -28,6 +28,7 @@ DATA_DIR = os.environ.get("DARTOS_DATA", "/data/thibsdarts")
 CALIB_FILE = os.path.join(DATA_DIR, "projector.json")
 LIGHT_TOPIC = "thibsdarts/projector/light"
 HUB_PROJECTOR_TOPIC = "thibsdarts/hub/projector"
+DEBUG_TOPIC = "thibsdarts/debug/state"  # mode Debug : {"on", "projector"} (projecteur éteint = image noire)
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEGMENTS = {"T20": (20, 3), "D16": (16, 2), "S5": (5, 1), "DB": (25, 2), "SB": (25, 1), "MISS": (0, 0)}
 # Une animation ne met jamais les caméras en pause plus longtemps que ça.
@@ -57,7 +58,7 @@ class Hub:
             playing = bool(data.get("playing"))
             changed_state = getattr(self, "playing", None) not in (None, playing)
             self.playing = playing
-        if (kind in ("pointer", "calib") or changed_state) and self.client:
+        if (kind in ("pointer", "calib", "debug") or changed_state) and self.client:
             # L'image projetée change pour de bon (croix, mire, nouveau calage) : caméras en pause,
             # puis nouveau fond, sinon la différence est prise pour une fléchette.
             until = int(time.time() * 1000) + 1500
@@ -261,7 +262,7 @@ def start():
     client = new_client("dartos-cam-projector")
 
     def on_connect(c, *_):
-        for t in (DART_TOPIC, TAKEOUT_TOPIC, STATE_TOPIC, TURN_TOPIC, HUB_PROJECTOR_TOPIC):
+        for t in (DART_TOPIC, TAKEOUT_TOPIC, STATE_TOPIC, TURN_TOPIC, HUB_PROJECTOR_TOPIC, DEBUG_TOPIC):
             c.subscribe(t, qos=1)
 
     def on_message(c, userdata, msg):
@@ -270,10 +271,10 @@ def start():
         except ValueError:
             return
         kind = {DART_TOPIC: "dart", TAKEOUT_TOPIC: "takeout", STATE_TOPIC: "state",
-                TURN_TOPIC: "turn", HUB_PROJECTOR_TOPIC: "game"}.get(msg.topic)
+                TURN_TOPIC: "turn", HUB_PROJECTOR_TOPIC: "game", DEBUG_TOPIC: "debug"}.get(msg.topic)
         if kind:
             # L'état de la partie et du hub est gardé pour une page qui (re)démarre.
-            hub.send(kind, data, keep=kind in ("state", "game"))
+            hub.send(kind, data, keep=kind in ("state", "game", "debug"))
 
     client.on_connect = on_connect
     client.on_message = on_message

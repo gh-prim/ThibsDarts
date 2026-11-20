@@ -87,10 +87,15 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
       return;
     }
     (d.done || []).forEach(([x, y]) => { pg.fillStyle = '#FF4D8D'; pg.beginPath(); pg.arc(x, y, 3, 0, Math.PI * 2); pg.fill(); });
-    // Vraie croix : deux traits continus d'1 px qui se coupent pile sur le point visé.
-    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, len = 120;
-    pg.strokeStyle = '#FFE14D'; pg.lineWidth = 1;
-    pg.beginPath(); pg.moveTo(x - len, y); pg.lineTo(x + len, y); pg.moveTo(x, y - len); pg.lineTo(x, y + len); pg.stroke();
+    // Halo blanc qui éclaire la cible autour du point, croix noire (sans lumière) dedans pour le
+    // contraste maximal, prolongée en rouge au-delà du halo pour la retrouver de loin.
+    const x = Math.round(d.x) + .5, y = Math.round(d.y) + .5, R = 90, len = 220;
+    const gr = pg.createRadialGradient(x, y, 0, x, y, R);
+    gr.addColorStop(0, '#fff'); gr.addColorStop(.75, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    pg.fillStyle = gr; pg.beginPath(); pg.arc(x, y, R, 0, Math.PI * 2); pg.fill();
+    pg.lineWidth = 1;
+    pg.strokeStyle = '#FF1E3C'; pg.beginPath(); pg.moveTo(x - len, y); pg.lineTo(x + len, y); pg.moveTo(x, y - len); pg.lineTo(x, y + len); pg.stroke();
+    pg.strokeStyle = '#000'; pg.beginPath(); pg.moveTo(x - R, y); pg.lineTo(x + R, y); pg.moveTo(x, y - R); pg.lineTo(x, y + R); pg.stroke();
   }
 
   const es = new EventSource('/events');

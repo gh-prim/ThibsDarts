@@ -18,7 +18,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const P2 = (x, y) => [CX + x * K, CY - y * K];
 
-  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1;
+  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1, scene = 'accueil';
   // Position du projecteur par rapport au centre de la cible (mm, z = distance au mur) : sert à placer
   // l'ombre de l'arceau et des caméras, qu'on laisse noires pour ne pas éclairer les objectifs.
   let PROJ = { x: -700, y: -530, z: 1550 };
@@ -292,6 +292,48 @@
     g2.strokeStyle = `rgba(255,77,141,${.55 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, 0.94, 2.24); g2.stroke();
     g2.restore();
   }
+  /* ---------- attente hors partie : la cible en "loader", les têtes qui tournent sur le surround ---------- */
+  const rings = () => [[RB.obull, RB.tIn], [RB.tIn, RB.tOut], [RB.tOut, RB.dIn], [RB.dIn, RB.dOut]];
+  function idleHeads(t, speed, bl) {
+    const names = Object.keys(heads).filter(n => n !== 'p09'), n = names.length, rm = (RB.board + RB.sur) / 2;
+    const size = (RB.sur - RB.board) * .7 * K;
+    names.forEach((name, i) => { const im = heads[name]; if (!ready(im)) return;
+      const a = i / n * TAU + t * speed, ar = im.naturalHeight / im.naturalWidth, w = size / Math.max(1, ar), h = w * ar;
+      g2.save(); g2.globalAlpha = bl; g2.translate(CX + Math.cos(a) * rm * K, CY + Math.sin(a) * rm * K);
+      g2.rotate(Math.sin(t * 1.5 + i) * .12); g2.drawImage(im, -w / 2, -h / 2, w, h); g2.restore(); });
+  }
+  function idle(t, bl) {
+    const RINGS = rings();
+    g2.save(); g2.globalCompositeOperation = 'lighter';
+    if (scene === 'entrainement') {
+      // Entraînement : une cible à viser s'allume après l'autre (triples et doubles), comme une série.
+      const ring = [RINGS[1], RINGS[3]], step = Math.floor(t / .45);
+      for (let j = 0; j < 6; j++) { const s2 = step - j; if (s2 < 0) continue;
+        const i = (s2 * 7) % 20, r = ring[s2 % 2], a = (1 - j / 6) * bl;
+        segPath(i, RB.obull, RB.dOut); g2.fillStyle = `rgba(79,163,255,${a * .35})`; g2.fill();
+        segPath(i, r[0], r[1]); g2.fillStyle = `rgba(255,225,77,${a * .9})`; g2.fill(); }
+      g2.strokeStyle = `rgba(79,163,255,${.5 * bl})`; g2.lineWidth = 3;
+      const p = (t * .6) % 1; g2.beginPath(); g2.arc(CX, CY, (RB.obull + p * (RB.dOut - RB.obull)) * K, 0, TAU); g2.stroke();
+      g2.beginPath(); g2.arc(CX, CY, RB.obull * K, 0, TAU); g2.fillStyle = `rgba(255,225,77,${(.4 + .3 * Math.sin(t * 4)) * bl})`; g2.fill();
+    } else if (scene === 'partie') {
+      // Partie : vagues orange et roses qui partent du bull vers le double, anneau par anneau.
+      RINGS.forEach((r, j) => { const ph = ((t * 1.2 - j * .22) % 1 + 1) % 1, a = Math.max(0, 1 - ph * 2.2) * .7 * bl;
+        if (a <= 0) return; ringPath(r[0], r[1]); g2.fillStyle = j % 2 ? `rgba(255,77,141,${a})` : `rgba(255,122,47,${a})`; g2.fill(); });
+      for (let i = 0; i < 20; i++) { const on = ((i + Math.floor(t * 6)) % 10) === 0; if (!on) continue;
+        segPath(i, RB.obull, RB.dOut); g2.fillStyle = `rgba(255,225,77,${.35 * bl})`; g2.fill(); }
+    } else {
+      // Accueil : loader, chaque case s'allume tour à tour dans le sens des aiguilles, avec une traîne.
+      const head = (t * 9) % 20;
+      for (let i = 0; i < 20; i++) {
+        const back = ((head - i) % 20 + 20) % 20; if (back > 7) continue;
+        RINGS.forEach((r, j) => { const a = Math.max(0, 1 - (back + j * .6) / 7) * .75 * bl; if (a <= 0) return;
+          segPath(i, r[0], r[1]); g2.fillStyle = (i + j) % 2 ? `rgba(255,77,141,${a})` : `rgba(255,122,47,${a})`; g2.fill(); });
+      }
+      g2.beginPath(); g2.arc(CX, CY, RB.obull * K, 0, TAU); g2.fillStyle = `rgba(255,225,77,${(.35 + .25 * Math.sin(t * 3)) * bl})`; g2.fill();
+    }
+    g2.restore();
+    idleHeads(t, scene === 'partie' ? -.18 : scene === 'entrainement' ? .25 : .12, bl);
+  }
   function pattern() {
     // Mire de calibration : anneaux officiels, fils des secteurs, croix aux 4 points de réglage.
     g2.fillStyle = '#000'; g2.fillRect(0, 0, LCW, LCH);
@@ -318,7 +360,7 @@
     const busy = live.some(e => !e.base) || parts.length > 0;
     fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
     boardLight = Math.min(boardLight, fxDim);
-    if (boardLight > 0.01) steady(boardLight);
+    if (boardLight > 0.01) { if (playing) steady(boardLight); else idle(now / 1000, boardLight); }
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
     parts = parts.filter(p => { p.life += dt; return p.life < p.max; });
@@ -356,6 +398,8 @@
   window.FX = {
     MMW, MMH, K, LCW, LCH, CX, CY, CAL_MM, init, frame, dart, busyFor,
     setPlaying(v) { playing = !!v; },
+    // Écran du hub hors partie : accueil, partie ou entrainement (animation d'attente).
+    setScene(v) { scene = v || 'accueil'; },
     // Rayons mesurés en calibration (mm). Le fil extérieur du double reste la référence (170).
     setRings(r) {
       if (!r) return;

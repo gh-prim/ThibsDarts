@@ -22,6 +22,7 @@ class CamLink {
   static const stateTopic = 'thibsdarts/hub/state';
   static const turnTopic = 'thibsdarts/hub/turn';
   static const cmdTopic = 'thibsdarts/cam/cmd';
+  static const projectorTopic = 'thibsdarts/hub/projector';
   static const debugSetTopic = 'thibsdarts/debug/set';
   static const debugStateTopic = 'thibsdarts/debug/state';
   static const debugMarkTopic = 'thibsdarts/debug/mark';
@@ -137,6 +138,23 @@ class CamLink {
     return true;
   }
 
+  String _scene = 'accueil';
+
+  /// Écran du hub hors partie, pour l'animation d'attente du vidéoprojecteur :
+  /// accueil, partie (choix d'une partie) ou entrainement (choix d'un entraînement).
+  void setScene(String scene) {
+    if (_scene == scene) return;
+    _scene = scene;
+    _publishScene();
+  }
+
+  void _publishScene() {
+    final client = _client;
+    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
+    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({'scene': _scene}));
+    client.publishMessage(projectorTopic, MqttQos.atLeastOnce, payload.payload!, retain: true);
+  }
+
   /// Mode Debug : captures [on] et vidéoprojecteur [projector] (null : inchangé).
   bool setDebug({bool? on, bool? projector}) => _publish(debugSetTopic, {
     'on': ?on,
@@ -160,6 +178,7 @@ class CamLink {
     final payload = MqttClientPayloadBuilder()
       ..addUTF8String(jsonEncode({'playing': _playing, 'ts': DateTime.now().millisecondsSinceEpoch}));
     client.publishMessage(stateTopic, MqttQos.atLeastOnce, payload.payload!, retain: true);
+    _publishScene();
   }
 
   void _onMessage(String topic, String text) {

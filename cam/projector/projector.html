@@ -100,6 +100,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
   es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); FX.setRings(d.rings); });
   // Mode Debug, projecteur éteint : image noire (sauf le pointeur de calibration), aucune animation.
   es.addEventListener('debug', e => { const d = JSON.parse(e.data); projOn = d.projector !== false; cv.style.opacity = projOn ? '1' : '0'; });
+  es.addEventListener('game', e => { const d = JSON.parse(e.data); if (d && d.scene) FX.setScene(d.scene); });
   es.addEventListener('state', e => { FX.setPlaying(JSON.parse(e.data).playing); });
   es.addEventListener('dart', e => {
     const d = JSON.parse(e.data), m = d.multiplier | 0, n = d.number | 0;

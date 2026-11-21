@@ -2,6 +2,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../cam/cam_link.dart';
 import '../game_config.dart';
 import '../players/player_store.dart';
 import '../theme/tokens.dart';
@@ -474,6 +475,19 @@ class NewGameScreen extends StatefulWidget {
 
 class _NewGameScreenState extends State<NewGameScreen> {
   bool get _practice => widget.practice;
+
+  @override
+  void initState() {
+    super.initState();
+    // Animation d'attente du vidéoprojecteur : une pour les parties, une pour les entraînements.
+    CamLink.instance.setScene(_practice ? 'entrainement' : 'partie');
+  }
+
+  @override
+  void dispose() {
+    CamLink.instance.setScene('accueil');
+    super.dispose();
+  }
 
   late _Mode _mode = _partyModes[1];
   String _fam = 'Finir';

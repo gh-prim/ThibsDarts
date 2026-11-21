@@ -58,6 +58,54 @@ DETECT_FPS = float(os.environ.get("VISION_DETECT_FPS", "30"))
 TEST_DURATION = 600
 
 
+def lag_test(rounds=3):
+    """Retard des caméras : la page du projecteur passe au noir (puis revient) à un instant connu,
+    on mesure quand chaque caméra le voit arriver dans Python. Compte aussi l'affichage de Chromium
+    et du projecteur (quelques dizaines de ms)."""
+    ps = sys.modules.get("projector_server")
+    if ps is None:
+        return {"error": "projecteur absent"}
+    hub = ps.hub
+    prev = hub.last.get("debug")
+    prev_data = json.loads(prev.decode().split("data: ", 1)[1]) if prev else {"on": False, "projector": True}
+    cams = [c for c in registry.ordered() if c.plugged]
+    for c in cams:
+        c.touch()
+    time.sleep(1.0)
+
+    def level(c):
+        f = c.frame
+        if f is None:
+            return None
+        h, w = f.shape[:2]
+        return float(cv2.cvtColor(cv2.resize(f[h // 4:3 * h // 4, w // 4:3 * w // 4], (64, 36)), cv2.COLOR_BGR2GRAY).mean())
+
+    out = {c.label or c.id: [] for c in cams}
+    try:
+        for r in range(rounds * 2):
+            dark = r % 2 == 0
+            base = {c: level(c) for c in cams}
+            seen = {c: c.frame_seq for c in cams}
+            t0 = time.monotonic()
+            hub.send("debug", dict(prev_data, projector=not dark))
+            found = {}
+            while len(found) < len(cams) and time.monotonic() - t0 < 3.0:
+                for c in cams:
+                    if c in found or c.frame_seq == seen[c]:
+                        continue
+                    seen[c] = c.frame_seq
+                    v, b = level(c), base[c]
+                    if v is not None and b is not None and abs(v - b) > max(8.0, 0.12 * b):
+                        found[c] = round((getattr(c, "frame_t", time.monotonic()) - t0) * 1000)
+                time.sleep(0.003)
+            for c in cams:
+                out[c.label or c.id].append({"noir" if dark else "retour": found.get(c)})
+            time.sleep(1.5)
+    finally:
+        hub.send("debug", prev_data, keep=True)
+    return {"cams": out, "fps": {c.label or c.id: round(c.fps, 1) for c in cams}}
+
+
 class Camera:
     def __init__(self, cid, path):
         self.id, self.path = cid, path
@@ -138,7 +186,7 @@ class Camera:
                 now = time.monotonic()
                 frames += 1
                 opened += 1
-                self.frame, self.frame_seq, self.opened = frame, self.frame_seq + 1, opened
+                self.frame, self.frame_seq, self.opened, self.frame_t = frame, self.frame_seq + 1, opened, now
                 if now - t0 >= 1:
                     self.fps, frames, t0 = frames / (now - t0), 0, now
                 self.size = (frame.shape[1], frame.shape[0])
@@ -482,6 +530,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/detect":
             return self._send(200, json.dumps(detect_status(), ensure_ascii=False).encode())
+        if path == "/lagtest":
+            return self._send(200, json.dumps(lag_test(), ensure_ascii=False).encode())
         if path == "/status":
             body = {
                 "version": VERSION,

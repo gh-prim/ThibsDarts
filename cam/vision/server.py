@@ -46,7 +46,7 @@ CMD_TOPIC = "thibsdarts/cam/cmd"
 # Le vidéoprojecteur annonce ses animations : la détection attend que l'image redevienne fixe,
 # plus le temps que l'exposition des caméras se recale.
 LIGHT_TOPIC = "thibsdarts/projector/light"
-LIGHT_SETTLE_MS = int(os.environ.get("LIGHT_SETTLE_MS", "800"))
+LIGHT_SETTLE_MS = int(os.environ.get("LIGHT_SETTLE_MS", "300"))
 # DARTOS_DRY_POWER=1 : on note la demande d'extinction sans éteindre (tests).
 DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
 # Une caméra en bas (6 h), les deux autres à un tiers du tour de chaque côté (10 h et 2 h).

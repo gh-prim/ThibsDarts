@@ -527,6 +527,7 @@ class Detector:
         self.calm_frames = 0
         self.motion_at = None  # début du dernier mouvement : arrivée estimée de la fléchette
         self.prev_t = None
+        self.first_motion, self.motion_log = None, []  # premier mouvement depuis la dernière décision (mesure)
         self.quiet_since = time.monotonic()
         self.last = None
         self.turn_over = False
@@ -562,6 +563,10 @@ class Detector:
         for n in frames:
             self.prev[n] = smalls[n]
         self.prev_t = now
+        if self.first_motion is None and motion > MOTION_MAX:
+            self.first_motion, self.motion_log = now, []
+        if self.first_motion is not None and len(self.motion_log) < 90:
+            self.motion_log.append((round((now - self.first_motion) * 1000), round(float(motion), 4)))
         if motion > MOTION_MAX:
             if self.calm_ref is not None or self.motion_at is None:
                 self.motion_at = now
@@ -580,6 +585,7 @@ class Detector:
         self.calm_frames += 1
         if self.calm_frames < CALM_FRAMES or now - self.calm_ref[0] < CALM_S:
             return
+        first_motion, motion_log = self.first_motion, self.motion_log
         change = {n: changed(smalls[n], self.bg_small[n]) for n in frames}
         if max(change.values(), default=0) < CHANGE_MIN:
             # Rien de neuf : on suit doucement la lumière.
@@ -676,6 +682,11 @@ class Detector:
             crops[o["cam"]] = ((x0, y0, x1, y1), g[y0:y1, x0:x1].copy())
         self.placed.append(crops)
         delay = None if self.motion_at is None else round((now - self.motion_at) * 1000)
+        if first_motion is not None:
+            moves = [m for _, m in motion_log]
+            bursts = sum(1 for a, b in zip(moves, moves[1:]) if a <= MOTION_MAX < b) + (moves[:1] > [MOTION_MAX])
+            self.log(f"mesure : {round((now - first_motion) * 1000)} ms depuis le 1er mouvement, "
+                     f"{bursts} reprises, mouvements {' '.join(f'{t}:{m}' for t, m in motion_log)}")
         self.last = {"x": float(x), "y": float(y), "cams": {o["cam"]: [round(float(v), 1) for v in o["tip"]]
                                                            for o in obs}, "ts": time.time(), "delay_ms": delay}
         # Tout ce qu'il faut pour la trace : images avant / après, ce que chaque caméra a vu.
@@ -707,6 +718,7 @@ class Detector:
         self._rebase(frames, smalls, empty=True)
 
     def _rebase(self, frames, smalls, empty=False):
+        self.first_motion, self.motion_log = None, []
         for n in frames:
             self.bg[n], self.bg_small[n] = frames[n], smalls[n]
             if empty:

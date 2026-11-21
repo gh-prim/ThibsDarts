@@ -96,6 +96,10 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
   }
 
   const es = new EventSource('/events');
+  // Après une mise à jour, le serveur redémarre : la page se recharge pour prendre le nouveau code (fx.js).
+  let dropped = false;
+  es.addEventListener('error', () => { dropped = true; });
+  es.addEventListener('open', () => { if (dropped) location.reload(); });
   es.addEventListener('pointer', e => pointer(JSON.parse(e.data)));
   es.addEventListener('calib', e => { const d = JSON.parse(e.data); if (d.points) apply(d.points); mode = d.pattern ? 'pattern' : 'show'; if (d.projector) FX.setProjector(d.projector); FX.setRings(d.rings); });
   // Mode Debug, projecteur éteint : image noire (sauf le pointeur de calibration), aucune animation.

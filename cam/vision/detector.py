@@ -228,6 +228,16 @@ def changed_light(a, b, level=DIFF_MIN):
     return changed(a, b2, level)
 
 
+def match_light(ref, img):
+    """img recalée sur la luminosité de ref (gain et décalage d'ensemble) : exposition de la caméra
+    qui a bougé, ou éclairage du projecteur pas encore revenu. Une fléchette ou une main restent."""
+    r, i = ref.astype(np.float32), img.astype(np.float32)
+    si = float(i.std())
+    a = float(r.std()) / si if si > 1 else 1.0
+    a = min(1.6, max(0.6, a))
+    return np.clip(a * (i - float(i.mean())) + float(r.mean()), 0, 255).astype(np.uint8)
+
+
 def diff_mask(bg, cur):
     """Pixels changés entre deux images grises pleine résolution (255), nettoyés."""
     d = cv2.absdiff(cv2.GaussianBlur(cur, (5, 5), 0), cv2.GaussianBlur(bg, (5, 5), 0))
@@ -636,6 +646,21 @@ class Detector:
         if self.darts and empty < EMPTY_MAX and empty < 0.5 * max(change.values()):
             self._takeout(frames, smalls, f"écart {empty:.4f}")
             return
+        if max(change.values()) > BIG_CHANGE:
+            # Une caméra dont toute l'image a changé de luminosité (exposition, lumière du projecteur
+            # pas encore revenue après une animation) n'est pas une main : on la recale sur le fond.
+            for n in list(frames):
+                if change[n] > BIG_CHANGE:
+                    # Le fond est recalé sur l'image du moment (pas l'inverse) : le prochain fond reste une vraie image.
+                    fixed = match_light(smalls[n], self.bg_small[n])
+                    c2 = changed(smalls[n], fixed)
+                    if c2 < BIG_CHANGE:
+                        self.log(f"lumière recalée sur {n} ({change[n]:.3f} -> {c2:.3f})")
+                        self.bg[n] = match_light(frames[n], self.bg[n])
+                        self.bg_small[n] = fixed
+                        change[n] = c2
+            self.ctx["change"] = {n: round(float(c), 4) for n, c in change.items()}
+            self.ctx["frames"] = {n: (self.bg[n], frames[n]) for n in frames}
         if max(change.values()) > BIG_CHANGE:
             if self.turn_over:
                 # Tour fini à la main, puis main devant la cible : c'est le retrait.

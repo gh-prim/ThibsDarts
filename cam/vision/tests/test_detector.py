@@ -403,3 +403,17 @@ def test_early_while_vibrating():
         assert any("au calme" in m or "fléchette au calme" in m for m in logs), logs
     finally:
         detector.CALM_S = saved
+
+
+def test_match_light_ignores_exposure_keeps_dart():
+    # Caméra dont l'exposition a bougé (gain + décalage) : plus de "gros changement", la fléchette reste.
+    import numpy as np
+    from detector import match_light, changed, BIG_CHANGE
+    rng = np.random.default_rng(1)
+    bg = rng.integers(40, 200, (180, 320)).astype(np.uint8)
+    cur = np.clip(bg.astype(np.float32) * 1.3 + 12, 0, 255).astype(np.uint8)
+    cur[80:84, 100:220] = 255
+    assert changed(cur, bg) > BIG_CHANGE
+    fixed = match_light(cur, bg)
+    assert changed(cur, fixed) < BIG_CHANGE
+    assert np.abs(cur.astype(int) - fixed.astype(int))[80:84, 100:220].mean() > 28

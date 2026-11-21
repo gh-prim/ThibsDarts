@@ -57,6 +57,15 @@ MOTION_MAX = 0.0008    # au-dessus : ça bouge encore
 # (vibration lente d'une fléchette qui s'amortit, invisible d'une image à la suivante à 30 images/s).
 CALM_S = int(os.environ.get("VISION_CALM_MS", "150")) / 1000
 CALM_FRAMES = 2        # au moins ça d'images calmes, même si la durée est atteinte
+# Décision anticipée : la pointe est plantée dès l'impact, seul l'empennage vibre (jusqu'à 0,8 s).
+# On analyse chaque image pendant la vibration et on compte la fléchette dès que la position trouvée
+# ne bouge plus sur EARLY_N images de suite (à EARLY_MM près). L'image calme sert ensuite de fond.
+EARLY = os.environ.get("VISION_EARLY", "1") != "0"
+EARLY_N = int(os.environ.get("VISION_EARLY_N", "3"))
+EARLY_MM = float(os.environ.get("VISION_EARLY_MM", "3"))
+EARLY_AFTER = 0.05     # s après le 1er mouvement : fléchette arrivée, plus en vol
+EARLY_MOTION_MAX = 0.05  # au-dessus : une main, pas une fléchette qui vibre
+SETTLE_MM = 25.0       # tache vue au calme à moins de ça de la fléchette comptée en avance : la même
 BIG_CHANGE = 0.05      # main ou bras devant la caméra
 EMPTY_MAX = 0.004      # cible "vide" : presque pareille qu'au début du tour
 DART_MIN_AREA = 120    # pixels pleine résolution
@@ -487,6 +496,11 @@ def _drop_outlier(obs):
     return best[1] if best else obs
 
 
+def _pair_agrees(obs):
+    """Au moins 2 caméras dont les droites et pointes concordent."""
+    return len(obs) >= 2 and any(_agree(_intersect([a, b]), [a, b]) for i, a in enumerate(obs) for b in obs[i + 1:])
+
+
 def fuse(obs, model=None):
     """Position de la pointe (mm) à partir des observations de plusieurs caméras.
     model : ajustements appris des corrections (learning.Model), ou None."""
@@ -528,6 +542,8 @@ class Detector:
         self.motion_at = None  # début du dernier mouvement : arrivée estimée de la fléchette
         self.prev_t = None
         self.first_motion, self.motion_log = None, []  # premier mouvement depuis la dernière décision (mesure)
+        self.early_hist = []  # positions trouvées pendant la vibration
+        self.settling = None  # position d'une fléchette comptée en avance, en attendant l'image calme
         self.quiet_since = time.monotonic()
         self.last = None
         self.turn_over = False
@@ -567,6 +583,8 @@ class Detector:
             self.first_motion, self.motion_log = now, []
         if self.first_motion is not None and len(self.motion_log) < 90:
             self.motion_log.append((round((now - self.first_motion) * 1000), round(float(motion), 4)))
+        if EARLY and self._early(frames, smalls, cals, now, motion):
+            return
         if motion > MOTION_MAX:
             if self.calm_ref is not None or self.motion_at is None:
                 self.motion_at = now
@@ -586,6 +604,7 @@ class Detector:
         if self.calm_frames < CALM_FRAMES or now - self.calm_ref[0] < CALM_S:
             return
         first_motion, motion_log = self.first_motion, self.motion_log
+        settling, self.settling = self.settling, None
         change = {n: changed(smalls[n], self.bg_small[n]) for n in frames}
         if max(change.values(), default=0) < CHANGE_MIN:
             # Rien de neuf : on suit doucement la lumière.
@@ -610,39 +629,28 @@ class Detector:
             self.log(f"gros changement ignoré ({max(change.values()):.3f}, écart vide {empty:.4f})")
             self._rebase(frames, smalls, empty=self.darts == 0)
             return
-        obs, why = [], {}
         before = {n: self.bg[n] for n in frames}
-        # Ombre portée (vidéoprojecteur) : ce que plusieurs caméras voient au même endroit de la cible.
-        masks = {n: diff_mask(self.bg[n], g) for n, g in frames.items()
-                 if cals.get(n) is not None and change[n] >= CHANGE_MIN / 3}
-        try:
-            flat = on_plane(masks, cals) if SHADOWS else {}
-        except (cv2.error, np.linalg.LinAlgError):
-            flat = {}
-        for n, g in frames.items():
-            cal = cals.get(n)
-            if cal is None or change[n] < CHANGE_MIN / 3:
-                if cal is not None:
-                    why[n] = "changement trop faible"
-                continue
-            reasons = []
-            o = find_dart(self.bg[n], g, cal, reasons, remove=flat.get(n))
-            if reasons:
-                why[n] = reasons[0]
-            if o:
-                o["cam"] = n
-                obs.append(o)
+        obs, why = self._observe(frames, cals, change)
         usable = sum(1 for n in frames if cals.get(n) is not None)
         if obs and usable >= 2:
             # Une vraie fléchette est vue par au moins 2 caméras qui concordent. Une seule caméra,
             # c'est presque toujours la lumière projetée (ombre de quelqu'un devant le projecteur,
             # reflet sur un logo imprimé) : on ne compte rien.
-            agree = len(obs) >= 2 and any(_agree(_intersect([a, b]), [a, b])
-                                          for i, a in enumerate(obs) for b in obs[i + 1:])
-            if not agree:
+            if not _pair_agrees(obs):
                 cams = ", ".join(o["cam"] for o in obs)
                 self.log(f"tache ignorée ({'une seule caméra' if len(obs) < 2 else 'caméras en désaccord'} : {cams})")
                 self._rebase(frames, smalls, empty=self.darts == 0)
+                return
+        if settling is not None:
+            # Fléchette déjà comptée pendant sa vibration : on la revoit au calme, par rapport à l'image
+            # d'avant elle. Même endroit : l'image calme devient le fond, rien de neuf.
+            pos, pre = settling
+            calm, _ = self._observe(frames, cals, {n: CHANGE_MIN for n in frames}, bg=pre)
+            gap = np.linalg.norm(np.float64(fuse(calm)) - pos) if _pair_agrees(calm) else None
+            if gap is None or gap < SETTLE_MM:
+                self.log("fléchette au calme : " + (f"{gap:.1f} mm de la position comptée" if gap is not None
+                                                     else "pas revue"))
+                self._rebase(frames, smalls)
                 return
         gone = self._removed(frames) if obs else None
         if gone is not None:
@@ -670,6 +678,71 @@ class Detector:
         if not obs:
             self.log(f"changement sans fléchette ({', '.join(f'{n} {c:.4f}' for n, c in change.items())})")
             return
+        self._commit(frames, obs, why, change, before, now, first_motion, motion_log)
+
+    def _observe(self, frames, cals, change, bg=None):
+        """Fléchette vue par chaque caméra (différence avec le fond), sans l'ombre portée."""
+        bg = self.bg if bg is None else bg
+        obs, why = [], {}
+        # Ombre portée (vidéoprojecteur) : ce que plusieurs caméras voient au même endroit de la cible.
+        masks = {n: diff_mask(bg[n], g) for n, g in frames.items()
+                 if n in bg and cals.get(n) is not None and change[n] >= CHANGE_MIN / 3}
+        try:
+            flat = on_plane(masks, cals) if SHADOWS else {}
+        except (cv2.error, np.linalg.LinAlgError):
+            flat = {}
+        for n, g in frames.items():
+            cal = cals.get(n)
+            if cal is None or n not in bg or change[n] < CHANGE_MIN / 3:
+                if cal is not None:
+                    why[n] = "changement trop faible"
+                continue
+            reasons = []
+            o = find_dart(bg[n], g, cal, reasons, remove=flat.get(n))
+            if reasons:
+                why[n] = reasons[0]
+            if o:
+                o["cam"] = n
+                obs.append(o)
+        return obs, why
+
+    def _early(self, frames, smalls, cals, now, motion):
+        """Pendant la vibration : compte la fléchette dès que sa position trouvée est stable. True si comptée."""
+        if (self.first_motion is None or self.settling is not None or self.turn_over
+                or now - self.first_motion < EARLY_AFTER or motion > EARLY_MOTION_MAX
+                or sum(1 for n in frames if cals.get(n) is not None) < 2
+                or any(n not in self.bg for n in frames)):
+            return False
+        change = {n: changed(smalls[n], self.bg_small[n]) for n in frames}
+        if max(change.values()) < CHANGE_MIN or max(change.values()) > BIG_CHANGE:
+            return False
+        obs, why = self._observe(frames, cals, change)
+        if not _pair_agrees(obs) or self._removed(frames) is not None:
+            self.early_hist = []
+            return False
+        p = np.float64(fuse(obs))
+        self.early_hist = (self.early_hist + [p])[-EARLY_N:]
+        if len(self.early_hist) < EARLY_N:
+            return False
+        mid = np.mean(self.early_hist, axis=0)
+        if max(np.linalg.norm(q - mid) for q in self.early_hist) > EARLY_MM:
+            return False
+        before = {n: self.bg[n] for n in frames}
+        self.ctx = {"frames": {n: (self.bg[n], frames[n]) for n in frames},
+                    "change": {n: round(float(c), 4) for n, c in change.items()}}
+        first_motion, motion_log = self.first_motion, self.motion_log
+        empty = self.darts == 0
+        self._rebase(frames, smalls, empty=False)
+        if empty:
+            # Le fond « cible vide » reste celui d'avant la fléchette.
+            for n in frames:
+                self.empty_small[n] = small_gray(before[n])
+        self.settling = (p, before)
+        self.calm_ref, self.calm_frames = None, 0
+        self._commit(frames, obs, why, change, before, now, first_motion, motion_log, early=True)
+        return True
+
+    def _commit(self, frames, obs, why, change, before, now, first_motion, motion_log, early=False):
         x, y = fuse(obs, self.model)
         raw = fuse(obs) if self.model is not None else (x, y)
         self.darts += 1
@@ -681,11 +754,11 @@ class Detector:
             x1, y1 = min(bx + bw + 10, g.shape[1]), min(by + bh + 10, g.shape[0])
             crops[o["cam"]] = ((x0, y0, x1, y1), g[y0:y1, x0:x1].copy())
         self.placed.append(crops)
-        delay = None if self.motion_at is None else round((now - self.motion_at) * 1000)
+        delay = None if first_motion is None else round((now - first_motion) * 1000)
         if first_motion is not None:
             moves = [m for _, m in motion_log]
             bursts = sum(1 for a, b in zip(moves, moves[1:]) if a <= MOTION_MAX < b) + (moves[:1] > [MOTION_MAX])
-            self.log(f"mesure : {round((now - first_motion) * 1000)} ms depuis le 1er mouvement, "
+            self.log(f"mesure : {delay} ms depuis le 1er mouvement ({'en vibration' if early else 'au calme'}), "
                      f"{bursts} reprises, mouvements {' '.join(f'{t}:{m}' for t, m in motion_log)}")
         self.last = {"x": float(x), "y": float(y), "cams": {o["cam"]: [round(float(v), 1) for v in o["tip"]]
                                                            for o in obs}, "ts": time.time(), "delay_ms": delay}
@@ -711,6 +784,7 @@ class Detector:
 
     def _takeout(self, frames, smalls, why):
         self.log(f"fléchettes retirées ({why})")
+        self.settling = None
         self.placed = []
         self.darts = 0
         self.turn_over = False
@@ -718,7 +792,7 @@ class Detector:
         self._rebase(frames, smalls, empty=True)
 
     def _rebase(self, frames, smalls, empty=False):
-        self.first_motion, self.motion_log = None, []
+        self.first_motion, self.motion_log, self.early_hist = None, [], []
         for n in frames:
             self.bg[n], self.bg_small[n] = frames[n], smalls[n]
             if empty:

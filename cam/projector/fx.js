@@ -88,11 +88,11 @@
           pts.slice(0, n).forEach(([px, py], i) => { const [X, Y] = P2(px, py); i ? g2.lineTo(X, Y) : g2.moveTo(X, Y); }); g2.stroke(); }); });
     });
   }
-  function shock(x, y, maxR, col = '255,225,77', dur = .7) {
+  function shock(x, y, maxR, col = '255,225,77', dur = .7, delay = 0) {
     fx(dur, (k) => { const [X, Y] = P2(x, y), e = ease(k);
       g2.globalCompositeOperation = 'lighter';
       g2.strokeStyle = `rgba(${col},${1 - k})`; g2.lineWidth = (14 * (1 - k) + 2); g2.beginPath(); g2.arc(X, Y, (10 + maxR * e) * K, 0, TAU); g2.stroke();
-      g2.strokeStyle = `rgba(255,255,255,${.7 * (1 - k)})`; g2.lineWidth = 2; g2.beginPath(); g2.arc(X, Y, (6 + maxR * .7 * e) * K, 0, TAU); g2.stroke(); });
+      g2.strokeStyle = `rgba(255,255,255,${.7 * (1 - k)})`; g2.lineWidth = 2; g2.beginPath(); g2.arc(X, Y, (6 + maxR * .7 * e) * K, 0, TAU); g2.stroke(); }, delay);
   }
   function flash(x, y, r) { fx(.28, (k) => { const [X, Y] = P2(x, y); const gr = g2.createRadialGradient(X, Y, 0, X, Y, r * K);
     gr.addColorStop(0, `rgba(255,255,255,${1 - k})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -263,6 +263,7 @@
 
   /* ---------- une fléchette (x, y en mm, y vers le haut) ---------- */
   function dart(h) {
+    if (clock && playing) return clockDart(h);
     if (!h.m) {
       tint(1.8, '40,70,120', .45); rain(200, 1.2); 
       ringTag('MISS', { n: 4, c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', speed: -.5, head: 'p09', grey: true });
@@ -282,8 +283,107 @@
     }
   }
 
+
+  /* ---------- Around the clock : un secteur allumé, touché, raté, passage au suivant, tour bouclé ---------- */
+  // clock = { target, prev, switchAt } : numéro visé (1 à 20). Avant switchAt, l'image fixe montre encore prev.
+  let clock = null;
+  const secAng = n => (ORDER.indexOf(n) * 18 - 90) * Math.PI / 180;   // angle du milieu du secteur (canevas)
+  const secMid = (n, r) => { const a = ORDER.indexOf(n) * 18 * Math.PI / 180; return [Math.sin(a) * r, Math.cos(a) * r]; };
+  function sector(n, r0, r1) { segPath(ORDER.indexOf(n), r0, r1); }
+  function shownTarget(now) { return clock && clock.prev && now < clock.switchAt ? clock.prev : clock && clock.target; }
+  // Image fixe : cible assombrie, secteur visé plein blanc chaud + contour fluo, numéro sur le surround,
+  // cadran de 20 points sur le bord (orange : faits, fluo : visé). Pas de nom du jeu : il cacherait le numéro.
+  function clockSteady(bl, now) {
+    const t = shownTarget(now);
+    g2.fillStyle = `rgba(255,244,230,${.14 * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
+    for (let n = 1; n < t; n++) { sector(n, RB.obull, RB.dOut); g2.fillStyle = `rgba(255,122,47,${.22 * bl})`; g2.fill(); }
+    sector(t, RB.obull, RB.board); g2.fillStyle = `rgba(255,250,236,${.97 * bl})`; g2.fill();
+    g2.strokeStyle = `rgba(255,225,77,${bl})`; g2.lineWidth = 5; g2.lineJoin = 'round'; g2.stroke();
+    for (let n = 1; n <= 20; n++) {
+      const a = secAng(n), X = CX + Math.cos(a) * (RB.sur - 14) * K, Y = CY + Math.sin(a) * (RB.sur - 14) * K;
+      g2.fillStyle = n === t ? `rgba(255,225,77,${bl})` : n < t ? `rgba(255,122,47,${.85 * bl})` : `rgba(255,236,220,${.25 * bl})`;
+      g2.beginPath(); g2.arc(X, Y, (n === t ? 9 : 6) * K, 0, TAU); g2.fill();
+    }
+    arcText(String(t), secAng(t), (RB.sur - RB.board) * .62, bl, C.fluo, C.fluo);
+  }
+  // Passage au numéro suivant : une comète file sur le surround jusqu'au nouveau secteur,
+  // qui se remplit du centre vers l'extérieur, puis son numéro claque sur le surround.
+  function clockMove(from, to, delay) {
+    const rm = (RB.board + RB.sur) / 2, a0 = from ? secAng(from) : secAng(to) - 1.2, a1 = secAng(to);
+    let d = ((a1 - a0) % TAU + TAU) % TAU; if (d > Math.PI) d -= TAU;
+    const dur = .3 + Math.abs(d) / Math.PI * .35;
+    fx(dur, (k) => {
+      g2.globalCompositeOperation = 'lighter';
+      for (let j = 0; j < 18; j++) {
+        const kk = Math.max(0, ease(k) - j * .025), a = a0 + d * kk, X = CX + Math.cos(a) * rm * K, Y = CY + Math.sin(a) * rm * K;
+        g2.fillStyle = j ? `rgba(255,${180 - j * 6},${60 + j * 4},${.8 * (1 - j / 18)})` : 'rgba(255,255,240,1)';
+        g2.beginPath(); g2.arc(X, Y, (j ? 11 - j * .5 : 14) * K, 0, TAU); g2.fill();
+      }
+    }, delay);
+    const t1 = delay + dur;
+    fx(.7, (k) => {
+      const r = RB.obull + (RB.board - RB.obull) * ease(Math.min(1, k * 1.8)), al = k < .75 ? 1 : (1 - k) / .25;
+      sector(to, RB.obull, r); g2.fillStyle = `rgba(255,225,77,${.9 * al})`; g2.fill();
+      g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,255,255,${al})`; g2.lineWidth = 6; g2.stroke();
+    }, t1);
+    const [mx, my] = secMid(to, 200); shock(mx, my, 160, '255,225,77', .6, t1 + .25);
+    fx(.6, (k, t) => {
+      const s = 1 + .9 * (1 - ease(Math.min(1, t / .22))), al = k > .7 ? (1 - k) / .3 : 1;
+      arcText(String(to), secAng(to), (RB.sur - RB.board) * .62 * s, al, C.fluo, C.sunset);
+    }, t1 + .25);
+    return t1 + .5;
+  }
+  // Touché : la case brille (lave), le secteur entier flashe fluo puis reste orange (fait), puis passage au suivant.
+  function clockHit(h, next) {
+    flash(h.x, h.y, 70); lava(h, 1); shock(h.x, h.y, 220, '255,225,77', .6); embers(h.x, h.y, 18);
+    if (h.m === 3) { fire(h.x, h.y, 70, 1.1); godRays(h.x, h.y, 1); }
+    else if (h.m === 2) lightningRing(RB.dIn, RB.dOut, .9);
+    fx(.8, (k) => { g2.globalCompositeOperation = 'lighter'; const a = k < .12 ? k / .12 : 1 - (k - .12) / .88;
+      sector(h.n, RB.obull, RB.board); g2.fillStyle = `rgba(255,225,77,${.85 * a})`; g2.fill(); });
+    if (!next) return clockWin(.5);
+    return clockMove(h.n, next, .45);
+  }
+  // Raté (mauvais numéro ou hors cible) : la case touchée vire au bleu froid avec une croix rose,
+  // une ligne pointillée part de l'impact vers le bon secteur, qui clignote deux fois en rose.
+  function clockMiss(h, target) {
+    if (h.m) {
+      fx(.9, (k) => { cellPath(h); g2.fillStyle = `rgba(110,150,210,${.7 * (1 - k)})`; g2.fill(); });
+      fx(1, (k) => { const [X, Y] = P2(h.x, h.y), s = 16 * K * (1 + .3 * (1 - ease(Math.min(1, k * 4)))), al = k > .6 ? (1 - k) / .4 : 1;
+        g2.strokeStyle = `rgba(255,77,141,${al})`; g2.lineWidth = 5; g2.lineCap = 'round';
+        g2.beginPath(); g2.moveTo(X - s, Y - s); g2.lineTo(X + s, Y + s); g2.moveTo(X + s, Y - s); g2.lineTo(X - s, Y + s); g2.stroke(); });
+    } else { tint(1.1, '40,70,120', .35); rain(110, .7); }
+    const [tx, ty] = secMid(target, 135), sx = h.m ? h.x : tx * 1.9, sy = h.m ? h.y : ty * 1.9;
+    fx(1, (k, t) => { const al = k > .7 ? (1 - k) / .3 : 1, e = ease(Math.min(1, t / .35)), [X0, Y0] = P2(sx, sy), [X1, Y1] = P2(sx + (tx - sx) * e, sy + (ty - sy) * e);
+      g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,225,77,${.9 * al})`; g2.lineWidth = 3; g2.setLineDash([10, 9]); g2.lineDashOffset = -t * 60;
+      g2.beginPath(); g2.moveTo(X0, Y0); g2.lineTo(X1, Y1); g2.stroke(); }, .1);
+    fx(1.1, (k, t) => { const on = Math.floor((t) / .2) % 2 ? .15 : 1, al = (k > .8 ? (1 - k) / .2 : 1) * on;
+      sector(target, RB.obull, RB.board); g2.fillStyle = `rgba(255,77,141,${.45 * al})`; g2.fill();
+      g2.strokeStyle = `rgba(255,225,77,${al})`; g2.lineWidth = 6; g2.stroke(); }, .2);
+  }
+  // Tour bouclé (20 touché) : les 20 secteurs s'allument dans l'ordre de 1 à 20, puis feu d'artifice.
+  function clockWin(delay = 0) {
+    for (let n = 1; n <= 20; n++) fx(.9, (k) => { const a = (1 - k);
+      g2.globalCompositeOperation = 'lighter'; sector(n, RB.obull, RB.board); g2.fillStyle = n % 2 ? `rgba(255,122,47,${.85 * a})` : `rgba(255,77,141,${.85 * a})`; g2.fill();
+      const [x, y] = secMid(n, 300), [X, Y] = P2(x, y); g2.fillStyle = `rgba(255,225,77,${a})`; g2.beginPath(); g2.arc(X, Y, 10 * K, 0, TAU); g2.fill(); }, delay + (n - 1) * .07);
+    const t1 = delay + 1.5;
+    fx(1.6, () => {}, t1);
+    setTimeout(() => { flash(0, 0, 500); sunsetSpiral(1.6); confetti(160); ringTag('TOUR BOUCLÉ', { n: 2, dur: 3, speed: .9 });
+      [[-300, 260], [300, 260], [0, 330]].forEach(([x, y], i) => setTimeout(() => fireworks(x, y, [C.fluo, C.crep, C.sunset][i]), i * 280)); }, t1 * 1000);
+    return t1 + 3;
+  }
+  function clockDart(h) {
+    const t = clock.target, now = performance.now();
+    if (clock.won) return;
+    if (h.m && h.n === t) {
+      const next = t < 20 ? t + 1 : null, end = clockHit(h, next);
+      clock.prev = t; clock.switchAt = now + (next ? end - .2 : 0) * 1000;
+      if (next) clock.target = next; else clock.won = true;
+    } else clockMiss(h, t);
+  }
+
   /* ---------- image de chaque instant ---------- */
-  function steady(bl) {
+  function steady(bl, now) {
+    if (clock) return clockSteady(bl, now);
     // Image fixe entre deux animations : les caméras la prennent comme fond, elle ne doit pas bouger.
     g2.fillStyle = `rgba(255,244,230,${(playing ? .9 : .55) * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
     ringPath(RB.board, RB.sur); g2.fillStyle = `rgba(255,236,220,${(playing ? .3 : .2) * bl})`; g2.fill();
@@ -419,9 +519,9 @@
     const busy = live.some(e => !e.base) || parts.length > 0;
     fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
     boardLight = Math.min(boardLight, fxDim);
-    if (boardLight > 0.01) { if (playing) steady(boardLight); else idle(now / 1000, boardLight); }
+    if (boardLight > 0.01) { if (playing) steady(boardLight, now); else idle(now / 1000, boardLight); }
     // Nom du jeu : pleine intensité hors effets, caché pendant le check-out (la route tourne à sa place).
-    if (playing && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
+    if (playing && !clock && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
     parts = parts.filter(p => { p.life += dt; return p.life < p.max; });
@@ -457,7 +557,7 @@
   }
 
   window.FX = {
-    MMW, MMH, K, LCW, LCH, CX, CY, CAL_MM, init, frame, dart, busyFor,
+    MMW, MMH, K, LCW, LCH, CX, CY, CAL_MM, init, frame, dart, busyFor, clockWin,
     setPlaying(v) { playing = !!v; },
     // Écran du hub hors partie : accueil, partie ou entrainement (animation d'attente).
     setScene(v) { scene = v || 'accueil'; },
@@ -465,6 +565,15 @@
     setGame(d) {
       if (!d) return;
       scene = d.scene || 'accueil'; title = d.scene === 'jeu' ? String(d.title || '') : '';
+      const ct = d.scene === 'jeu' && Number.isInteger(d.clock) && d.clock >= 1 && d.clock <= 20 ? d.clock : 0;
+      if (!ct) clock = null;
+      else if (!clock) { clock = { target: ct, prev: 0, switchAt: 0 }; if (playing) clockMove(0, ct, 0); }
+      else if (ct !== clock.target) {
+        // Autre joueur, ou correction : le nouveau secteur s'allume après l'animation en cours.
+        const now = performance.now(), wait = Math.max(0, (clock.switchAt - now) / 1000);
+        clock.prev = clock.target; clock.target = ct; clock.won = false;
+        clock.switchAt = now + (wait + clockMove(clock.prev, ct, wait) - .2) * 1000;
+      }
       const co = Array.isArray(d.checkout) ? d.checkout.join(' ') : '';
       if (co && co !== lastCheckout && playing) checkoutFx(d.checkout);
       lastCheckout = co;

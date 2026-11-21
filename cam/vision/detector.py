@@ -58,7 +58,8 @@ EMPTY_MAX = 0.004      # cible "vide" : presque pareille qu'au début du tour
 DART_MIN_AREA = 120    # pixels pleine résolution
 PIECE_GAP = 60.0  # trou max (px) entre deux morceaux d'une même fléchette, le long de son axe
 DART_MAX_AREA = 40000
-BOARD_LIMIT = 230.0    # au-delà, la tache n'est pas sur la cible (mm)
+BOARD_LIMIT = 300.0    # au-delà, la tache n'est pas sur la cible ni le surround (mm) : en deçà, une fléchette hors du double = MISS
+SHADOWS = os.environ.get("VISION_SHADOWS", "1") != "0"  # retrait des ombres vues à plat par plusieurs caméras
 
 
 class Calibration:
@@ -213,12 +214,52 @@ def changed_light(a, b, level=DIFF_MIN):
     return changed(a, b2, level)
 
 
-def find_dart(bg, cur, cal, why=None):
-    """Nouvelle fléchette entre deux images grises pleine résolution. None si rien de net.
-    why : liste qui reçoit la raison du refus (montrée dans la trace)."""
+def diff_mask(bg, cur):
+    """Pixels changés entre deux images grises pleine résolution (255), nettoyés."""
     d = cv2.absdiff(cv2.GaussianBlur(cur, (5, 5), 0), cv2.GaussianBlur(bg, (5, 5), 0))
     mask = cv2.threshold(d, DIFF_MIN, 255, cv2.THRESH_BINARY)[1]
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    return cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+
+
+# Grille "vue de face" de la cible pour comparer les caméras : 1 px = 1 mm, centre au milieu.
+PLANE_R = 240
+PLANE_T = np.float64([[1, 0, PLANE_R], [0, 1, PLANE_R], [0, 0, 1]])
+SHADOW_GROW_MM = 7  # tolérance de calibration entre caméras
+
+
+def on_plane(masks, cals):
+    """Ce qui a changé À PLAT sur la cible : vu au même endroit (en mm) par au moins 2 caméras.
+    L'ombre d'une fléchette (vidéoprojecteur) est collée à la cible : toutes les caméras la voient au
+    même endroit. La fléchette, elle, dépasse de la cible : chaque caméra la voit partir dans une
+    direction différente, et seule sa pointe coïncide. Renvoie {caméra: masque image à retirer}."""
+    names = [n for n in masks if n in cals]
+    if len(names) < 2:
+        return {}
+    size = 2 * PLANE_R
+    k = np.ones((SHADOW_GROW_MM, SHADOW_GROW_MM), np.uint8)
+    warped = {}
+    for n in names:
+        M = PLANE_T @ cals[n].H
+        warped[n] = cv2.dilate(cv2.warpPerspective(masks[n], M, (size, size), flags=cv2.INTER_NEAREST), k)
+    count = sum((w > 0).astype(np.uint8) for w in warped.values())
+    common = cv2.dilate(((count >= 2) * 255).astype(np.uint8), k)
+    out = {}
+    for n in names:
+        h, w = masks[n].shape
+        M = PLANE_T @ cals[n].H
+        out[n] = cv2.warpPerspective(common, np.linalg.inv(M), (w, h), flags=cv2.INTER_NEAREST)
+    return out
+
+
+def find_dart(bg, cur, cal, why=None, remove=None):
+    """Nouvelle fléchette entre deux images grises pleine résolution. None si rien de net.
+    why : liste qui reçoit la raison du refus (montrée dans la trace).
+    remove : masque des pixels à ignorer (ombre portée, vue à plat par plusieurs caméras)."""
+    mask = diff_mask(bg, cur)
+    full = None
+    if remove is not None:
+        full = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+        mask = cv2.bitwise_and(mask, cv2.bitwise_not(remove))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
     n, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
     areas = stats[:, cv2.CC_STAT_AREA]
@@ -227,7 +268,9 @@ def find_dart(bg, cur, cal, why=None):
     cands = sorted((i for i in range(1, n) if areas[i] >= DART_MIN_AREA // 3), key=lambda i: -areas[i])[:6]
     reasons, best = [], None
     for i in cands:
-        r = _dart_from(i, n, labels, stats, centroids, cal)
+        r = _dart_from(i, n, labels, stats, centroids, cal, limit=BOARD_LIMIT + (60 if full is not None else 0))
+        if full is not None and not isinstance(r, str):
+            r = _extend_tip(r, full, cal)
         if isinstance(r, str):
             reasons.append(r)
         elif best is None or r["area"] > best["area"]:
@@ -237,7 +280,46 @@ def find_dart(bg, cur, cal, why=None):
     return best
 
 
-def _dart_from(main, n, labels, stats, centroids, cal):
+def _extend_tip(r, full, cal):
+    """Après retrait de l'ombre, le bout du fût près de la pointe (vu au même endroit par toutes les
+    caméras) a été retiré aussi : on reprend la pointe sur le masque complet, dans l'axe du fût.
+    L'ombre part dans une autre direction : la marche s'arrête à la vraie pointe."""
+    tip, tail = np.float64(r["tip_img"]), np.float64(r["tail_img"])
+    v = tip - tail
+    nv = np.linalg.norm(v)
+    if nv < 1e-6:
+        return r
+    v /= nv
+    perp = np.float64([-v[1], v[0]])
+    h, w = full.shape
+    last = tip
+    miss = 0
+    for k in range(1, 121):
+        p = tip + v * k
+        hit = False
+        for off in (-2, -1, 0, 1, 2):
+            x, y = (p + perp * off).round().astype(int)
+            if 0 <= x < w and 0 <= y < h and full[y, x]:
+                hit = True
+                break
+        if hit:
+            last, miss = p, 0
+        else:
+            miss += 1
+            if miss > 3:
+                break
+    tip_mm = cal.to_board(last)
+    if np.linalg.norm(tip_mm) > BOARD_LIMIT:
+        return "pointe hors cible"
+    r = dict(r, tip_img=last, tip=tip_mm)
+    step = (tail - last) / max(np.linalg.norm(tail - last), 1e-6) * min(25.0, r["length"] / 2)
+    d = cal.to_board(last + step) - tip_mm
+    nd = np.linalg.norm(d)
+    r["dir"] = d / nd if nd > 1e-6 else r["dir"]
+    return r
+
+
+def _dart_from(main, n, labels, stats, centroids, cal, limit=BOARD_LIMIT):
     """Fléchette construite autour de la tache main, ou la raison du refus (texte)."""
     areas = stats[:, cv2.CC_STAT_AREA]
     c0 = np.float64(centroids[main])
@@ -314,7 +396,7 @@ def _dart_from(main, n, labels, stats, centroids, cal):
     # La pointe est le bout opposé à l'empennage (qui part vers le joueur, donc vers la caméra).
     tip, tail = p0 + v * proj.min(), p0 + v * proj.max()
     tip_mm = cal.to_board(tip)
-    if np.linalg.norm(tip_mm) > BOARD_LIMIT:
+    if np.linalg.norm(tip_mm) > limit:
         return "pointe hors cible"
     step = (tail - tip) / max(np.linalg.norm(tail - tip), 1e-6) * min(25.0, length / 2)
     direction = cal.to_board(tip + step) - tip_mm
@@ -501,6 +583,13 @@ class Detector:
             return
         obs, why = [], {}
         before = {n: self.bg[n] for n in frames}
+        # Ombre portée (vidéoprojecteur) : ce que plusieurs caméras voient au même endroit de la cible.
+        masks = {n: diff_mask(self.bg[n], g) for n, g in frames.items()
+                 if cals.get(n) is not None and change[n] >= CHANGE_MIN / 3}
+        try:
+            flat = on_plane(masks, cals) if SHADOWS else {}
+        except (cv2.error, np.linalg.LinAlgError):
+            flat = {}
         for n, g in frames.items():
             cal = cals.get(n)
             if cal is None or change[n] < CHANGE_MIN / 3:
@@ -508,7 +597,7 @@ class Detector:
                     why[n] = "changement trop faible"
                 continue
             reasons = []
-            o = find_dart(self.bg[n], g, cal, reasons)
+            o = find_dart(self.bg[n], g, cal, reasons, remove=flat.get(n))
             if reasons:
                 why[n] = reasons[0]
             if o:

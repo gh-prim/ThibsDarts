@@ -51,7 +51,9 @@ LIGHT_SETTLE_MS = int(os.environ.get("LIGHT_SETTLE_MS", "800"))
 DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
 # Une caméra en bas (6 h), les deux autres à un tiers du tour de chaque côté (10 h et 2 h).
 PRESET_NAMES = ["Bas", "Haut gauche", "Haut droite"]
-DETECT_FPS = 10
+# Cadence de la détection (les caméras donnent 30 images/s). L'immobilité est jugée sur une durée
+# (VISION_CALM_MS, voir detector.py), donc changer la cadence ne change pas sa fiabilité.
+DETECT_FPS = float(os.environ.get("VISION_DETECT_FPS", "30"))
 # Mode test de la page /calib : détection active sans partie, pendant 10 min.
 TEST_DURATION = 600
 
@@ -285,9 +287,11 @@ class Registry:
     def on_dart(self, x, y, info):
         n, m = dart_at(x, y, self.calibs.rings())
         dart_id = str(uuid.uuid4())
-        print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}", flush=True)
+        delay = info.get("delay_ms")
+        took = f" en {delay} ms" if delay is not None else ""
+        print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}{took}", flush=True)
         self._event({"type": "dart", "id": dart_id, "segment": segment_name(n, m), "x": round(x, 1),
-                     "y": round(y, 1), "cams": info["cams"]})
+                     "y": round(y, 1), "cams": info["cams"], "delay_ms": delay})
         if self.client:
             self.client.publish(DART_TOPIC, dart_message(n, m, x, y, source="vision", dart_id=dart_id), qos=1)
         self.traces.save(dart_id, info)
@@ -296,7 +300,7 @@ class Registry:
             seen = {o["cam"]: {"tip": [round(float(v), 1) for v in o["tip"]], "area": int(o.get("area", 0)),
                                "length": round(float(o.get("length", 0)), 1)} for o in info["obs"]}
             self.debug.capture(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}",
-                               info["frames"], {"id": dart_id, "change": {k: round(float(v), 4) for k, v in info["change"].items()},
+                               info["frames"], {"id": dart_id, "delay_ms": delay, "change": {k: round(float(v), 4) for k, v in info["change"].items()},
                                                 "why": info.get("why"), "obs": seen}, kind="flechette")
 
     def correct(self, dart_id, number, multiplier, x=None, y=None):
@@ -316,9 +320,11 @@ class Registry:
 
     def detect_loop(self):
         """Lit les caméras calibrées à DETECT_FPS images/s et les passe au détecteur."""
-        was = False
+        was, seen, tick = False, {}, time.monotonic()
         while True:
-            time.sleep(1 / DETECT_FPS)
+            # Cadence fixe (le temps de calcul est compté dedans), sans dépasser celle des caméras.
+            tick = max(tick + 1 / DETECT_FPS, time.monotonic())
+            time.sleep(max(0.0, tick - time.monotonic()))
             if not self.detecting:
                 if was:
                     self.detector.reset()
@@ -334,22 +340,24 @@ class Registry:
                 self.rebase = False
                 self.detector.reset()
                 continue
-            frames, cals = {}, {}
+            frames, cals, fresh = {}, {}, False
             for cam in self.ordered():
                 cal = self.calibs.get(cam.label)
                 if cal is None or not cam.plugged:
                     continue
                 cam.touch()
-                frame = cam.frame
+                frame, seq = cam.frame, cam.frame_seq
                 if not cam.ready or frame is None:
                     continue
+                fresh = fresh or seen.get(cam.label) != seq
+                seen[cam.label] = seq
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 if (gray.shape[1], gray.shape[0]) != cal.size:
                     gray = cv2.resize(gray, cal.size)
                 frames[cam.label], cals[cam.label] = gray, cal
-            if frames:
+            if frames and fresh:
                 try:
-                    self.detector.step(frames, cals)
+                    self.detector.step(frames, cals, time.monotonic())
                 except cv2.error as e:
                     print(f"détection : {e}", flush=True)
 

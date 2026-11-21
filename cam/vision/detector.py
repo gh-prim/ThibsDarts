@@ -52,7 +52,11 @@ SMALL = (320, 180)
 DIFF_MIN = 28          # écart de gris pour dire qu'un pixel a changé
 CHANGE_MIN = 0.0006    # part de l'image (petite) changée pour lancer une analyse
 MOTION_MAX = 0.0008    # au-dessus : ça bouge encore
-STABLE_TICKS = 3       # images immobiles avant l'analyse
+# Immobilité jugée sur une durée, pas sur un nombre d'images : la même attente quelle que soit la cadence.
+# Chaque image est comparée à la précédente (main, fléchette en vol) et à la première image calme
+# (vibration lente d'une fléchette qui s'amortit, invisible d'une image à la suivante à 30 images/s).
+CALM_S = int(os.environ.get("VISION_CALM_MS", "150")) / 1000
+CALM_FRAMES = 2        # au moins ça d'images calmes, même si la durée est atteinte
 BIG_CHANGE = 0.05      # main ou bras devant la caméra
 EMPTY_MAX = 0.004      # cible "vide" : presque pareille qu'au début du tour
 DART_MIN_AREA = 120    # pixels pleine résolution
@@ -519,7 +523,10 @@ class Detector:
     def reset(self):
         self.bg, self.bg_small, self.empty_small, self.prev = {}, {}, {}, {}
         self.darts = 0
-        self.stable = 0
+        self.calm_ref = None  # (instant, petites images) du début de la période calme
+        self.calm_frames = 0
+        self.motion_at = None  # début du dernier mouvement : arrivée estimée de la fléchette
+        self.prev_t = None
         self.quiet_since = time.monotonic()
         self.last = None
         self.turn_over = False
@@ -536,8 +543,10 @@ class Detector:
         for d in (self.bg, self.bg_small, self.empty_small, self.prev):
             d.pop(name, None)
 
-    def step(self, frames, cals):
-        """frames : {nom: image grise pleine résolution}, cals : {nom: Calibration}."""
+    def step(self, frames, cals, now=None):
+        """frames : {nom: image grise pleine résolution}, cals : {nom: Calibration}.
+        now : instant des images (time.monotonic), maintenant par défaut."""
+        now = time.monotonic() if now is None else now
         self.ctx = None  # images avant / après de la décision en cours (mode Debug)
         smalls = {n: small_gray(g) for n, g in frames.items()}
         for n in list(self.bg):
@@ -549,13 +558,27 @@ class Detector:
             if self.darts == 0:
                 self.empty_small[n] = smalls[n]
         motion = max((changed(smalls[n], self.prev[n], 15) for n in frames if n not in new), default=0)
+        prev, prev_t = dict(self.prev), self.prev_t
         for n in frames:
             self.prev[n] = smalls[n]
+        self.prev_t = now
         if motion > MOTION_MAX:
-            self.stable = 0
+            if self.calm_ref is not None or self.motion_at is None:
+                self.motion_at = now
+            self.calm_ref, self.calm_frames = None, 0
             return
-        self.stable += 1
-        if self.stable < STABLE_TICKS:
+        if self.calm_ref is None:
+            # L'image d'avant est déjà pareille : le calme commence avec elle.
+            self.calm_ref = (now if prev_t is None else prev_t, {n: prev.get(n, smalls[n]) for n in frames})
+        else:
+            t0, ref = self.calm_ref
+            drift = max((changed(smalls[n], ref[n], 15) for n in frames if n in ref), default=0)
+            if drift > MOTION_MAX:
+                # Ça bouge encore, lentement : le calme repart d'ici.
+                self.calm_ref, self.calm_frames = (now, dict(smalls)), 0
+                return
+        self.calm_frames += 1
+        if self.calm_frames < CALM_FRAMES or now - self.calm_ref[0] < CALM_S:
             return
         change = {n: changed(smalls[n], self.bg_small[n]) for n in frames}
         if max(change.values(), default=0) < CHANGE_MIN:
@@ -652,8 +675,9 @@ class Detector:
             x1, y1 = min(bx + bw + 10, g.shape[1]), min(by + bh + 10, g.shape[0])
             crops[o["cam"]] = ((x0, y0, x1, y1), g[y0:y1, x0:x1].copy())
         self.placed.append(crops)
+        delay = None if self.motion_at is None else round((now - self.motion_at) * 1000)
         self.last = {"x": float(x), "y": float(y), "cams": {o["cam"]: [round(float(v), 1) for v in o["tip"]]
-                                                           for o in obs}, "ts": time.time()}
+                                                           for o in obs}, "ts": time.time(), "delay_ms": delay}
         # Tout ce qu'il faut pour la trace : images avant / après, ce que chaque caméra a vu.
         info = dict(self.last, raw=[float(raw[0]), float(raw[1])], obs=obs, change=change, why=why,
                     frames={n: (before[n], frames[n]) for n in frames})

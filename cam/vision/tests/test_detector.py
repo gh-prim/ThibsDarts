@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "simulato
 import detector  # noqa: E402
 from dartlink import SECTORS, dart_at, segment_name  # noqa: E402
 
+# Les tests enchaînent les images sans attendre : immobilité jugée sur le nombre d'images seulement.
+detector.CALM_S = 0.0
+
 W, H = 1280, 720
 F = math.hypot(W, H) / 2 / math.tan(math.radians(50))
 K = np.float64([[F, 0, W / 2], [0, F, H / 2], [0, 0, 1]])
@@ -308,3 +311,50 @@ def test_ring_points():
 if __name__ == "__main__":
     test_ring_points()
     print("bandes ok")
+
+
+def test_calm_is_a_duration():
+    """À 30 images/s : la fléchette est comptée après CALM_S de calme, et un lent mouvement
+    (invisible d'une image à la suivante) repousse la décision."""
+    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
+    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
+    got = []
+    det = detector.Detector(lambda x, y, info: got.append(info), lambda: None, log=print)
+    tex = board_texture()
+    thrown, light = [], [0]
+    base = {}
+
+    def frames():
+        if not base or tuple(thrown) not in base:
+            base[tuple(thrown)] = {n: render(R, t, tex, thrown) for n, (R, t) in cams.items()}
+        return {n: np.clip(g.astype(np.int16) + light[0], 0, 255).astype(np.uint8)
+                for n, g in base[tuple(thrown)].items()}
+
+    saved, dt, now = detector.CALM_S, 1 / 30, 0.0
+    detector.CALM_S = 0.15
+    try:
+        for _ in range(10):
+            det.step(frames(), cals, now)
+            now += dt
+        thrown.append((40, 60))
+        steps = 0
+        while not got and steps < 30:
+            det.step(frames(), cals, now)
+            now += dt
+            steps += 1
+        assert got, "pas détectée"
+        # 1 image de mouvement, puis 0,15 s de calme : 5 à 6 images, pas 1 ou 2.
+        assert 5 <= steps <= 7, steps
+        assert got[0]["delay_ms"] is not None and 140 <= got[0]["delay_ms"] <= 220, got[0]["delay_ms"]
+
+        # Deuxième fléchette, puis lent changement de 4 niveaux de gris par image (15 = seuil).
+        thrown.append((-120, 20))
+        det.step(frames(), cals, now)
+        now += dt
+        for i in range(12):
+            light[0] += 4
+            det.step(frames(), cals, now)
+            now += dt
+        assert len(got) == 1, "comptée pendant que l'image bougeait encore"
+    finally:
+        detector.CALM_S = saved

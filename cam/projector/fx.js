@@ -360,7 +360,8 @@
   }
   function clockDart(h) {
     const t = clock.target, now = performance.now();
-    if (clock.won) return;
+    // Tour fini côté hub (en attente du retrait) : la fléchette n'est pas comptée, pas d'animation.
+    if (clock.won || clock.wait) return;
     if (h.m && h.n === t) {
       const next = t < 20 ? t + 1 : null, end = clockHit(h, next);
       clock.prev = t; clock.switchAt = now + (next ? end - .2 : 0) * 1000;
@@ -560,6 +561,7 @@
         clock.prev = clock.target; clock.target = ct; clock.won = false;
         clock.switchAt = now + (wait + clockMove(clock.prev, ct, wait) - .2) * 1000;
       }
+      if (clock) clock.wait = !!d.wait;
       const co = Array.isArray(d.checkout) ? d.checkout.join(' ') : '';
       if (co && co !== lastCheckout && playing) checkoutFx(d.checkout);
       lastCheckout = co;

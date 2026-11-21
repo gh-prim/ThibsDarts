@@ -523,7 +523,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   @override
   Widget build(BuildContext context) {
     // Vidéoprojecteur, Around the clock : le secteur visé par le joueur en cours reste allumé.
-    if (_g case final ClockGame c when !c.isFinished) CamLink.instance.setGameInfo(widget.config.title, clock: c.target[c.currentIndex]);
+    if (_g case final ClockGame c when !c.isFinished) CamLink.instance.setGameInfo(widget.config.title, clock: c.target[c.currentIndex], wait: c.awaitingNextPlayer);
     _publish();
     final g = _g;
     final board = Stage(

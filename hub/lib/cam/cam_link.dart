@@ -23,6 +23,7 @@ class CamLink {
   static const turnTopic = 'thibsdarts/hub/turn';
   static const cmdTopic = 'thibsdarts/cam/cmd';
   static const projectorTopic = 'thibsdarts/hub/projector';
+  static const fxTopic = 'thibsdarts/hub/fx';
   static const debugSetTopic = 'thibsdarts/debug/set';
   static const debugStateTopic = 'thibsdarts/debug/state';
   static const debugMarkTopic = 'thibsdarts/debug/mark';
@@ -168,6 +169,9 @@ class CamLink {
     final payload = MqttClientPayloadBuilder()..addUTF8String(_scene);
     client.publishMessage(projectorTopic, MqttQos.atLeastOnce, payload.payload!, retain: true);
   }
+
+  /// Événement ponctuel pour le vidéoprojecteur (non retenu) : 180 = vidéo 180 sur la cible.
+  bool fx(String kind) => _publish(fxTopic, {'kind': kind, 'ts': DateTime.now().millisecondsSinceEpoch});
 
   /// Mode Debug : captures [on] et vidéoprojecteur [projector] (null : inchangé).
   bool setDebug({bool? on, bool? projector}) => _publish(debugSetTopic, {

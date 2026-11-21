@@ -28,6 +28,7 @@ DATA_DIR = os.environ.get("DARTOS_DATA", "/data/thibsdarts")
 CALIB_FILE = os.path.join(DATA_DIR, "projector.json")
 LIGHT_TOPIC = "thibsdarts/projector/light"
 HUB_PROJECTOR_TOPIC = "thibsdarts/hub/projector"
+HUB_FX_TOPIC = "thibsdarts/hub/fx"  # événements ponctuels du hub : {"kind": "180"}
 DEBUG_TOPIC = "thibsdarts/debug/state"  # mode Debug : {"on", "projector"} (projecteur éteint = image noire)
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEGMENTS = {"T20": (20, 3), "D16": (16, 2), "S5": (5, 1), "DB": (25, 2), "SB": (25, 1), "MISS": (0, 0)}
@@ -157,7 +158,8 @@ class Handler(BaseHTTPRequestHandler):
             name, ctype = FILES[path]
             with open(os.path.join(HERE, name), "rb") as f:
                 return self._send(200, f.read(), ctype)
-        for prefix, ext, ctype in (("/heads/", ".png", "image/png"), ("/fonts/", ".woff2", "font/woff2")):
+        for prefix, ext, ctype in (("/heads/", ".png", "image/png"), ("/fonts/", ".woff2", "font/woff2"),
+                                   ("/media/", ".mp4", "video/mp4")):
             name = path[len(prefix):]
             if path.startswith(prefix) and name.endswith(ext) and "/" not in name and not name.startswith("."):
                 p = os.path.join(HERE, prefix.strip("/"), name)
@@ -270,7 +272,7 @@ def start():
     client = new_client("dartos-cam-projector")
 
     def on_connect(c, *_):
-        for t in (DART_TOPIC, TAKEOUT_TOPIC, STATE_TOPIC, TURN_TOPIC, HUB_PROJECTOR_TOPIC, DEBUG_TOPIC):
+        for t in (DART_TOPIC, TAKEOUT_TOPIC, STATE_TOPIC, TURN_TOPIC, HUB_PROJECTOR_TOPIC, HUB_FX_TOPIC, DEBUG_TOPIC):
             c.subscribe(t, qos=1)
 
     def on_message(c, userdata, msg):
@@ -279,7 +281,8 @@ def start():
         except ValueError:
             return
         kind = {DART_TOPIC: "dart", TAKEOUT_TOPIC: "takeout", STATE_TOPIC: "state",
-                TURN_TOPIC: "turn", HUB_PROJECTOR_TOPIC: "game", DEBUG_TOPIC: "debug"}.get(msg.topic)
+                TURN_TOPIC: "turn", HUB_PROJECTOR_TOPIC: "game", HUB_FX_TOPIC: "fx",
+                DEBUG_TOPIC: "debug"}.get(msg.topic)
         if kind:
             # L'état de la partie et du hub est gardé pour une page qui (re)démarre.
             hub.send(kind, data, keep=kind in ("state", "game", "debug"))

@@ -190,13 +190,8 @@ struct LiveGameView: View {
         }
         .overlay {
             if game.winner == nil, is180, seen180 != turnKey {
-                Stage {
-                    CelebrationView(kind: .oneEighty, winner: game.current, isMe: game.current == me) {
-                        seen180 = turnKey
-                    }
-                    .padding(Td.s4)
-                }
-                .transition(.opacity)
+                Fete180VideoView { seen180 = turnKey }
+                    .transition(.opacity)
             }
         }
     }

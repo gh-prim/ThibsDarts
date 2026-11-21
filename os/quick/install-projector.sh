@@ -6,6 +6,6 @@
 set -euo pipefail
 HOST="${1:-thibs@dartos-cam.local}"
 cd "$(dirname "$0")"
-ssh "$HOST" 'sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cage chromium && sudo usermod -aG video,render,input thibs'
+ssh "$HOST" 'sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cage chromium wlr-randr && sudo usermod -aG video,render,input thibs'
 rsync -az thibsdarts-kiosk.service "$HOST":/tmp/
 ssh "$HOST" 'sudo mv /tmp/thibsdarts-kiosk.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable thibsdarts-kiosk && sudo systemctl restart thibsdarts-kiosk && systemctl is-active thibsdarts-kiosk'

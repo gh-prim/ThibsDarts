@@ -178,7 +178,8 @@
       if (!layout) {
         const sp = size * K * .08, widths = [...text].map(ch => g2.measureText(ch).width + sp);
         const arc = widths.reduce((a, b) => a + b, 0) / (rm * K);
-        const n = Math.max(1, Math.min(opts.n || 3, Math.floor(TAU / (arc * 1.35))));
+        const headArc = opts.head ? (r1 - r0) * 1.05 / rm : 0;
+        const n = Math.max(1, Math.min(opts.n || 3, Math.floor(TAU / (arc * 1.2 + headArc))));
         layout = { widths, arc, n };
       }
       const { widths, arc, n } = layout;
@@ -201,6 +202,15 @@
           g2.restore();
           a += da;
         });
+        // Tête de Thibaut entre deux inscriptions, qui tourne avec elles.
+        const im = opts.head && heads[opts.head];
+        if (ready(im)) {
+          const ah = mid + Math.PI / n, R = rm * K * (.85 + .15 * appear), hs = (r1 - r0) * .9 * K * appear;
+          const ar = im.naturalHeight / im.naturalWidth, w = hs / Math.max(1, ar), h = w * ar;
+          g2.save(); g2.translate(CX + Math.cos(ah) * R, CY + Math.sin(ah) * R); g2.rotate(Math.sin(t * 5 + c) * .15);
+          if (opts.grey) g2.filter = 'grayscale(1) brightness(.85)';
+          g2.drawImage(im, -w / 2, -h / 2, w, h); g2.restore();
+        }
       }
     });
   }
@@ -254,21 +264,21 @@
   /* ---------- une fléchette (x, y en mm, y vers le haut) ---------- */
   function dart(h) {
     if (!h.m) {
-      tint(1.8, '40,70,120', .45); rain(200, 1.2); headAt('p09', LAY.left, 2, 'sink', { grey: true });
-      ringTag('MISS', { n: 4, c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', speed: -.5 });
+      tint(1.8, '40,70,120', .45); rain(200, 1.2); 
+      ringTag('MISS', { n: 4, c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', speed: -.5, head: 'p09', grey: true });
     } else if (h.n === 25) {
       flash(0, 0, 120); vortex(1.3); fire(0, 0, 70, 1.1); shock(0, 0, 520, '255,122,47', 1.1); embers(0, 0, 40); neonWires(1.3, '255,225,77');
       if (h.m === 2) { godRays(0, 0, 1.4); headAt('p12', { x: 0, y: 0, w: 300, h: 300 }, 1.5, 'zoom'); }
-      ringTag(h.m === 2 ? 'BULL' : '25', { n: 4, speed: 1.1 });
+      ringTag(h.m === 2 ? 'BULL' : '25', { n: 4, speed: 1.1, head: pick(HAPPY) });
     } else if (h.m === 3) {
       flash(h.x, h.y, 90); lava(h, 1.5); fire(h.x, h.y, 100, 1.2); shock(h.x, h.y, 360); embers(h.x, h.y, 40); godRays(h.x, h.y, 1.2); crack(h.x, h.y, 5, 140);
-      ringTag('TRIPLE ' + h.n, { n: 3, speed: .9 }); headAt('p03', LAY.left, 2, 'spin');
+      ringTag('TRIPLE ' + h.n, { n: 3, speed: .9, head: 'p03' });
     } else if (h.m === 2) {
       flash(h.x, h.y, 80); lava(h, 1.4); lightningRing(RB.dIn, RB.dOut, 1.0); fire(h.x, h.y, 60, 1); shock(h.x, h.y, 280, '255,77,141'); neonWires(1.1);
-      ringTag('DOUBLE ' + h.n, { n: 3, speed: .8, c1: C.crep, c2: C.ciel }); headAt(pick(HAPPY), LAY.left, 1.8, 'pop');
+      ringTag('DOUBLE ' + h.n, { n: 3, speed: .8, c1: C.crep, c2: C.ciel, head: pick(HAPPY) });
     } else {
       flash(h.x, h.y, 60); lava(h, 1); fire(h.x, h.y, 30, .75); shock(h.x, h.y, 140, '255,225,77', .6); embers(h.x, h.y, 10);
-      ringTag(String(h.n), { n: 5, dur: 1.6, speed: .6, scale: .55 });
+      ringTag(String(h.n), { n: 4, dur: 1.6, speed: .6, scale: .55, head: pick(HAPPY) });
     }
   }
 

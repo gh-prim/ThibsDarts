@@ -145,12 +145,14 @@ class CamLink {
   void setScene(String scene) => _setProjector({'scene': scene});
 
   /// En partie : nom du jeu écrit sur le surround, et check-out proposé (cases allumées par le projecteur).
-  /// Around the clock : [clock] = numéro visé par le joueur en cours (secteur allumé par le projecteur).
-  void setGameInfo(String title, {List<String>? checkout, int? clock}) => _setProjector({
+  /// Around the clock : [clock] = numéro visé par le joueur en cours (animations du projecteur).
+  /// [wait] : tour fini, le hub ignore les fléchettes jusqu'au retrait : le projecteur aussi.
+  void setGameInfo(String title, {List<String>? checkout, int? clock, bool wait = false}) => _setProjector({
     'scene': 'jeu',
     'title': title,
     if (checkout != null && checkout.isNotEmpty) 'checkout': checkout,
     'clock': ?clock,
+    if (wait) 'wait': true,
   });
 
   void _setProjector(Map<String, dynamic> body) {

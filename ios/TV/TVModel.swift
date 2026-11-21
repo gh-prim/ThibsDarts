@@ -142,10 +142,11 @@ final class TVModel: ObservableObject {
             let key = "\(g.leg)-\(g.current)-\(g.players.map(\.remaining))"
             if key != last180Key {
                 last180Key = key
+                // La vidéo remet fete180 à false à la fin ; filet de sécurité si elle ne finit pas.
                 withAnimation(Td.sortie) { fete180 = true }
                 Task {
-                    try? await Task.sleep(for: .seconds(5))
-                    withAnimation(Td.sortie) { self.fete180 = false }
+                    try? await Task.sleep(for: .seconds(9))
+                    if self.last180Key == key { withAnimation(Td.sortie) { self.fete180 = false } }
                 }
             }
         }

@@ -32,6 +32,12 @@ class Sounds {
     }
   }
 
+  /// Coupe le son en cours (vidéo 180 passée d'un toucher).
+  static void stop() {
+    _playing?.kill();
+    _playing = null;
+  }
+
   /// Fléchette lancée par le joueur (caméras ou posée à la main) : son qui va avec.
   static void dart(DartThrow d) {
     if (d.isMiss) {

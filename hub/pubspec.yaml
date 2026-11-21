@@ -27,6 +27,7 @@ flutter:
   assets:
     - assets/brand/
     - assets/sounds/
+    - assets/fete180/
   fonts:
     - family: Inter
       fonts:

@@ -119,7 +119,19 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
     FX.dart({ n, m, x, y });
     light(true);
   });
-  es.addEventListener('test', e => { const d = JSON.parse(e.data); if (d.kind === '180') { FX.big180(); light(true); } });
+  // Vidéo 180 : chargée une fois en mémoire (blob), rejouée à chaque 180 annoncé par le hub.
+  const clip = document.createElement('video');
+  clip.muted = true; clip.playsInline = true; clip.preload = 'auto';
+  fetch('/media/fete180.mp4').then(r => r.ok ? r.blob() : null).then(b => { if (b) clip.src = URL.createObjectURL(b); }).catch(() => {});
+  function fete180() {
+    if (!projOn) return;
+    if (!clip.src) { FX.big180(); light(true); return; }
+    clip.currentTime = 0;
+    clip.play().then(() => { FX.video(clip); light(true); }).catch(() => { FX.big180(); light(true); });
+  }
+  es.addEventListener('test', e => { const d = JSON.parse(e.data); if (d.kind === '180') fete180(); });
+  // Le hub annonce un 180 en partie (thibsdarts/hub/fx).
+  es.addEventListener('fx', e => { const d = JSON.parse(e.data); if (d.kind === '180') fete180(); });
 
   let last = performance.now(), lastPing = 0;
   (function loop(now) {

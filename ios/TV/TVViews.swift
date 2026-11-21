@@ -83,8 +83,9 @@ struct TVLiveView: View {
             if let up = model.nextUp, let g = model.info?.game, g.winner == nil {
                 TVStage { TVNextUpView(up: up, game: g) }.transition(.opacity)
             }
-            if model.fete180, let g = model.info?.game {
-                TVFete180View(name: g.current).transition(.opacity)
+            if model.fete180 {
+                Fete180VideoView { withAnimation(Td.sortie) { model.fete180 = false } }
+                    .transition(.opacity)
             }
             if let m = model.music {
                 TVMiniPlayer(music: m)

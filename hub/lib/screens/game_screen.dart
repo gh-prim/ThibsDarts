@@ -15,6 +15,7 @@ import '../tournament/tournament.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/celebration.dart';
+import '../widgets/fete180_video.dart';
 import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/hit_tag.dart';
@@ -202,6 +203,7 @@ class _GameScreenState extends State<GameScreen> {
       final t = _game.currentTurn;
       if (_last != ThrowOutcome.bust && t.length == 3 && t.every((x) => x.sector == 20 && x.multiplier == 3)) {
         _show180 = true;
+        if (!_log.replaying) CamLink.instance.fx('180');
       }
       _hits.add(BoardHit(d, pos, _hits.length + 1, traceId: traceId));
       _tagDart = d;
@@ -756,11 +758,9 @@ class _GameScreenState extends State<GameScreen> {
             )
           else if (_show180)
             Positioned.fill(
-              child: Celebration(
-                kind: CelebrationKind.oneEighty,
-                winner: p.name,
-                onTap: () => setState(() => _show180 = false),
-              ),
+              child: Fete180Video(onDone: () {
+                if (mounted) setState(() => _show180 = false);
+              }),
             ),
         ],
       ),

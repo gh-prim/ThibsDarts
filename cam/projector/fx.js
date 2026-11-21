@@ -573,6 +573,21 @@
       Object.keys(D).forEach(k => { RB[k] = typeof r[k] === 'number' && r[k] > 20 && r[k] < 600 ? r[k] : D[k]; });
     },
     setProjector(p) { if (p && isFinite(p.x) && isFinite(p.y) && isFinite(p.z)) PROJ = p; },
+    // Vidéo 180 (clip Blender) posée sur la cible et le surround, coupée au bord du surround.
+    // Fondu d'entrée et de sortie ; la vidéo est muette ici (le son sort du petit écran et de la TV).
+    video(v) {
+      const dur = isFinite(v.duration) && v.duration > 0 ? v.duration : 6;
+      blackout(dur, 0, .25);
+      fx(dur, (k, t) => {
+        if (v.readyState < 2 || !v.videoWidth) return;
+        const R = RB.sur * K, a = Math.max(0, Math.min(1, t / .25, (dur - t) / .35));
+        const s = Math.min(v.videoWidth, v.videoHeight);
+        g2.globalAlpha = a;
+        g2.beginPath(); g2.arc(CX, CY, R, 0, TAU); g2.clip();
+        g2.fillStyle = '#000'; g2.fillRect(CX - R, CY - R, 2 * R, 2 * R);
+        g2.drawImage(v, (v.videoWidth - s) / 2, (v.videoHeight - s) / 2, s, s, CX - R, CY - R, 2 * R, 2 * R);
+      });
+    },
     // Démonstration complète d'un 180 (fin de tour, pas de fléchette attendue juste après).
     big180() {
       blackout(.5, .1); flash(0, 0, 700); shatter(2.4); shake = 1;

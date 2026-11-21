@@ -34,6 +34,10 @@ class Sounds {
 
   /// Fléchette lancée par le joueur (caméras ou posée à la main) : son qui va avec.
   static void dart(DartThrow d) {
-    if (d.isMiss) play('miss');
+    if (d.isMiss) {
+      play('miss');
+    } else if (d.sector == 20 && d.multiplier == 3) {
+      play('t20');
+    }
   }
 }

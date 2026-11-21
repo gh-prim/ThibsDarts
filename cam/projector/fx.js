@@ -7,7 +7,7 @@
   const ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
   const RB = { bull: 6.35, obull: 15.9, tIn: 99, tOut: 107, dIn: 162, dOut: 170, board: 225.5, sur: 380, ring: 410 };
   const C = { fluo: '#FFE14D', sunset: '#FF7A2F', crep: '#FF4D8D', ciel: '#4FA3FF' };
-  const HAPPY = ['p01', 'p04', 'p05', 'p08', 'p11'];
+  const HAPPY = ['p01', 'p04', 'p05', 'p08', 'p11', 'p13', 'p16', 'p18'];
   // Zones libres autour de la cible (projecteur sur la baie, à gauche) : score, têtes, tags.
   // Tout reste sur le surround (anneau gris entre le bord de la cible et son bord extérieur) : rien sur le mur.
   const LAY = { score: { x: -255, y: 150, w: 110, h: 100 }, left: { x: -255, y: -150, w: 110, h: 110 }, tag: { x: 300, y: 0, w: 120, h: 110 } };
@@ -26,7 +26,7 @@
 
   function init(canvas, headUrl) {
     canvas.width = LCW; canvas.height = LCH; g2 = canvas.getContext('2d');
-    for (let i = 1; i <= 12; i++) { const n = 'p' + String(i).padStart(2, '0'); const im = new Image(); im.src = headUrl + n + '.png'; heads[n] = im; }
+    for (let i = 1; i <= 18; i++) { const n = 'p' + String(i).padStart(2, '0'); const im = new Image(); im.src = headUrl + n + '.png'; heads[n] = im; }
   }
   const ready = im => im && im.complete && im.naturalWidth > 0;
 

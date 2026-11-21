@@ -285,27 +285,14 @@
 
 
   /* ---------- Around the clock : un secteur allumé, touché, raté, passage au suivant, tour bouclé ---------- */
-  // clock = { target, prev, switchAt } : numéro visé (1 à 20). Avant switchAt, l'image fixe montre encore prev.
+  // clock = { target, prev, switchAt } : numéro visé (1 à 20). switchAt : fin de l'animation en cours.
   let clock = null;
   const secAng = n => (ORDER.indexOf(n) * 18 - 90) * Math.PI / 180;   // angle du milieu du secteur (canevas)
   const secMid = (n, r) => { const a = ORDER.indexOf(n) * 18 * Math.PI / 180; return [Math.sin(a) * r, Math.cos(a) * r]; };
   function sector(n, r0, r1) { segPath(ORDER.indexOf(n), r0, r1); }
-  function shownTarget(now) { return clock && clock.prev && now < clock.switchAt ? clock.prev : clock && clock.target; }
-  // Image fixe : cible assombrie, secteur visé plein blanc chaud + contour fluo, numéro sur le surround,
-  // cadran de 20 points sur le bord (orange : faits, fluo : visé). Pas de nom du jeu : il cacherait le numéro.
-  function clockSteady(bl, now) {
-    const t = shownTarget(now);
-    g2.fillStyle = `rgba(255,244,230,${.14 * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
-    for (let n = 1; n < t; n++) { sector(n, RB.obull, RB.dOut); g2.fillStyle = `rgba(255,122,47,${.22 * bl})`; g2.fill(); }
-    sector(t, RB.obull, RB.board); g2.fillStyle = `rgba(255,250,236,${.97 * bl})`; g2.fill();
-    g2.strokeStyle = `rgba(255,225,77,${bl})`; g2.lineWidth = 5; g2.lineJoin = 'round'; g2.stroke();
-    for (let n = 1; n <= 20; n++) {
-      const a = secAng(n), X = CX + Math.cos(a) * (RB.sur - 14) * K, Y = CY + Math.sin(a) * (RB.sur - 14) * K;
-      g2.fillStyle = n === t ? `rgba(255,225,77,${bl})` : n < t ? `rgba(255,122,47,${.85 * bl})` : `rgba(255,236,220,${.25 * bl})`;
-      g2.beginPath(); g2.arc(X, Y, (n === t ? 9 : 6) * K, 0, TAU); g2.fill();
-    }
-    arcText(String(t), secAng(t), (RB.sur - RB.board) * .62, bl, C.fluo, C.fluo);
-  }
+  // Pas d'image fixe propre au mode : la lumière de la cible ne change jamais pendant la volée,
+  // sinon les caméras doivent reprendre un fond et avalent une fléchette arrivée entre-temps.
+  // Le numéro visé se voit dans les animations (passage au suivant, raté).
   // Passage au numéro suivant : une comète file sur le surround jusqu'au nouveau secteur,
   // qui se remplit du centre vers l'extérieur, puis son numéro claque sur le surround.
   function clockMove(from, to, delay) {
@@ -321,14 +308,14 @@
       }
     }, delay);
     const t1 = delay + dur;
-    fx(.7, (k) => {
-      const r = RB.obull + (RB.board - RB.obull) * ease(Math.min(1, k * 1.8)), al = k < .75 ? 1 : (1 - k) / .25;
+    fx(1.6, (k) => {
+      const r = RB.obull + (RB.board - RB.obull) * ease(Math.min(1, k * 4)), al = k < .8 ? 1 : (1 - k) / .2;
       sector(to, RB.obull, r); g2.fillStyle = `rgba(255,225,77,${.9 * al})`; g2.fill();
       g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,255,255,${al})`; g2.lineWidth = 6; g2.stroke();
     }, t1);
     const [mx, my] = secMid(to, 200); shock(mx, my, 160, '255,225,77', .6, t1 + .25);
-    fx(.6, (k, t) => {
-      const s = 1 + .9 * (1 - ease(Math.min(1, t / .22))), al = k > .7 ? (1 - k) / .3 : 1;
+    fx(1.4, (k, t) => {
+      const s = 1 + .9 * (1 - ease(Math.min(1, t / .22))), al = k > .8 ? (1 - k) / .2 : 1;
       arcText(String(to), secAng(to), (RB.sur - RB.board) * .62 * s, al, C.fluo, C.sunset);
     }, t1 + .25);
     return t1 + .5;
@@ -382,8 +369,7 @@
   }
 
   /* ---------- image de chaque instant ---------- */
-  function steady(bl, now) {
-    if (clock) return clockSteady(bl, now);
+  function steady(bl) {
     // Image fixe entre deux animations : les caméras la prennent comme fond, elle ne doit pas bouger.
     g2.fillStyle = `rgba(255,244,230,${(playing ? .9 : .55) * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
     ringPath(RB.board, RB.sur); g2.fillStyle = `rgba(255,236,220,${(playing ? .3 : .2) * bl})`; g2.fill();
@@ -519,9 +505,9 @@
     const busy = live.some(e => !e.base) || parts.length > 0;
     fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
     boardLight = Math.min(boardLight, fxDim);
-    if (boardLight > 0.01) { if (playing) steady(boardLight, now); else idle(now / 1000, boardLight); }
+    if (boardLight > 0.01) { if (playing) steady(boardLight); else idle(now / 1000, boardLight); }
     // Nom du jeu : pleine intensité hors effets, caché pendant le check-out (la route tourne à sa place).
-    if (playing && !clock && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
+    if (playing && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
     parts = parts.filter(p => { p.life += dt; return p.life < p.max; });

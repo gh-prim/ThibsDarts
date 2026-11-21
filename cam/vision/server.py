@@ -229,16 +229,47 @@ class Registry:
         if self.debug and self.debug.on and ctx:
             self.debug.capture(m, ctx["frames"], {"change": ctx["change"]})
 
-    def mark(self):
-        """Bouton Signaler du hub (mode Debug) : images du moment de chaque caméra."""
+    def _now_frames(self):
+        cams = [c for c in self.ordered() if c.plugged]
+        for cam in cams:
+            cam.touch()  # hors partie, les caméras dorment : on les réveille le temps d'une image
+        for cam in cams:
+            if cam.frame is None:
+                cam.wait_frame(cam.seq, timeout=3.0)
         frames = {}
-        for cam in self.ordered():
+        for cam in cams:
             frame = cam.frame if cam.plugged else None
             if frame is not None:
                 frames[cam.label] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        last = [e for e in self.events[-5:]]
+        return frames
+
+    def mark(self, d=None):
+        """Bouton Signaler du hub (mode Debug) : images du moment de chaque caméra."""
+        d = d if isinstance(d, dict) else {}
         print("debug : signalé depuis le hub", flush=True)
-        self.debug.capture("signalé depuis le hub", frames, {"derniers": last}, kind="SIGNALE")
+        self.debug.capture("signalé depuis le hub", self._now_frames(),
+                           {"game": d.get("game"), "derniers": self.events[-5:]}, kind="SIGNALE")
+
+    def truth(self, d):
+        """Vérité donnée sur le hub en mode Debug : rangée avec les photos de la fléchette détectée
+        (trace), ou celles du moment pour une fléchette que les caméras n'ont pas vue."""
+        kind = str(d.get("kind", "?"))
+        text = {"correction": f"correction : détectée {d.get('detected')}, en vrai {d.get('real')}",
+                "fantome": f"fantôme : {d.get('detected')} détectée alors que rien n'a été tiré",
+                "manuelle": f"pas détectée : {d.get('real')} posée à la main"}.get(kind, f"vérité {kind}")
+        print(f"debug : {text}", flush=True)
+        frames = {}
+        tid = d.get("trace")
+        if tid and re.fullmatch(r"[0-9a-f-]{36}", str(tid)):
+            tdir = os.path.join(self.traces.dir, tid)
+            for name in ("Bas", "Haut gauche", "Haut droite"):
+                s = traces.slug(name)
+                a, b = (cv2.imread(os.path.join(tdir, f"{s}-{k}.jpg"), cv2.IMREAD_GRAYSCALE) for k in ("avant", "apres"))
+                if a is not None and b is not None:
+                    frames[name] = (a, b)
+        if not frames:
+            frames = self._now_frames()
+        self.debug.capture(text, frames, {"verite": d, "derniers": self.events[-5:]}, kind=f"verite-{kind}")
 
     @property
     def mode(self):
@@ -670,6 +701,7 @@ def main():
         c.subscribe(LIGHT_TOPIC, qos=0)
         c.subscribe(debugmode.SET_TOPIC, qos=1)
         c.subscribe(debugmode.MARK_TOPIC, qos=1)
+        c.subscribe(debugmode.TRUTH_TOPIC, qos=1)
         registry.publish_status("online")
         registry.debug.publish_state()
 
@@ -703,8 +735,20 @@ def main():
             registry.debug.set(d)
 
     def on_debug_mark(c, userdata, msg):
-        if not msg.retain:
+        if msg.retain:
+            return
+        try:
+            registry.mark(json.loads(msg.payload))
+        except ValueError:
             registry.mark()
+
+    def on_debug_truth(c, userdata, msg):
+        try:
+            d = json.loads(msg.payload)
+        except ValueError:
+            return
+        if isinstance(d, dict) and not msg.retain and registry.debug.on:
+            registry.truth(d)
 
     def on_turn(c, userdata, msg):
         registry.detector.end_turn()
@@ -741,6 +785,7 @@ def main():
     client.message_callback_add(LIGHT_TOPIC, on_light)
     client.message_callback_add(debugmode.SET_TOPIC, on_debug_set)
     client.message_callback_add(debugmode.MARK_TOPIC, on_debug_mark)
+    client.message_callback_add(debugmode.TRUTH_TOPIC, on_debug_truth)
     registry.debug.client = client
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)

@@ -4,6 +4,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../cam/cam_link.dart';
 import '../cam/cam_traces.dart';
 import '../theme/tokens.dart';
 import '../widgets/controls.dart';
@@ -213,13 +214,16 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
                                 onTap: () => setState(() => _sector = 0),
                               ),
                             ),
+                            // Mode Debug : fléchette vue alors que rien n'a été tiré. Elle devient un raté.
+                            if (CamLink.instance.debugOn)
+                              _ActionButton(label: 'Fantôme', icon: LucideIcons.ghost, onTap: () => _validate(ghost: true)),
                             _ActionButton(label: 'Annuler', tertiary: true, onTap: () => Navigator.of(context).pop()),
                             Expanded(
                               flex: 14,
                               child: _ActionButton(
                                 label: 'Valider',
                                 primary: true,
-                                onTap: _validate,
+                                onTap: () => _validate(),
                               ),
                             ),
                           ],
@@ -242,12 +246,18 @@ class _CorrectionScreenState extends State<CorrectionScreen> {
       i == _index && _tapped != null ? BoardHit(_dart, _tapped!, h.n, traceId: h.traceId) : h,
   ];
 
-  void _validate() {
+  void _validate({bool ghost = false}) {
     final id = _traceId;
-    final pos = _position;
+    final dart = ghost ? const DartThrow.miss() : _dart;
+    final pos = ghost ? null : _position;
+    final before = _index < widget.turn.length ? widget.turn[_index] : null;
+    // Mode Debug : la vérité part au Pi 5, rangée avec les photos de la détection.
+    CamLink.instance.debugTruth(ghost ? 'fantome' : 'correction',
+        detected: before, real: ghost ? null : dart, traceId: id, position: pos);
     // La vraie fléchette part au Pi 5 : exemple juste pour l'apprentissage de la détection.
-    if (id != null) CamTraces.correct(id, _dart, pos);
-    Navigator.of(context).pop(Correction(_index, _dart, position: pos));
+    // Une fantôme n'est pas une fléchette : rien à apprendre de sa position.
+    if (id != null && !ghost) CamTraces.correct(id, dart, pos);
+    Navigator.of(context).pop(Correction(_index, dart, position: pos));
   }
 
   Widget _key(int n) {

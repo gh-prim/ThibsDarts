@@ -11,7 +11,9 @@ Captures dans <données>/debug/<AAAAMMJJ-HHMMSS-mmm>-<type>/ :
 Les 400 dernières captures sont gardées. Écriture dans un fil à part : la détection n'attend pas.
 
 MQTT : thibsdarts/debug/set {on?, projector?} (hub -> Pi 5), thibsdarts/debug/state retenu (Pi 5 -> tous),
-thibsdarts/debug/mark {} (hub -> Pi 5), thibsdarts/debug/event {ts, kind, text, dir} (Pi 5 -> hub).
+thibsdarts/debug/mark {game?} (hub -> Pi 5), thibsdarts/debug/event {ts, kind, text, dir} (Pi 5 -> hub),
+thibsdarts/debug/truth {kind, detected?, real?, trace?, x?, y?, game?} (hub -> Pi 5) : la vérité donnée sur le hub,
+rangée dans ...-verite-<kind>/ avec les photos de la trace (ou celles du moment si la fléchette n'a pas été vue).
 """
 
 import json
@@ -27,6 +29,7 @@ SET_TOPIC = "thibsdarts/debug/set"
 STATE_TOPIC = "thibsdarts/debug/state"
 MARK_TOPIC = "thibsdarts/debug/mark"
 EVENT_TOPIC = "thibsdarts/debug/event"
+TRUTH_TOPIC = "thibsdarts/debug/truth"  # hub -> Pi 5 : correction, fantome, manuelle (vérité du joueur)
 KEEP = 400
 
 

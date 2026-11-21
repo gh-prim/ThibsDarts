@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../cam/cam_link.dart';
 import '../game/paused_game.dart';
 import '../game_config.dart';
 import '../lobby/lobby.dart';
@@ -13,7 +12,6 @@ import '../widgets/music_button.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
-import 'debug_screen.dart';
 import 'mode_game_screen.dart';
 import 'new_game_screen.dart';
 import 'settings_screen.dart';
@@ -39,27 +37,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _open(SalonScreen(config: cfg, opened: true));
       return true;
     };
-    // Mode Debug resté actif sur le Pi 5 (après un redémarrage ou une mise à jour) : on y retourne.
-    CamLink.instance.debugState.addListener(_debugResume);
-    _debugResume();
-  }
-
-  bool _inDebug = false;
-
-  void _debugResume() {
-    if (CamLink.instance.debugState.value?['on'] != true || _inDebug) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || _inDebug || ModalRoute.of(context)?.isCurrent != true) return;
-      _inDebug = true;
-      await _open(const DebugScreen());
-      _inDebug = false;
-    });
   }
 
   @override
   void dispose() {
     Lobby.instance.remoteOpen = null;
-    CamLink.instance.debugState.removeListener(_debugResume);
     super.dispose();
   }
 

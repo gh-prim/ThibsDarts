@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'cam/cam_link.dart';
 import 'cam/cam_pairing.dart';
 import 'screens/boot_screen.dart';
+import 'screens/debug_screen.dart';
 import 'theme/tokens.dart';
 
 void main() {
@@ -33,7 +34,16 @@ class DartOsApp extends StatelessWidget {
         colorScheme: const ColorScheme.dark(primary: Td.sunset, secondary: Td.crepuscule, surface: Td.asphalte),
       ),
       home: const Scaffold(body: BootScreen()),
-      builder: (context, child) => pixelAspect == 1 ? child! : _SquarePixels(child: child!),
+      builder: (context, child) {
+        // Mode Debug : pastille Signaler par-dessus tous les écrans.
+        final app = Stack(
+          children: [
+            child!,
+            const Positioned(left: 8, bottom: 8, child: DebugBadge()),
+          ],
+        );
+        return pixelAspect == 1 ? app : _SquarePixels(child: app);
+      },
     );
   }
 }

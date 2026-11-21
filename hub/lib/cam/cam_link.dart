@@ -26,6 +26,31 @@ class CamLink {
   static const debugStateTopic = 'thibsdarts/debug/state';
   static const debugMarkTopic = 'thibsdarts/debug/mark';
   static const debugEventTopic = 'thibsdarts/debug/event';
+  static const debugTruthTopic = 'thibsdarts/debug/truth';
+
+  /// Vrai si le mode Debug est actif sur le Pi 5.
+  bool get debugOn => debugState.value?['on'] == true;
+
+  /// Partie ou entraînement en cours (ex. "série T20 de 15 fléchettes"), joint aux vérités du mode Debug.
+  String? debugGame;
+
+  /// Mode Debug : la vérité d'une fléchette, donnée par le joueur sur le hub.
+  /// [kind] : correction (mauvais segment), fantome (pas une fléchette), manuelle (fléchette pas détectée,
+  /// ajoutée à la main). Le Pi 5 la range avec les photos de la détection.
+  void debugTruth(String kind, {DartThrow? detected, DartThrow? real, String? traceId, Offset? position}) {
+    if (!debugOn) return;
+    String? name(DartThrow? d) => d == null ? null : d.isMiss ? 'MISS' : d.label;
+    _publish(debugTruthTopic, {
+      'kind': kind,
+      'detected': ?name(detected),
+      'real': ?name(real),
+      'trace': ?traceId,
+      'x': ?position?.dx,
+      'y': ?position?.dy,
+      'game': ?debugGame,
+      'ts': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
 
   /// Mode Debug du Pi 5 : {on, projector}, retenu sur le broker (gardé après un redémarrage).
   final ValueNotifier<Map<String, dynamic>?> debugState = ValueNotifier(null);
@@ -119,7 +144,7 @@ class CamLink {
   });
 
   /// Bouton Signaler : le Pi 5 garde les images du moment.
-  bool debugMark() => _publish(debugMarkTopic, {'ts': DateTime.now().millisecondsSinceEpoch});
+  bool debugMark() => _publish(debugMarkTopic, {'ts': DateTime.now().millisecondsSinceEpoch, 'game': ?debugGame});
 
   bool _publish(String topic, Map<String, dynamic> body) {
     final client = _client;

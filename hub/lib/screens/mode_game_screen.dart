@@ -121,6 +121,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _botPlay());
     Lobby.instance.stopGame = _stopFromPhone;
     CamLink.instance
+      ..debugGame = widget.config.label
       ..onDart = _camDart
       ..onTakeout = _camTakeout
       ..setPlaying(true);
@@ -220,9 +221,16 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     });
   }
 
-  void _onBoardTap(Offset p) => _throw(dartAt(p), p);
+  void _onBoardTap(Offset p) {
+    // Mode Debug : fléchette posée à la main, donc pas vue par les caméras.
+    CamLink.instance.debugTruth('manuelle', real: dartAt(p), position: p);
+    _throw(dartAt(p), p);
+  }
 
-  void _outOfBoard() => _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
+  void _outOfBoard() {
+    CamLink.instance.debugTruth('manuelle', real: const DartThrow.miss());
+    _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
+  }
 
   Future<void> _correct() async {
     if (_g.isFinished || _botTurn) return;

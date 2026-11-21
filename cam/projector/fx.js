@@ -167,6 +167,43 @@
         g2.fillStyle = gr; g2.fillText(l, 0, ly); });
     });
   }
+  // Texte écrit en courbe sur le surround, répété n fois, qui tourne autour de la cible.
+  // Lettres debout vers l'extérieur, lecture dans le sens des aiguilles d'une montre.
+  function ringTag(text, opts = {}) {
+    const dur = opts.dur || 2.2, speed = opts.speed ?? .7, start = rnd(0, TAU);
+    let layout = null;
+    fx(dur, (k, t) => {
+      const r0 = RB.board + 6, r1 = RB.sur - 6, rm = (r0 + r1) / 2, size = (r1 - r0) * (opts.scale || .62);
+      g2.font = Math.round(size * K) + 'px "Permanent Marker","Space Grotesk",sans-serif';
+      if (!layout) {
+        const sp = size * K * .08, widths = [...text].map(ch => g2.measureText(ch).width + sp);
+        const arc = widths.reduce((a, b) => a + b, 0) / (rm * K);
+        const n = Math.max(1, Math.min(opts.n || 3, Math.floor(TAU / (arc * 1.35))));
+        layout = { widths, arc, n };
+      }
+      const { widths, arc, n } = layout;
+      const appear = ease(Math.min(1, t / .35)), alpha = k > .8 ? (1 - k) / .2 : 1;
+      // Départ rapide qui ralentit, puis rotation régulière.
+      const turn = start + speed * t + (1 - appear) * -1.2;
+      g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.lineJoin = 'round';
+      g2.lineWidth = Math.max(3, size * K * .12); g2.globalAlpha = alpha;
+      for (let c = 0; c < n; c++) {
+        // Dans la moitié basse, lettres tête vers le centre et lecture inversée : toujours lisible du pas de tir.
+        const mid = turn + c * TAU / n, low = Math.sin(mid) > 0, dir = low ? -1 : 1;
+        let a = mid - dir * arc / 2;
+        [...text].forEach((ch, i) => {
+          const da = dir * widths[i] / (rm * K), am = a + da / 2;
+          const R = rm * K * (.85 + .15 * appear);
+          g2.save(); g2.translate(CX + Math.cos(am) * R, CY + Math.sin(am) * R); g2.rotate(am + (low ? -Math.PI / 2 : Math.PI / 2));
+          g2.scale(appear, appear);
+          g2.strokeStyle = opts.stroke || C.fluo; g2.strokeText(ch, 0, 0);
+          g2.fillStyle = (i + c) % 2 ? (opts.c2 || C.crep) : (opts.c1 || C.sunset); g2.fillText(ch, 0, 0);
+          g2.restore();
+          a += da;
+        });
+      }
+    });
+  }
   function headAt(name, Z, dur, mode, opts = {}) {
     fx(dur, (k, t) => {
       const im = heads[name]; if (!ready(im)) return;
@@ -218,19 +255,20 @@
   function dart(h) {
     if (!h.m) {
       tint(1.8, '40,70,120', .45); rain(200, 1.2); headAt('p09', LAY.left, 2, 'sink', { grey: true });
-      sprayTag('MISS', 'R', 0, 80, { c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', rot: .1 });
+      ringTag('MISS', { n: 4, c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', speed: -.5 });
     } else if (h.n === 25) {
       flash(0, 0, 120); vortex(1.3); fire(0, 0, 70, 1.1); shock(0, 0, 520, '255,122,47', 1.1); embers(0, 0, 40); neonWires(1.3, '255,225,77');
       if (h.m === 2) { godRays(0, 0, 1.4); headAt('p12', { x: 0, y: 0, w: 300, h: 300 }, 1.5, 'zoom'); }
-      sprayTag(h.m === 2 ? 'BULL' : '25', 'R', 0, 85);
+      ringTag(h.m === 2 ? 'BULL' : '25', { n: 4, speed: 1.1 });
     } else if (h.m === 3) {
       flash(h.x, h.y, 90); lava(h, 1.5); fire(h.x, h.y, 100, 1.2); shock(h.x, h.y, 360); embers(h.x, h.y, 40); godRays(h.x, h.y, 1.2); crack(h.x, h.y, 5, 140);
-      sprayTag('TRIPLE\n' + h.n, 'R', 0, 66); headAt('p03', LAY.left, 2, 'spin');
+      ringTag('TRIPLE ' + h.n, { n: 3, speed: .9 }); headAt('p03', LAY.left, 2, 'spin');
     } else if (h.m === 2) {
       flash(h.x, h.y, 80); lava(h, 1.4); lightningRing(RB.dIn, RB.dOut, 1.0); fire(h.x, h.y, 60, 1); shock(h.x, h.y, 280, '255,77,141'); neonWires(1.1);
-      sprayTag('DOUBLE\n' + h.n, 'R', 0, 66); headAt(pick(HAPPY), LAY.left, 1.8, 'pop');
+      ringTag('DOUBLE ' + h.n, { n: 3, speed: .8, c1: C.crep, c2: C.ciel }); headAt(pick(HAPPY), LAY.left, 1.8, 'pop');
     } else {
       flash(h.x, h.y, 60); lava(h, 1); fire(h.x, h.y, 30, .75); shock(h.x, h.y, 140, '255,225,77', .6); embers(h.x, h.y, 10);
+      ringTag(String(h.n), { n: 5, dur: 1.6, speed: .6, scale: .55 });
     }
   }
 
@@ -319,7 +357,7 @@
     big180() {
       blackout(.5, .1); flash(0, 0, 700); shatter(2.4); shake = 1;
       headAt('p07', { x: 0, y: 0, w: 330, h: 330 }, 1.6, 'pop');
-      headCarousel(['p07', 'p03', 'p07', 'p11', 'p07', 'p04', 'p07', 'p08'], 3); sprayTag('180', 0, 0, 200, { dur: 3, rot: -.1 });
+      headCarousel(['p07', 'p03', 'p07', 'p11', 'p07', 'p04', 'p07', 'p08'], 3); sprayTag('180', 0, 0, 200, { dur: 3, rot: -.1 }); ringTag('180', { n: 6, dur: 3, speed: 1.4 });
       confetti(200); [[-420, 250], [420, 250], [-200, 300], [220, 290]].forEach(([x, y], i) => setTimeout(() => fireworks(x, y, [C.fluo, C.crep, C.sunset, C.ciel][i]), 400 + i * 300));
     },
   };

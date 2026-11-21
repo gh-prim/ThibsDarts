@@ -18,7 +18,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const P2 = (x, y) => [CX + x * K, CY - y * K];
 
-  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1, scene = 'accueil';
+  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1, scene = 'accueil', title = '', lastCheckout = '', coUntil = 0;
   // Position du projecteur par rapport au centre de la cible (mm, z = distance au mur) : sert à placer
   // l'ombre de l'arceau et des caméras, qu'on laisse noires pour ne pas éclairer les objectifs.
   let PROJ = { x: -700, y: -530, z: 1550 };
@@ -287,6 +287,7 @@
     // Image fixe entre deux animations : les caméras la prennent comme fond, elle ne doit pas bouger.
     g2.fillStyle = `rgba(255,244,230,${(playing ? .9 : .55) * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
     ringPath(RB.board, RB.sur); g2.fillStyle = `rgba(255,236,220,${(playing ? .3 : .2) * bl})`; g2.fill();
+    if (title) return;  // en partie, le nom du jeu prend la place des deux arcs
     g2.save(); g2.globalCompositeOperation = 'lighter'; g2.lineWidth = 12;
     g2.strokeStyle = `rgba(255,122,47,${.6 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, -2.2, -0.9); g2.stroke();
     g2.strokeStyle = `rgba(255,77,141,${.55 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, 0.94, 2.24); g2.stroke();
@@ -334,6 +335,64 @@
     g2.restore();
     idleHeads(t, scene === 'partie' ? -.18 : scene === 'entrainement' ? .25 : .12, bl);
   }
+  /* ---------- en partie : nom du jeu sur le surround (fixe : les caméras le prennent comme fond) ---------- */
+  function arcText(text, mid, size, alpha, c1, c2) {
+    const r0 = RB.board + 6, r1 = RB.sur - 6, rm = (r0 + r1) / 2;
+    g2.font = Math.round(size * K) + 'px "Permanent Marker","Space Grotesk",sans-serif';
+    g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.lineJoin = 'round'; g2.lineWidth = Math.max(3, size * K * .12);
+    const chars = [...text], widths = chars.map(ch => g2.measureText(ch).width + size * K * .08);
+    const arc = widths.reduce((a, b) => a + b, 0) / (rm * K), low = Math.sin(mid) > 0, dir = low ? -1 : 1;
+    let a = mid - dir * arc / 2;
+    g2.save(); g2.globalAlpha = alpha;
+    chars.forEach((ch, i) => { const da = dir * widths[i] / (rm * K), am = a + da / 2;
+      g2.save(); g2.translate(CX + Math.cos(am) * rm * K, CY + Math.sin(am) * rm * K); g2.rotate(am + (low ? -Math.PI / 2 : Math.PI / 2));
+      g2.strokeStyle = 'rgba(18,18,20,.9)'; g2.strokeText(ch, 0, 0); g2.fillStyle = i % 2 ? c2 : c1; g2.fillText(ch, 0, 0); g2.restore();
+      a += da; });
+    g2.restore();
+  }
+  function gameDecor(bl) {
+    if (!title || bl <= 0) return;
+    const size = (RB.sur - RB.board) * .5;
+    // En haut et en bas : le texte se lit à plat depuis le pas de tir.
+    [-Math.PI / 2, Math.PI / 2].forEach(m => arcText(title, m, size, .85 * bl, C.sunset, C.crep));
+    // Petites étoiles fixes autour du nom du jeu.
+    g2.save(); g2.fillStyle = `rgba(255,225,77,${.6 * bl})`; const rm = (RB.board + RB.sur) / 2;
+    [-Math.PI / 2 - .5, -Math.PI / 2 + .5, Math.PI / 2 - .5, Math.PI / 2 + .5].forEach(a => { g2.beginPath(); g2.arc(CX + Math.cos(a) * rm * K, CY + Math.sin(a) * rm * K, 5 * K, 0, TAU); g2.fill(); });
+    g2.restore();
+  }
+
+  /* ---------- check-out proposé : les cases à viser clignotent, restent fixes 1 s, reclignotent ---------- */
+  function cellOf(label) {
+    const L = String(label).toUpperCase();
+    if (L === 'BULL' || L === 'DB') return { n: 25, m: 2 };
+    if (L === '25' || L === 'SB') return { n: 25, m: 1 };
+    const m = L[0] === 'T' ? 3 : L[0] === 'D' ? 2 : 1, n = parseInt(L.replace(/^[TDS]/, ''), 10);
+    return n >= 1 && n <= 20 ? { n, m } : null;
+  }
+  function checkoutFx(labels) {
+    const cells = labels.map(cellOf).filter(Boolean); if (!cells.length) return;
+    const cols = ['255,225,77', '255,122,47', '255,77,141'], dur = 3.4;
+    coUntil = performance.now() + dur * 1000;
+    fx(dur, (k, t) => {
+      // 0-0,9 s : 3 clignotements ; 0,9-1,9 s : fixe ; 1,9-2,8 s : 3 clignotements ; puis fondu.
+      let on = 1;
+      if (t < .9 || (t > 1.9 && t < 2.8)) on = (Math.floor(t / .15) % 2) ? .25 : 1;
+      else if (t >= 2.8) on = Math.max(0, 1 - (t - 2.8) / .6);
+      cells.forEach((c, j) => {
+        const i = ORDER.indexOf(c.n);
+        // Secteur entier en léger, pour trouver la case de loin.
+        if (c.n !== 25) { segPath(i, RB.obull, RB.dOut); g2.fillStyle = `rgba(${cols[j % 3]},${.22 * on})`; g2.fill(); }
+        if (c.n === 25) { g2.beginPath(); g2.arc(CX, CY, (c.m === 2 ? RB.bull : RB.obull) * K, 0, TAU); }
+        else if (c.m === 3) segPath(i, RB.tIn, RB.tOut);
+        else if (c.m === 2) segPath(i, RB.dIn, RB.dOut);
+        else segPath(i, RB.tOut, RB.dIn);
+        g2.save(); g2.shadowColor = `rgba(${cols[j % 3]},${on})`; g2.shadowBlur = 30;
+        g2.fillStyle = `rgba(${cols[j % 3]},${on})`; g2.fill(); g2.restore();
+        g2.strokeStyle = `rgba(255,255,255,${on})`; g2.lineWidth = 4; g2.stroke();
+      });
+    });
+    ringTag(labels.join(' · '), { n: 2, dur, speed: .3, scale: .45 });
+  }
   function pattern() {
     // Mire de calibration : anneaux officiels, fils des secteurs, croix aux 4 points de réglage.
     g2.fillStyle = '#000'; g2.fillRect(0, 0, LCW, LCH);
@@ -361,6 +420,8 @@
     fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
     boardLight = Math.min(boardLight, fxDim);
     if (boardLight > 0.01) { if (playing) steady(boardLight); else idle(now / 1000, boardLight); }
+    // Nom du jeu : pleine intensité hors effets, caché pendant le check-out (la route tourne à sa place).
+    if (playing && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
     parts = parts.filter(p => { p.life += dt; return p.life < p.max; });
@@ -400,6 +461,14 @@
     setPlaying(v) { playing = !!v; },
     // Écran du hub hors partie : accueil, partie ou entrainement (animation d'attente).
     setScene(v) { scene = v || 'accueil'; },
+    // Message du hub : écran (scene), nom du jeu en partie (title), check-out proposé (checkout).
+    setGame(d) {
+      if (!d) return;
+      scene = d.scene || 'accueil'; title = d.scene === 'jeu' ? String(d.title || '') : '';
+      const co = Array.isArray(d.checkout) ? d.checkout.join(' ') : '';
+      if (co && co !== lastCheckout && playing) checkoutFx(d.checkout);
+      lastCheckout = co;
+    },
     // Rayons mesurés en calibration (mm). Le fil extérieur du double reste la référence (170).
     setRings(r) {
       if (!r) return;

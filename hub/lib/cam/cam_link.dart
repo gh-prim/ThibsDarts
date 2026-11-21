@@ -138,20 +138,30 @@ class CamLink {
     return true;
   }
 
-  String _scene = 'accueil';
+  String _scene = jsonEncode({'scene': 'accueil'});
 
   /// Écran du hub hors partie, pour l'animation d'attente du vidéoprojecteur :
   /// accueil, partie (choix d'une partie) ou entrainement (choix d'un entraînement).
-  void setScene(String scene) {
-    if (_scene == scene) return;
-    _scene = scene;
+  void setScene(String scene) => _setProjector({'scene': scene});
+
+  /// En partie : nom du jeu écrit sur le surround, et check-out proposé (cases allumées par le projecteur).
+  void setGameInfo(String title, {List<String>? checkout}) => _setProjector({
+    'scene': 'jeu',
+    'title': title,
+    if (checkout != null && checkout.isNotEmpty) 'checkout': checkout,
+  });
+
+  void _setProjector(Map<String, dynamic> body) {
+    final text = jsonEncode(body);
+    if (_scene == text) return;
+    _scene = text;
     _publishScene();
   }
 
   void _publishScene() {
     final client = _client;
     if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
-    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({'scene': _scene}));
+    final payload = MqttClientPayloadBuilder()..addUTF8String(_scene);
     client.publishMessage(projectorTopic, MqttQos.atLeastOnce, payload.payload!, retain: true);
   }
 

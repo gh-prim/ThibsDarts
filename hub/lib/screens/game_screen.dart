@@ -479,6 +479,11 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     _publish();
+    // Vidéoprojecteur : nom du jeu sur le surround, et cases du check-out proposé au joueur.
+    CamLink.instance.setGameInfo(
+      '${_cfg.startScore}',
+      checkout: _botTurn ? null : _game.checkoutHint?.map((d) => d.label).toList(),
+    );
     final g = _game;
     final p = g.currentPlayer;
     final turn = g.currentTurn;

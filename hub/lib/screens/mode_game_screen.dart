@@ -122,6 +122,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _botPlay());
     Lobby.instance.stopGame = _stopFromPhone;
     CamLink.instance
+      ..setGameInfo(widget.config.title)
       ..debugGame = widget.config.label
       ..onDart = _camDart
       ..onTakeout = _camTakeout

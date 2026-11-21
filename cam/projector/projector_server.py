@@ -58,7 +58,14 @@ class Hub:
             playing = bool(data.get("playing"))
             changed_state = getattr(self, "playing", None) not in (None, playing)
             self.playing = playing
-        if (kind in ("pointer", "calib", "debug") or changed_state) and self.client:
+        # Message du hub : nouvel écran ou nouveau jeu = le décor fixe du surround change (nouveau fond).
+        # Le check-out seul, non : son effet est passager (caméras en pause via /light), l'image revient pareille.
+        changed_game = False
+        if kind == "game" and isinstance(data, dict):
+            decor = (data.get("scene"), data.get("title"))
+            changed_game = getattr(self, "decor", None) != decor
+            self.decor = decor
+        if (kind in ("pointer", "calib", "debug") or changed_state or changed_game) and self.client:
             # L'image projetée change pour de bon (croix, mire, nouveau calage) : caméras en pause,
             # puis nouveau fond, sinon la différence est prise pour une fléchette.
             until = int(time.time() * 1000) + 1500

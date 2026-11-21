@@ -15,6 +15,7 @@ import json
 import math
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -337,7 +338,9 @@ def _dart_from(main, n, labels, stats, centroids, cal, limit=BOARD_LIMIT):
     areas = stats[:, cv2.CC_STAT_AREA]
     c0 = np.float64(centroids[main])
     up = cal.normal_dir(c0)  # direction attendue pointe -> empennage dans l'image
-    ys, xs = np.nonzero(labels == main)
+    bx, by, bw, bh = stats[main, :4]
+    ys, xs = np.nonzero(labels[by:by + bh, bx:bx + bw] == main)
+    xs, ys = xs + bx, ys + by
     pts = np.float32(np.column_stack([xs, ys]))
     axis = up
     if len(pts) >= 5:
@@ -374,17 +377,27 @@ def _dart_from(main, n, labels, stats, centroids, cal, limit=BOARD_LIMIT):
                 lo, hi = min(lo, a), max(hi, b)
                 near_axis.remove(piece)
                 grown = True
-    sel = np.isin(labels, keep)
-    area = int(sel.sum())
+    area = int(areas[keep].sum())
     if area < DART_MIN_AREA:
         return "tache trop petite"
     if area > DART_MAX_AREA:
         return "tache trop grande"
-    ys, xs = np.nonzero(sel)
+    # Calculs restreints à la boîte qui englobe les morceaux gardés (bien plus petite que l'image).
+    ks = stats[keep]
+    ox, oy = int(ks[:, 0].min()), int(ks[:, 1].min())
+    ex, ey = int((ks[:, 0] + ks[:, 2]).max()), int((ks[:, 1] + ks[:, 3]).max())
+    sub = labels[oy:ey, ox:ex]
+    lut = np.zeros(n, bool)
+    lut[keep] = True
+    sel_sub = lut[sub]
+    ys, xs = np.nonzero(sel_sub)
+    xs, ys = xs + ox, ys + oy
     pts = np.float32(np.column_stack([xs, ys]))
     if len(keep) > 1 and axis is up:
         # Empennage + morceaux de fût : l'axe passe par le centre de l'empennage et le fût.
-        others = np.float32(np.column_stack(np.nonzero(np.isin(labels, keep[1:]))[::-1]))
+        lut[main] = False
+        oys, oxs = np.nonzero(lut[sub])
+        others = np.float32(np.column_stack([oxs + ox, oys + oy]))
         fit_pts = np.vstack([others, np.repeat(np.float32([c0]), min(len(others), 200), axis=0)])
     else:
         fit_pts = pts
@@ -425,7 +438,7 @@ def _dart_from(main, n, labels, stats, centroids, cal, limit=BOARD_LIMIT):
         "length": length,
         # Tache retenue (pour la trace) : boîte englobante et masque découpé.
         "bbox": (x0b, y0b, x1b - x0b, y1b - y0b),
-        "mask": (sel[y0b:y1b, x0b:x1b].astype(np.uint8) * 255),
+        "mask": (sel_sub[y0b - oy:y1b - oy, x0b - ox:x1b - ox].astype(np.uint8) * 255),
     }
 
 
@@ -524,6 +537,9 @@ def fuse(obs, model=None):
         return x
     best = max(obs, key=lambda o: float(o.get("length", 0)) * float(o.get("weight", 1.0)))
     return np.float64(best["tip"])
+
+
+_POOL = ThreadPoolExecutor(max_workers=3)
 
 
 class Detector:
@@ -691,14 +707,21 @@ class Detector:
             flat = on_plane(masks, cals) if SHADOWS else {}
         except (cv2.error, np.linalg.LinAlgError):
             flat = {}
+        todo = []
         for n, g in frames.items():
             cal = cals.get(n)
             if cal is None or n not in bg or change[n] < CHANGE_MIN / 3:
                 if cal is not None:
                     why[n] = "changement trop faible"
                 continue
+            todo.append(n)
+
+        def one(n):
             reasons = []
-            o = find_dart(bg[n], g, cal, reasons, remove=flat.get(n))
+            return n, find_dart(bg[n], frames[n], cals[n], reasons, remove=flat.get(n)), reasons
+
+        # Une caméra par cœur : OpenCV et numpy relâchent le verrou de Python.
+        for n, o, reasons in _POOL.map(one, todo):
             if reasons:
                 why[n] = reasons[0]
             if o:

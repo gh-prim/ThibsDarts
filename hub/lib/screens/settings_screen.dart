@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../cam/cam_link.dart';
 import '../cam/cam_pairing.dart';
 import '../system/release.dart';
+import 'debug_screen.dart';
 import 'wifi_screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/game_widgets.dart';
@@ -98,6 +99,17 @@ class SettingsScreen extends StatelessWidget {
                 title: 'Système',
                 detail: 'Pi 4 ${Release.current} · Pi 5 ${camVersion() ?? 'hors ligne'} · mise à jour, reset usine',
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SystemScreen())),
+              ),
+            ),
+            ValueListenableBuilder(
+              valueListenable: CamLink.instance.debugState,
+              builder: (context, state, _) => _Item(
+                icon: LucideIcons.bug,
+                title: 'Mode Debug',
+                detail: state?['on'] == true
+                    ? 'Actif : photos de chaque détection gardées sur le Pi 5'
+                    : 'Pour traquer les fausses détections, pendant une partie ou un entraînement',
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DebugScreen())),
               ),
             ),
             const Spacer(),

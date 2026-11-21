@@ -6,5 +6,6 @@ set -euo pipefail
 HOST="${1:-thibs@dartos-hub.local}"
 cd "$(dirname "$0")/../../hub"
 ~/.pub-cache/bin/flutterpi_tool build --arch=arm64 --cpu=pi4 --release
-rsync -az --delete build/flutter-pi/pi4-64/ "$HOST":/opt/thibsdarts/hub/
+# Image Dart OS : /opt/thibsdarts appartient à root, on écrit en sudo.
+rsync -az --delete --no-o --no-g --rsync-path="sudo rsync" build/flutter-pi/pi4-64/ "$HOST":/opt/thibsdarts/hub/
 ssh "$HOST" 'sudo systemctl restart thibsdarts-hub && systemctl is-active thibsdarts-hub'

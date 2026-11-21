@@ -26,6 +26,7 @@ import detector
 import identity
 import learning
 import traces
+import debugmode
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "simulator"))
 from dartlink import (  # noqa: E402
@@ -45,14 +46,64 @@ CMD_TOPIC = "thibsdarts/cam/cmd"
 # Le vidéoprojecteur annonce ses animations : la détection attend que l'image redevienne fixe,
 # plus le temps que l'exposition des caméras se recale.
 LIGHT_TOPIC = "thibsdarts/projector/light"
-LIGHT_SETTLE_MS = int(os.environ.get("LIGHT_SETTLE_MS", "800"))
+LIGHT_SETTLE_MS = int(os.environ.get("LIGHT_SETTLE_MS", "300"))
 # DARTOS_DRY_POWER=1 : on note la demande d'extinction sans éteindre (tests).
 DRY_POWER = os.environ.get("DARTOS_DRY_POWER") == "1"
 # Une caméra en bas (6 h), les deux autres à un tiers du tour de chaque côté (10 h et 2 h).
 PRESET_NAMES = ["Bas", "Haut gauche", "Haut droite"]
-DETECT_FPS = 10
+# Cadence de la détection (les caméras donnent 30 images/s). L'immobilité est jugée sur une durée
+# (VISION_CALM_MS, voir detector.py), donc changer la cadence ne change pas sa fiabilité.
+DETECT_FPS = float(os.environ.get("VISION_DETECT_FPS", "30"))
 # Mode test de la page /calib : détection active sans partie, pendant 10 min.
 TEST_DURATION = 600
+
+
+def lag_test(rounds=3):
+    """Retard des caméras : la page du projecteur passe au noir (puis revient) à un instant connu,
+    on mesure quand chaque caméra le voit arriver dans Python. Compte aussi l'affichage de Chromium
+    et du projecteur (quelques dizaines de ms)."""
+    ps = sys.modules.get("projector_server")
+    if ps is None:
+        return {"error": "projecteur absent"}
+    hub = ps.hub
+    prev = hub.last.get("debug")
+    prev_data = json.loads(prev.decode().split("data: ", 1)[1]) if prev else {"on": False, "projector": True}
+    cams = [c for c in registry.ordered() if c.plugged]
+    for c in cams:
+        c.touch()
+    time.sleep(1.0)
+
+    def level(c):
+        f = c.frame
+        if f is None:
+            return None
+        h, w = f.shape[:2]
+        return float(cv2.cvtColor(cv2.resize(f[h // 4:3 * h // 4, w // 4:3 * w // 4], (64, 36)), cv2.COLOR_BGR2GRAY).mean())
+
+    out = {c.label or c.id: [] for c in cams}
+    try:
+        for r in range(rounds * 2):
+            dark = r % 2 == 0
+            base = {c: level(c) for c in cams}
+            seen = {c: c.frame_seq for c in cams}
+            t0 = time.monotonic()
+            hub.send("debug", dict(prev_data, projector=not dark))
+            found = {}
+            while len(found) < len(cams) and time.monotonic() - t0 < 3.0:
+                for c in cams:
+                    if c in found or c.frame_seq == seen[c]:
+                        continue
+                    seen[c] = c.frame_seq
+                    v, b = level(c), base[c]
+                    if v is not None and b is not None and abs(v - b) > max(8.0, 0.12 * b):
+                        found[c] = round((getattr(c, "frame_t", time.monotonic()) - t0) * 1000)
+                time.sleep(0.003)
+            for c in cams:
+                out[c.label or c.id].append({"noir" if dark else "retour": found.get(c)})
+            time.sleep(1.5)
+    finally:
+        hub.send("debug", prev_data, keep=True)
+    return {"cams": out, "fps": {c.label or c.id: round(c.fps, 1) for c in cams}}
 
 
 class Camera:
@@ -135,7 +186,7 @@ class Camera:
                 now = time.monotonic()
                 frames += 1
                 opened += 1
-                self.frame, self.frame_seq, self.opened = frame, self.frame_seq + 1, opened
+                self.frame, self.frame_seq, self.opened, self.frame_t = frame, self.frame_seq + 1, opened, now
                 if now - t0 >= 1:
                     self.fps, frames, t0 = frames / (now - t0), 0, now
                 self.size = (frame.shape[1], frame.shape[0])
@@ -217,8 +268,58 @@ class Registry:
         self.playing = False
         self.test_until = 0.0
         self.light_until = 0  # ms epoch : animation du projecteur en cours jusque-là
+        self.rebase = False  # l'image projetée a changé pour de bon : nouveau fond après la pause
         self.events = []  # dernières fléchettes et retraits, pour la page /calib
-        self.detector = detector.Detector(self.on_dart, self.on_takeout, log=lambda m: print(m, flush=True))
+        self.debug = None  # debugmode.DebugMode, créé au démarrage
+        self.detector = detector.Detector(self.on_dart, self.on_takeout, log=self.log)
+
+    def log(self, m):
+        print(m, flush=True)
+        ctx = self.detector.ctx
+        if self.debug and self.debug.on and ctx:
+            self.debug.capture(m, ctx["frames"], {"change": ctx["change"]})
+
+    def _now_frames(self):
+        cams = [c for c in self.ordered() if c.plugged]
+        for cam in cams:
+            cam.touch()  # hors partie, les caméras dorment : on les réveille le temps d'une image
+        for cam in cams:
+            if cam.frame is None:
+                cam.wait_frame(cam.seq, timeout=3.0)
+        frames = {}
+        for cam in cams:
+            frame = cam.frame if cam.plugged else None
+            if frame is not None:
+                frames[cam.label] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return frames
+
+    def mark(self, d=None):
+        """Bouton Signaler du hub (mode Debug) : images du moment de chaque caméra."""
+        d = d if isinstance(d, dict) else {}
+        print("debug : signalé depuis le hub", flush=True)
+        self.debug.capture("signalé depuis le hub", self._now_frames(),
+                           {"game": d.get("game"), "derniers": self.events[-5:]}, kind="SIGNALE")
+
+    def truth(self, d):
+        """Vérité donnée sur le hub en mode Debug : rangée avec les photos de la fléchette détectée
+        (trace), ou celles du moment pour une fléchette que les caméras n'ont pas vue."""
+        kind = str(d.get("kind", "?"))
+        text = {"correction": f"correction : détectée {d.get('detected')}, en vrai {d.get('real')}",
+                "fantome": f"fantôme : {d.get('detected')} détectée alors que rien n'a été tiré",
+                "manuelle": f"pas détectée : {d.get('real')} posée à la main"}.get(kind, f"vérité {kind}")
+        print(f"debug : {text}", flush=True)
+        frames = {}
+        tid = d.get("trace")
+        if tid and re.fullmatch(r"[0-9a-f-]{36}", str(tid)):
+            tdir = os.path.join(self.traces.dir, tid)
+            for name in ("Bas", "Haut gauche", "Haut droite"):
+                s = traces.slug(name)
+                a, b = (cv2.imread(os.path.join(tdir, f"{s}-{k}.jpg"), cv2.IMREAD_GRAYSCALE) for k in ("avant", "apres"))
+                if a is not None and b is not None:
+                    frames[name] = (a, b)
+        if not frames:
+            frames = self._now_frames()
+        self.debug.capture(text, frames, {"verite": d, "derniers": self.events[-5:]}, kind=f"verite-{kind}")
 
     @property
     def mode(self):
@@ -234,13 +335,21 @@ class Registry:
     def on_dart(self, x, y, info):
         n, m = dart_at(x, y, self.calibs.rings())
         dart_id = str(uuid.uuid4())
-        print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}", flush=True)
+        delay = info.get("delay_ms")
+        took = f" en {delay} ms" if delay is not None else ""
+        print(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}{took}", flush=True)
         self._event({"type": "dart", "id": dart_id, "segment": segment_name(n, m), "x": round(x, 1),
-                     "y": round(y, 1), "cams": info["cams"]})
+                     "y": round(y, 1), "cams": info["cams"], "delay_ms": delay})
         if self.client:
             self.client.publish(DART_TOPIC, dart_message(n, m, x, y, source="vision", dart_id=dart_id), qos=1)
         self.traces.save(dart_id, info)
         self.learner.add(dart_id, info["obs"], x, y)
+        if self.debug and self.debug.on:
+            seen = {o["cam"]: {"tip": [round(float(v), 1) for v in o["tip"]], "area": int(o.get("area", 0)),
+                               "length": round(float(o.get("length", 0)), 1)} for o in info["obs"]}
+            self.debug.capture(f"fléchette {segment_name(n, m)} ({x:.1f}, {y:.1f}) vue par {', '.join(info['cams'])}",
+                               info["frames"], {"id": dart_id, "delay_ms": delay, "change": {k: round(float(v), 4) for k, v in info["change"].items()},
+                                                "why": info.get("why"), "obs": seen}, kind="flechette")
 
     def correct(self, dart_id, number, multiplier, x=None, y=None):
         """Correction venue du Pi 4 : exemple juste pour l'apprentissage, modèle refait et validé."""
@@ -259,9 +368,11 @@ class Registry:
 
     def detect_loop(self):
         """Lit les caméras calibrées à DETECT_FPS images/s et les passe au détecteur."""
-        was = False
+        was, seen, tick = False, {}, time.monotonic()
         while True:
-            time.sleep(1 / DETECT_FPS)
+            # Cadence fixe (le temps de calcul est compté dedans), sans dépasser celle des caméras.
+            tick = max(tick + 1 / DETECT_FPS, time.monotonic())
+            time.sleep(max(0.0, tick - time.monotonic()))
             if not self.detecting:
                 if was:
                     self.detector.reset()
@@ -273,22 +384,28 @@ class Registry:
             if time.time() * 1000 < self.light_until + LIGHT_SETTLE_MS:
                 # Image projetée en mouvement : on ne regarde pas, le fond reste celui d'avant.
                 continue
-            frames, cals = {}, {}
+            if self.rebase:
+                self.rebase = False
+                self.detector.reset()
+                continue
+            frames, cals, fresh = {}, {}, False
             for cam in self.ordered():
                 cal = self.calibs.get(cam.label)
                 if cal is None or not cam.plugged:
                     continue
                 cam.touch()
-                frame = cam.frame
+                frame, seq = cam.frame, cam.frame_seq
                 if not cam.ready or frame is None:
                     continue
+                fresh = fresh or seen.get(cam.label) != seq
+                seen[cam.label] = seq
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 if (gray.shape[1], gray.shape[0]) != cal.size:
                     gray = cv2.resize(gray, cal.size)
                 frames[cam.label], cals[cam.label] = gray, cal
-            if frames:
+            if frames and fresh:
                 try:
-                    self.detector.step(frames, cals)
+                    self.detector.step(frames, cals, time.monotonic())
                 except cv2.error as e:
                     print(f"détection : {e}", flush=True)
 
@@ -413,6 +530,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/detect":
             return self._send(200, json.dumps(detect_status(), ensure_ascii=False).encode())
+        if path == "/lagtest":
+            return self._send(200, json.dumps(lag_test(), ensure_ascii=False).encode())
         if path == "/status":
             body = {
                 "version": VERSION,
@@ -629,6 +748,7 @@ def main():
     registry.calibs = detector.CalibStore(DATA_DIR)
     registry.traces = traces.TraceStore(DATA_DIR, registry.segment)
     registry.learner = learning.Learner(DATA_DIR, detector.fuse, registry.segment)
+    registry.debug = debugmode.DebugMode(DATA_DIR)
     registry.detector.model = None if registry.learner.model.empty else registry.learner.model
     client = new_client("dartos-cam-vision")
     client.will_set(STATUS_TOPIC, registry.status("offline"), qos=1, retain=True)
@@ -637,7 +757,11 @@ def main():
         c.subscribe(STATE_TOPIC, qos=1)
         c.subscribe(TURN_TOPIC, qos=1)
         c.subscribe(LIGHT_TOPIC, qos=0)
+        c.subscribe(debugmode.SET_TOPIC, qos=1)
+        c.subscribe(debugmode.MARK_TOPIC, qos=1)
+        c.subscribe(debugmode.TRUTH_TOPIC, qos=1)
         registry.publish_status("online")
+        registry.debug.publish_state()
 
     def on_state(c, userdata, msg):
         try:
@@ -651,11 +775,38 @@ def main():
 
     def on_light(c, userdata, msg):
         try:
-            until = int(json.loads(msg.payload).get("until", 0))
+            d = json.loads(msg.payload)
+            until = int(d.get("until", 0))
         except (ValueError, AttributeError, TypeError):
             return
+        if d.get("rebase"):
+            registry.rebase = True
         # Jamais plus de 10 s de pause d'un coup, même si le message est faux.
         registry.light_until = min(until, int(time.time() * 1000) + 10000)
+
+    def on_debug_set(c, userdata, msg):
+        try:
+            d = json.loads(msg.payload)
+        except ValueError:
+            return
+        if isinstance(d, dict) and not msg.retain:
+            registry.debug.set(d)
+
+    def on_debug_mark(c, userdata, msg):
+        if msg.retain:
+            return
+        try:
+            registry.mark(json.loads(msg.payload))
+        except ValueError:
+            registry.mark()
+
+    def on_debug_truth(c, userdata, msg):
+        try:
+            d = json.loads(msg.payload)
+        except ValueError:
+            return
+        if isinstance(d, dict) and not msg.retain and registry.debug.on:
+            registry.truth(d)
 
     def on_turn(c, userdata, msg):
         registry.detector.end_turn()
@@ -690,6 +841,10 @@ def main():
     client.message_callback_add(STATE_TOPIC, on_state)
     client.message_callback_add(TURN_TOPIC, on_turn)
     client.message_callback_add(LIGHT_TOPIC, on_light)
+    client.message_callback_add(debugmode.SET_TOPIC, on_debug_set)
+    client.message_callback_add(debugmode.MARK_TOPIC, on_debug_mark)
+    client.message_callback_add(debugmode.TRUTH_TOPIC, on_debug_truth)
+    registry.debug.client = client
     client.reconnect_delay_set(1, 30)
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_start()

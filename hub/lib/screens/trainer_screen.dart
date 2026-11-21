@@ -4,6 +4,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../system/sounds.dart';
 import '../cam/cam_link.dart';
 import '../game/paused_game.dart';
 import '../game_config.dart';
@@ -96,6 +97,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
       PausedGame.clear();
     }
     CamLink.instance
+      ..setGameInfo(widget.config.title)
+      ..debugGame = widget.config.label
       ..onDart = _camDart
       ..onTakeout = _camTakeout
       ..setPlaying(true);
@@ -139,7 +142,9 @@ class _TrainerScreenState extends State<TrainerScreen> {
   bool get _newRecord => _g.isFinished && _score > 0 && (_record == null || _score > _record!);
 
   void _camDart(DartThrow d, Offset? pos, String? traceId) {
-    if (mounted) _throw(d, pos ?? boardPositionFor(d), traceId: traceId);
+    if (!mounted) return;
+    Sounds.dart(d);
+    _throw(d, pos ?? boardPositionFor(d), traceId: traceId);
   }
 
   void _camTakeout() {
@@ -174,9 +179,18 @@ class _TrainerScreenState extends State<TrainerScreen> {
     });
   }
 
-  void _onBoardTap(Offset p) => _throw(dartAt(p), p);
+  void _onBoardTap(Offset p) {
+    // Mode Debug : fléchette posée à la main, donc pas vue par les caméras.
+    CamLink.instance.debugTruth('manuelle', real: dartAt(p), position: p);
+    Sounds.dart(dartAt(p));
+    _throw(dartAt(p), p);
+  }
 
-  void _outOfBoard() => _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
+  void _outOfBoard() {
+    CamLink.instance.debugTruth('manuelle', real: const DartThrow.miss());
+    Sounds.play('miss');
+    _throw(const DartThrow.miss(), const Offset(38.7, 181.9));
+  }
 
   Future<void> _correct() async {
     if (_showEnd) return;

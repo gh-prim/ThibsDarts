@@ -83,6 +83,7 @@ struct ProfileView: View {
     @State private var confirmLogout = false
     @State private var addFriend = false
     @State private var showCameras = false
+    @State private var showProjector = false
     @State private var busy = false
     @State private var error: String?
     @State private var spotifyBusy = false
@@ -150,6 +151,9 @@ struct ProfileView: View {
                                 TdButton(title: "Caméras en direct", variant: .secondary, icon: .camera, block: true) {
                                     showCameras = true
                                 }
+                                TdButton(title: "Calibrer le projecteur", variant: .secondary, icon: .crosshair, block: true) {
+                                    showProjector = true
+                                }
                             }
                             TdButton(title: "Se déconnecter", variant: .tertiary, icon: .logOut, block: true) {
                                 confirmLogout = true
@@ -180,6 +184,7 @@ struct ProfileView: View {
         .fullScreenCover(isPresented: $shooting) { PhotoCapture { photo = $0 } }
         .sheet(isPresented: $addFriend) { AddFriendView().environmentObject(app) }
         .fullScreenCover(isPresented: $showCameras) { CamerasView().environmentObject(app) }
+        .fullScreenCover(isPresented: $showProjector) { ProjectorCalibView().environmentObject(app) }
         .alert("Se déconnecter ?", isPresented: $confirmLogout) {
             Button("Se déconnecter", role: .destructive) { app.logout() }
             Button("Annuler", role: .cancel) {}

@@ -249,6 +249,7 @@ class Lobby extends ChangeNotifier {
       if (req.method == 'POST' && path == '/api/lobby/create') return await _create(req, res);
       if (path == '/api/spotify' || path.startsWith('/api/spotify/')) return await _spotifyRoute(req, res, seg);
       if (path == '/api/cams' || path.startsWith('/api/cams/')) return await _camsRoute(req, res, seg);
+      if (path.startsWith('/api/projector/')) return await _projectorRoute(req, res, seg);
       if (path == '/api/tournament' || path.startsWith('/api/tournament/')) return await _tournamentRoute(req, res, seg);
       if (req.method == 'POST' && path == '/api/lobby/stop') {
         // Un joueur du salon arrête la partie depuis son iPhone (confirmé dans l'app).
@@ -339,6 +340,42 @@ class Lobby extends ChangeNotifier {
       } catch (_) {}
     } finally {
       client.close(force: true);
+    }
+  }
+
+  HttpClient? _projClient;
+
+  /// Vidéoprojecteur du Pi 5 (port 8082) relayé pour l'app iOS (réservé au propriétaire) :
+  /// GET/POST /api/projector/guide pour la calibration guidée, POST /api/projector/test pour un essai.
+  Future<void> _projectorRoute(HttpRequest req, HttpResponse res, List<String> seg) async {
+    if (!_authorized(req, PlayerStore.instance.owner)) return _send(res, {'error': 'cle'}, status: 401);
+    final base = CamLink.instance.previewBase;
+    if (base == null) return _send(res, {'error': 'camera'}, status: 503);
+    final rest = seg.skip(2).join('/');
+    if (rest != 'guide' && rest != 'test') return _send(res, {'error': 'introuvable'}, status: 404);
+    final target = base.replace(port: 8082, path: '/$rest');
+    // Client gardé d'une requête à l'autre : la connexion au Pi 5 reste ouverte (pointeur fluide).
+    final client = _projClient ??= (HttpClient()
+      ..connectionTimeout = const Duration(seconds: 4)
+      ..idleTimeout = const Duration(seconds: 30));
+    try {
+      final out = req.method == 'POST' ? await client.postUrl(target) : await client.getUrl(target);
+      if (req.method == 'POST') {
+        final body = utf8.encode(jsonEncode(await _body(req)));
+        out.headers
+          ..contentType = ContentType.json
+          ..contentLength = body.length;
+        out.add(body);
+      }
+      final up = await out.close();
+      final data = await up.transform(utf8.decoder).join();
+      res.statusCode = up.statusCode;
+      res.headers.contentType = ContentType.json;
+      res.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      res.write(data);
+      await res.close();
+    } catch (_) {
+      await _send(res, {'error': 'camera'}, status: 503);
     }
   }
 

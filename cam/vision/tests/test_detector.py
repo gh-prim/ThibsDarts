@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "simulato
 import detector  # noqa: E402
 from dartlink import SECTORS, dart_at, segment_name  # noqa: E402
 
+# Les tests enchaînent les images sans attendre : immobilité jugée sur le nombre d'images seulement.
+detector.CALM_S = 0.0
+
 W, H = 1280, 720
 F = math.hypot(W, H) / 2 / math.tan(math.radians(50))
 K = np.float64([[F, 0, W / 2], [0, F, H / 2], [0, 0, 1]])
@@ -66,8 +69,12 @@ def render(R, t, tex, darts=()):
     cz = (-R.T @ t)[2]
     img[(rays[2] * cz >= 0).reshape(H, W)] = (70, 70, 70)
     rvec, _ = cv2.Rodrigues(R)
-    for (x, y) in darts:
-        p, _ = cv2.projectPoints(np.float64([(x, y, 0), (x, y, -60), (x, y, -110)]), rvec, t, K, None)
+    for d in darts:
+        # (x, y) : fléchette droite ; (x, y, dx, dy) : arrière décalé de (dx, dy) mm (vibration).
+        x, y = d[:2]
+        dx, dy = d[2:] if len(d) == 4 else (0, 0)
+        p, _ = cv2.projectPoints(np.float64([(x, y, 0), (x + dx * 60 / 110, y + dy * 60 / 110, -60),
+                                             (x + dx, y + dy, -110)]), rvec, t, K, None)
         p = p.reshape(-1, 2)
         cv2.line(img, tuple(np.int32(p[0])), tuple(np.int32(p[1])), (200, 120, 0), 4, cv2.LINE_AA)
         cv2.line(img, tuple(np.int32(p[1])), tuple(np.int32(p[2])), (0, 200, 255), 9, cv2.LINE_AA)
@@ -308,3 +315,91 @@ def test_ring_points():
 if __name__ == "__main__":
     test_ring_points()
     print("bandes ok")
+
+
+def test_calm_is_a_duration():
+    """À 30 images/s : la fléchette est comptée après CALM_S de calme, et un lent mouvement
+    (invisible d'une image à la suivante) repousse la décision."""
+    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
+    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
+    got = []
+    det = detector.Detector(lambda x, y, info: got.append(info), lambda: None, log=print)
+    tex = board_texture()
+    thrown, light = [], [0]
+    base = {}
+
+    def frames():
+        if not base or tuple(thrown) not in base:
+            base[tuple(thrown)] = {n: render(R, t, tex, thrown) for n, (R, t) in cams.items()}
+        return {n: np.clip(g.astype(np.int16) + light[0], 0, 255).astype(np.uint8)
+                for n, g in base[tuple(thrown)].items()}
+
+    saved, saved_early, dt, now = detector.CALM_S, detector.EARLY, 1 / 30, 0.0
+    detector.CALM_S, detector.EARLY = 0.15, False
+    try:
+        for _ in range(10):
+            det.step(frames(), cals, now)
+            now += dt
+        thrown.append((40, 60))
+        steps = 0
+        while not got and steps < 30:
+            det.step(frames(), cals, now)
+            now += dt
+            steps += 1
+        assert got, "pas détectée"
+        # 1 image de mouvement, puis 0,15 s de calme : 5 à 6 images, pas 1 ou 2.
+        assert 5 <= steps <= 7, steps
+        assert got[0]["delay_ms"] is not None and 140 <= got[0]["delay_ms"] <= 220, got[0]["delay_ms"]
+
+        # Deuxième fléchette, puis lent changement de 4 niveaux de gris par image (15 = seuil).
+        thrown.append((-120, 20))
+        det.step(frames(), cals, now)
+        now += dt
+        for i in range(12):
+            light[0] += 4
+            det.step(frames(), cals, now)
+            now += dt
+        assert len(got) == 1, "comptée pendant que l'image bougeait encore"
+    finally:
+        detector.CALM_S, detector.EARLY = saved, saved_early
+
+
+def test_early_while_vibrating():
+    """L'arrière de la fléchette vibre 0,7 s : elle est comptée pendant la vibration, au bon endroit,
+    une seule fois ; la suivante est comptée aussi."""
+    np.random.seed(3)
+    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
+    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
+    got, logs = [], []
+    det = detector.Detector(lambda x, y, info: got.append((x, y, info)), lambda: None, log=logs.append)
+    tex = board_texture()
+    thrown = []
+
+    def frames():
+        return {n: render(R, t, tex, thrown) for n, (R, t) in cams.items()}
+
+    saved, dt, now = detector.CALM_S, 1 / 30, 0.0
+    detector.CALM_S = 0.15
+    try:
+        for _ in range(8):
+            det.step(frames(), cals, now)
+            now += dt
+        for tgt in [(40, 60), (-90, -30)]:
+            thrown.append(tgt)
+            first = len(got)
+            counted_at = None
+            for i in range(40):
+                amp = 12 * math.exp(-i / 8) if i < 21 else 0  # vibration amortie, environ 0,7 s
+                thrown[-1] = (tgt[0], tgt[1], amp * (1 if i % 2 else -1), 0.0) if amp else tgt
+                det.step(frames(), cals, now)
+                now += dt
+                if counted_at is None and len(got) > first:
+                    counted_at = i
+            assert len(got) == first + 1, ([g[:2] for g in got], logs[-6:])
+            assert counted_at is not None and counted_at <= 10, counted_at
+            x, y, info = got[-1]
+            assert math.hypot(x - tgt[0], y - tgt[1]) < 6, (x, y)
+            thrown[-1] = tgt
+        assert any("au calme" in m or "fléchette au calme" in m for m in logs), logs
+    finally:
+        detector.CALM_S = saved

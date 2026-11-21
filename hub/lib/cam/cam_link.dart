@@ -22,6 +22,42 @@ class CamLink {
   static const stateTopic = 'thibsdarts/hub/state';
   static const turnTopic = 'thibsdarts/hub/turn';
   static const cmdTopic = 'thibsdarts/cam/cmd';
+  static const projectorTopic = 'thibsdarts/hub/projector';
+  static const debugSetTopic = 'thibsdarts/debug/set';
+  static const debugStateTopic = 'thibsdarts/debug/state';
+  static const debugMarkTopic = 'thibsdarts/debug/mark';
+  static const debugEventTopic = 'thibsdarts/debug/event';
+  static const debugTruthTopic = 'thibsdarts/debug/truth';
+
+  /// Vrai si le mode Debug est actif sur le Pi 5.
+  bool get debugOn => debugState.value?['on'] == true;
+
+  /// Partie ou entraînement en cours (ex. "série T20 de 15 fléchettes"), joint aux vérités du mode Debug.
+  String? debugGame;
+
+  /// Mode Debug : la vérité d'une fléchette, donnée par le joueur sur le hub.
+  /// [kind] : correction (mauvais segment), fantome (pas une fléchette), manuelle (fléchette pas détectée,
+  /// ajoutée à la main). Le Pi 5 la range avec les photos de la détection.
+  void debugTruth(String kind, {DartThrow? detected, DartThrow? real, String? traceId, Offset? position}) {
+    if (!debugOn) return;
+    String? name(DartThrow? d) => d == null ? null : d.isMiss ? 'MISS' : d.label;
+    _publish(debugTruthTopic, {
+      'kind': kind,
+      'detected': ?name(detected),
+      'real': ?name(real),
+      'trace': ?traceId,
+      'x': ?position?.dx,
+      'y': ?position?.dy,
+      'game': ?debugGame,
+      'ts': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  /// Mode Debug du Pi 5 : {on, projector}, retenu sur le broker (gardé après un redémarrage).
+  final ValueNotifier<Map<String, dynamic>?> debugState = ValueNotifier(null);
+
+  /// Dernières décisions de la détection en mode Debug (la plus récente en premier).
+  final ValueNotifier<List<Map<String, dynamic>>> debugEvents = ValueNotifier(const []);
 
   /// Écran de partie qui reçoit les fléchettes (position en unités plateau, en mm).
   void Function(DartThrow dart, Offset? position, String? traceId)? onDart;
@@ -66,7 +102,7 @@ class CamLink {
       await Future<void>.delayed(const Duration(seconds: 10));
     }
     debugPrint('CamLink: connecté à $host');
-    for (final t in [dartTopic, takeoutTopic, statusTopic]) {
+    for (final t in [dartTopic, takeoutTopic, statusTopic, debugStateTopic, debugEventTopic]) {
       client.subscribe(t, MqttQos.atLeastOnce);
     }
     client.updates!.listen((events) {
@@ -102,12 +138,57 @@ class CamLink {
     return true;
   }
 
+  String _scene = jsonEncode({'scene': 'accueil'});
+
+  /// Écran du hub hors partie, pour l'animation d'attente du vidéoprojecteur :
+  /// accueil, partie (choix d'une partie) ou entrainement (choix d'un entraînement).
+  void setScene(String scene) => _setProjector({'scene': scene});
+
+  /// En partie : nom du jeu écrit sur le surround, et check-out proposé (cases allumées par le projecteur).
+  void setGameInfo(String title, {List<String>? checkout}) => _setProjector({
+    'scene': 'jeu',
+    'title': title,
+    if (checkout != null && checkout.isNotEmpty) 'checkout': checkout,
+  });
+
+  void _setProjector(Map<String, dynamic> body) {
+    final text = jsonEncode(body);
+    if (_scene == text) return;
+    _scene = text;
+    _publishScene();
+  }
+
+  void _publishScene() {
+    final client = _client;
+    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
+    final payload = MqttClientPayloadBuilder()..addUTF8String(_scene);
+    client.publishMessage(projectorTopic, MqttQos.atLeastOnce, payload.payload!, retain: true);
+  }
+
+  /// Mode Debug : captures [on] et vidéoprojecteur [projector] (null : inchangé).
+  bool setDebug({bool? on, bool? projector}) => _publish(debugSetTopic, {
+    'on': ?on,
+    'projector': ?projector,
+  });
+
+  /// Bouton Signaler : le Pi 5 garde les images du moment.
+  bool debugMark() => _publish(debugMarkTopic, {'ts': DateTime.now().millisecondsSinceEpoch, 'game': ?debugGame});
+
+  bool _publish(String topic, Map<String, dynamic> body) {
+    final client = _client;
+    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode(body));
+    client.publishMessage(topic, MqttQos.atLeastOnce, payload.payload!);
+    return true;
+  }
+
   void _publishState() {
     final client = _client;
     if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
     final payload = MqttClientPayloadBuilder()
       ..addUTF8String(jsonEncode({'playing': _playing, 'ts': DateTime.now().millisecondsSinceEpoch}));
     client.publishMessage(stateTopic, MqttQos.atLeastOnce, payload.payload!, retain: true);
+    _publishScene();
   }
 
   void _onMessage(String topic, String text) {
@@ -120,6 +201,10 @@ class CamLink {
     switch (topic) {
       case statusTopic:
         camStatus.value = json;
+      case debugStateTopic:
+        debugState.value = json;
+      case debugEventTopic:
+        debugEvents.value = [json, ...debugEvents.value.take(59)];
       case takeoutTopic:
         onTakeout?.call();
       case dartTopic:

@@ -9,7 +9,8 @@
   const C = { fluo: '#FFE14D', sunset: '#FF7A2F', crep: '#FF4D8D', ciel: '#4FA3FF' };
   const HAPPY = ['p01', 'p04', 'p05', 'p08', 'p11'];
   // Zones libres autour de la cible (projecteur sur la baie, à gauche) : score, têtes, tags.
-  const LAY = { score: { x: -470, y: 180, w: 150, h: 120 }, left: { x: -470, y: -170, w: 150, h: 150 }, tag: { x: 300, y: 0, w: 150, h: 150 } };
+  // Tout reste sur le surround (anneau gris entre le bord de la cible et son bord extérieur) : rien sur le mur.
+  const LAY = { score: { x: -255, y: 150, w: 110, h: 100 }, left: { x: -255, y: -150, w: 110, h: 110 }, tag: { x: 300, y: 0, w: 120, h: 110 } };
   const TAU = Math.PI * 2;
   const rnd = (a, b) => a + Math.random() * (b - a);
   const ease = t => 1 - Math.pow(1 - t, 3);
@@ -17,7 +18,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const P2 = (x, y) => [CX + x * K, CY - y * K];
 
-  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false;
+  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1, scene = 'accueil', title = '', lastCheckout = '', coUntil = 0;
   // Position du projecteur par rapport au centre de la cible (mm, z = distance au mur) : sert à placer
   // l'ombre de l'arceau et des caméras, qu'on laisse noires pour ne pas éclairer les objectifs.
   let PROJ = { x: -700, y: -530, z: 1550 };
@@ -166,6 +167,53 @@
         g2.fillStyle = gr; g2.fillText(l, 0, ly); });
     });
   }
+  // Texte écrit en courbe sur le surround, répété n fois, qui tourne autour de la cible.
+  // Lettres debout vers l'extérieur, lecture dans le sens des aiguilles d'une montre.
+  function ringTag(text, opts = {}) {
+    const dur = opts.dur || 2.2, speed = opts.speed ?? .7, start = rnd(0, TAU);
+    let layout = null;
+    fx(dur, (k, t) => {
+      const r0 = RB.board + 6, r1 = RB.sur - 6, rm = (r0 + r1) / 2, size = (r1 - r0) * (opts.scale || .62);
+      g2.font = Math.round(size * K) + 'px "Permanent Marker","Space Grotesk",sans-serif';
+      if (!layout) {
+        const sp = size * K * .08, widths = [...text].map(ch => g2.measureText(ch).width + sp);
+        const arc = widths.reduce((a, b) => a + b, 0) / (rm * K);
+        const headArc = opts.head ? (r1 - r0) * 1.05 / rm : 0;
+        const n = Math.max(1, Math.min(opts.n || 3, Math.floor(TAU / (arc * 1.2 + headArc))));
+        layout = { widths, arc, n };
+      }
+      const { widths, arc, n } = layout;
+      const appear = ease(Math.min(1, t / .35)), alpha = k > .8 ? (1 - k) / .2 : 1;
+      // Départ rapide qui ralentit, puis rotation régulière.
+      const turn = start + speed * t + (1 - appear) * -1.2;
+      g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.lineJoin = 'round';
+      g2.lineWidth = Math.max(3, size * K * .12); g2.globalAlpha = alpha;
+      for (let c = 0; c < n; c++) {
+        // Dans la moitié basse, lettres tête vers le centre et lecture inversée : toujours lisible du pas de tir.
+        const mid = turn + c * TAU / n, low = Math.sin(mid) > 0, dir = low ? -1 : 1;
+        let a = mid - dir * arc / 2;
+        [...text].forEach((ch, i) => {
+          const da = dir * widths[i] / (rm * K), am = a + da / 2;
+          const R = rm * K * (.85 + .15 * appear);
+          g2.save(); g2.translate(CX + Math.cos(am) * R, CY + Math.sin(am) * R); g2.rotate(am + (low ? -Math.PI / 2 : Math.PI / 2));
+          g2.scale(appear, appear);
+          g2.strokeStyle = opts.stroke || C.fluo; g2.strokeText(ch, 0, 0);
+          g2.fillStyle = (i + c) % 2 ? (opts.c2 || C.crep) : (opts.c1 || C.sunset); g2.fillText(ch, 0, 0);
+          g2.restore();
+          a += da;
+        });
+        // Tête de Thibaut entre deux inscriptions, qui tourne avec elles.
+        const im = opts.head && heads[opts.head];
+        if (ready(im)) {
+          const ah = mid + Math.PI / n, R = rm * K * (.85 + .15 * appear), hs = (r1 - r0) * .9 * K * appear;
+          const ar = im.naturalHeight / im.naturalWidth, w = hs / Math.max(1, ar), h = w * ar;
+          g2.save(); g2.translate(CX + Math.cos(ah) * R, CY + Math.sin(ah) * R); g2.rotate(Math.sin(t * 5 + c) * .15);
+          if (opts.grey) g2.filter = 'grayscale(1) brightness(.85)';
+          g2.drawImage(im, -w / 2, -h / 2, w, h); g2.restore();
+        }
+      }
+    });
+  }
   function headAt(name, Z, dur, mode, opts = {}) {
     fx(dur, (k, t) => {
       const im = heads[name]; if (!ready(im)) return;
@@ -216,20 +264,21 @@
   /* ---------- une fléchette (x, y en mm, y vers le haut) ---------- */
   function dart(h) {
     if (!h.m) {
-      tint(1.8, '40,70,120', .45); rain(200, 1.2); headAt('p09', LAY.left, 2, 'sink', { grey: true });
-      sprayTag('MISS', 'R', 0, 80, { c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', rot: .1 });
+      tint(1.8, '40,70,120', .45); rain(200, 1.2); 
+      ringTag('MISS', { n: 4, c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', speed: -.5, head: 'p09', grey: true });
     } else if (h.n === 25) {
       flash(0, 0, 120); vortex(1.3); fire(0, 0, 70, 1.1); shock(0, 0, 520, '255,122,47', 1.1); embers(0, 0, 40); neonWires(1.3, '255,225,77');
       if (h.m === 2) { godRays(0, 0, 1.4); headAt('p12', { x: 0, y: 0, w: 300, h: 300 }, 1.5, 'zoom'); }
-      sprayTag(h.m === 2 ? 'BULL' : '25', 'R', 0, 85);
+      ringTag(h.m === 2 ? 'BULL' : '25', { n: 4, speed: 1.1, head: pick(HAPPY) });
     } else if (h.m === 3) {
       flash(h.x, h.y, 90); lava(h, 1.5); fire(h.x, h.y, 100, 1.2); shock(h.x, h.y, 360); embers(h.x, h.y, 40); godRays(h.x, h.y, 1.2); crack(h.x, h.y, 5, 140);
-      sprayTag('TRIPLE\n' + h.n, 'R', 0, 66); headAt('p03', LAY.left, 2, 'spin');
+      ringTag('TRIPLE ' + h.n, { n: 3, speed: .9, head: 'p03' });
     } else if (h.m === 2) {
       flash(h.x, h.y, 80); lava(h, 1.4); lightningRing(RB.dIn, RB.dOut, 1.0); fire(h.x, h.y, 60, 1); shock(h.x, h.y, 280, '255,77,141'); neonWires(1.1);
-      sprayTag('DOUBLE\n' + h.n, 'R', 0, 66); headAt(pick(HAPPY), LAY.left, 1.8, 'pop');
+      ringTag('DOUBLE ' + h.n, { n: 3, speed: .8, c1: C.crep, c2: C.ciel, head: pick(HAPPY) });
     } else {
       flash(h.x, h.y, 60); lava(h, 1); fire(h.x, h.y, 30, .75); shock(h.x, h.y, 140, '255,225,77', .6); embers(h.x, h.y, 10);
+      ringTag(String(h.n), { n: 4, dur: 1.6, speed: .6, scale: .55, head: pick(HAPPY) });
     }
   }
 
@@ -238,16 +287,117 @@
     // Image fixe entre deux animations : les caméras la prennent comme fond, elle ne doit pas bouger.
     g2.fillStyle = `rgba(255,244,230,${(playing ? .9 : .55) * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
     ringPath(RB.board, RB.sur); g2.fillStyle = `rgba(255,236,220,${(playing ? .3 : .2) * bl})`; g2.fill();
+    if (title) return;  // en partie, le nom du jeu prend la place des deux arcs
     g2.save(); g2.globalCompositeOperation = 'lighter'; g2.lineWidth = 12;
     g2.strokeStyle = `rgba(255,122,47,${.6 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, -2.2, -0.9); g2.stroke();
     g2.strokeStyle = `rgba(255,77,141,${.55 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, 0.94, 2.24); g2.stroke();
     g2.restore();
   }
+  /* ---------- attente hors partie : la cible en "loader", les têtes qui tournent sur le surround ---------- */
+  const rings = () => [[RB.obull, RB.tIn], [RB.tIn, RB.tOut], [RB.tOut, RB.dIn], [RB.dIn, RB.dOut]];
+  function idleHeads(t, speed, bl) {
+    const names = Object.keys(heads).filter(n => n !== 'p09'), n = names.length, rm = (RB.board + RB.sur) / 2;
+    const size = (RB.sur - RB.board) * .7 * K;
+    names.forEach((name, i) => { const im = heads[name]; if (!ready(im)) return;
+      const a = i / n * TAU + t * speed, ar = im.naturalHeight / im.naturalWidth, w = size / Math.max(1, ar), h = w * ar;
+      g2.save(); g2.globalAlpha = bl; g2.translate(CX + Math.cos(a) * rm * K, CY + Math.sin(a) * rm * K);
+      g2.rotate(Math.sin(t * 1.5 + i) * .12); g2.drawImage(im, -w / 2, -h / 2, w, h); g2.restore(); });
+  }
+  function idle(t, bl) {
+    const RINGS = rings();
+    g2.save(); g2.globalCompositeOperation = 'lighter';
+    if (scene === 'entrainement') {
+      // Entraînement : une cible à viser s'allume après l'autre (triples et doubles), comme une série.
+      const ring = [RINGS[1], RINGS[3]], step = Math.floor(t / .45);
+      for (let j = 0; j < 6; j++) { const s2 = step - j; if (s2 < 0) continue;
+        const i = (s2 * 7) % 20, r = ring[s2 % 2], a = (1 - j / 6) * bl;
+        segPath(i, RB.obull, RB.dOut); g2.fillStyle = `rgba(79,163,255,${a * .35})`; g2.fill();
+        segPath(i, r[0], r[1]); g2.fillStyle = `rgba(255,225,77,${a * .9})`; g2.fill(); }
+      g2.strokeStyle = `rgba(79,163,255,${.5 * bl})`; g2.lineWidth = 3;
+      const p = (t * .6) % 1; g2.beginPath(); g2.arc(CX, CY, (RB.obull + p * (RB.dOut - RB.obull)) * K, 0, TAU); g2.stroke();
+      g2.beginPath(); g2.arc(CX, CY, RB.obull * K, 0, TAU); g2.fillStyle = `rgba(255,225,77,${(.4 + .3 * Math.sin(t * 4)) * bl})`; g2.fill();
+    } else if (scene === 'partie') {
+      // Partie : vagues orange et roses qui partent du bull vers le double, anneau par anneau.
+      RINGS.forEach((r, j) => { const ph = ((t * 1.2 - j * .22) % 1 + 1) % 1, a = Math.max(0, 1 - ph * 2.2) * .7 * bl;
+        if (a <= 0) return; ringPath(r[0], r[1]); g2.fillStyle = j % 2 ? `rgba(255,77,141,${a})` : `rgba(255,122,47,${a})`; g2.fill(); });
+      for (let i = 0; i < 20; i++) { const on = ((i + Math.floor(t * 6)) % 10) === 0; if (!on) continue;
+        segPath(i, RB.obull, RB.dOut); g2.fillStyle = `rgba(255,225,77,${.35 * bl})`; g2.fill(); }
+    } else {
+      // Accueil : loader, chaque case s'allume tour à tour dans le sens des aiguilles, avec une traîne.
+      const head = (t * 9) % 20;
+      for (let i = 0; i < 20; i++) {
+        const back = ((head - i) % 20 + 20) % 20; if (back > 7) continue;
+        RINGS.forEach((r, j) => { const a = Math.max(0, 1 - (back + j * .6) / 7) * .75 * bl; if (a <= 0) return;
+          segPath(i, r[0], r[1]); g2.fillStyle = (i + j) % 2 ? `rgba(255,77,141,${a})` : `rgba(255,122,47,${a})`; g2.fill(); });
+      }
+      g2.beginPath(); g2.arc(CX, CY, RB.obull * K, 0, TAU); g2.fillStyle = `rgba(255,225,77,${(.35 + .25 * Math.sin(t * 3)) * bl})`; g2.fill();
+    }
+    g2.restore();
+    idleHeads(t, scene === 'partie' ? -.18 : scene === 'entrainement' ? .25 : .12, bl);
+  }
+  /* ---------- en partie : nom du jeu sur le surround (fixe : les caméras le prennent comme fond) ---------- */
+  function arcText(text, mid, size, alpha, c1, c2) {
+    const r0 = RB.board + 6, r1 = RB.sur - 6, rm = (r0 + r1) / 2;
+    g2.font = Math.round(size * K) + 'px "Permanent Marker","Space Grotesk",sans-serif';
+    g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.lineJoin = 'round'; g2.lineWidth = Math.max(3, size * K * .12);
+    const chars = [...text], widths = chars.map(ch => g2.measureText(ch).width + size * K * .08);
+    const arc = widths.reduce((a, b) => a + b, 0) / (rm * K), low = Math.sin(mid) > 0, dir = low ? -1 : 1;
+    let a = mid - dir * arc / 2;
+    g2.save(); g2.globalAlpha = alpha;
+    chars.forEach((ch, i) => { const da = dir * widths[i] / (rm * K), am = a + da / 2;
+      g2.save(); g2.translate(CX + Math.cos(am) * rm * K, CY + Math.sin(am) * rm * K); g2.rotate(am + (low ? -Math.PI / 2 : Math.PI / 2));
+      g2.strokeStyle = 'rgba(18,18,20,.9)'; g2.strokeText(ch, 0, 0); g2.fillStyle = i % 2 ? c2 : c1; g2.fillText(ch, 0, 0); g2.restore();
+      a += da; });
+    g2.restore();
+  }
+  function gameDecor(bl) {
+    if (!title || bl <= 0) return;
+    const size = (RB.sur - RB.board) * .5;
+    // En haut et en bas : le texte se lit à plat depuis le pas de tir.
+    [-Math.PI / 2, Math.PI / 2].forEach(m => arcText(title, m, size, .85 * bl, C.sunset, C.crep));
+    // Petites étoiles fixes autour du nom du jeu.
+    g2.save(); g2.fillStyle = `rgba(255,225,77,${.6 * bl})`; const rm = (RB.board + RB.sur) / 2;
+    [-Math.PI / 2 - .5, -Math.PI / 2 + .5, Math.PI / 2 - .5, Math.PI / 2 + .5].forEach(a => { g2.beginPath(); g2.arc(CX + Math.cos(a) * rm * K, CY + Math.sin(a) * rm * K, 5 * K, 0, TAU); g2.fill(); });
+    g2.restore();
+  }
+
+  /* ---------- check-out proposé : les cases à viser clignotent, restent fixes 1 s, reclignotent ---------- */
+  function cellOf(label) {
+    const L = String(label).toUpperCase();
+    if (L === 'BULL' || L === 'DB') return { n: 25, m: 2 };
+    if (L === '25' || L === 'SB') return { n: 25, m: 1 };
+    const m = L[0] === 'T' ? 3 : L[0] === 'D' ? 2 : 1, n = parseInt(L.replace(/^[TDS]/, ''), 10);
+    return n >= 1 && n <= 20 ? { n, m } : null;
+  }
+  function checkoutFx(labels) {
+    const cells = labels.map(cellOf).filter(Boolean); if (!cells.length) return;
+    const cols = ['255,225,77', '255,122,47', '255,77,141'], dur = 3.4;
+    coUntil = performance.now() + dur * 1000;
+    fx(dur, (k, t) => {
+      // 0-0,9 s : 3 clignotements ; 0,9-1,9 s : fixe ; 1,9-2,8 s : 3 clignotements ; puis fondu.
+      let on = 1;
+      if (t < .9 || (t > 1.9 && t < 2.8)) on = (Math.floor(t / .15) % 2) ? .25 : 1;
+      else if (t >= 2.8) on = Math.max(0, 1 - (t - 2.8) / .6);
+      cells.forEach((c, j) => {
+        const i = ORDER.indexOf(c.n);
+        // Secteur entier en léger, pour trouver la case de loin.
+        if (c.n !== 25) { segPath(i, RB.obull, RB.dOut); g2.fillStyle = `rgba(${cols[j % 3]},${.22 * on})`; g2.fill(); }
+        if (c.n === 25) { g2.beginPath(); g2.arc(CX, CY, (c.m === 2 ? RB.bull : RB.obull) * K, 0, TAU); }
+        else if (c.m === 3) segPath(i, RB.tIn, RB.tOut);
+        else if (c.m === 2) segPath(i, RB.dIn, RB.dOut);
+        else segPath(i, RB.tOut, RB.dIn);
+        g2.save(); g2.shadowColor = `rgba(${cols[j % 3]},${on})`; g2.shadowBlur = 30;
+        g2.fillStyle = `rgba(${cols[j % 3]},${on})`; g2.fill(); g2.restore();
+        g2.strokeStyle = `rgba(255,255,255,${on})`; g2.lineWidth = 4; g2.stroke();
+      });
+    });
+    ringTag(labels.join(' · '), { n: 2, dur, speed: .3, scale: .45 });
+  }
   function pattern() {
     // Mire de calibration : anneaux officiels, fils des secteurs, croix aux 4 points de réglage.
     g2.fillStyle = '#000'; g2.fillRect(0, 0, LCW, LCH);
     g2.strokeStyle = '#FFE14D'; g2.lineWidth = 2;
-    [RB.bull, RB.obull, RB.tIn, RB.tOut, RB.dIn, RB.dOut, RB.sur].forEach(r => { g2.beginPath(); g2.arc(CX, CY, r * K, 0, TAU); g2.stroke(); });
+    [RB.bull, RB.obull, RB.tIn, RB.tOut, RB.dIn, RB.dOut, RB.board, RB.sur].forEach(r => { g2.beginPath(); g2.arc(CX, CY, r * K, 0, TAU); g2.stroke(); });
     for (let i = 0; i < 20; i++) { const a = (i * 18 - 9) * Math.PI / 180, [x0, y0] = P2(Math.sin(a) * RB.obull, Math.cos(a) * RB.obull), [x1, y1] = P2(Math.sin(a) * RB.dOut, Math.cos(a) * RB.dOut); g2.beginPath(); g2.moveTo(x0, y0); g2.lineTo(x1, y1); g2.stroke(); }
     g2.strokeStyle = '#FF4D8D'; g2.lineWidth = 3;
     CAL_MM.forEach(([x, y]) => { const [X, Y] = P2(x, y); g2.beginPath(); g2.moveTo(X - 25, Y); g2.lineTo(X + 25, Y); g2.moveTo(X, Y - 25); g2.lineTo(X, Y + 25); g2.stroke(); });
@@ -265,7 +415,13 @@
     g2.fillStyle = '#000'; g2.fillRect(0, 0, LCW, LCH);
     live.forEach(e => { if (e.base) e.draw(e.t / e.dur, e.t); });
     if (shake > 0) { shake = Math.max(0, shake - dt * 1.1); g2.translate(rnd(-1, 1) * 18 * shake, rnd(-1, 1) * 18 * shake); }
-    if (boardLight > 0.01) steady(boardLight);
+    // Pendant une animation, l'éclairage blanc de la cible baisse fortement : sinon il noie les couleurs.
+    const busy = live.some(e => !e.base) || parts.length > 0;
+    fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
+    boardLight = Math.min(boardLight, fxDim);
+    if (boardLight > 0.01) { if (playing) steady(boardLight); else idle(now / 1000, boardLight); }
+    // Nom du jeu : pleine intensité hors effets, caché pendant le check-out (la route tourne à sa place).
+    if (playing && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
     parts = parts.filter(p => { p.life += dt; return p.life < p.max; });
@@ -283,12 +439,18 @@
     });
     g2.restore();
     g2.setTransform(1, 0, 0, 1, 0, 0);
+    clipSurround();
     drawMask();
+  }
+  // Noir hors du bord extérieur du surround : le mur n'est jamais éclairé (image penchée sinon visible).
+  function clipSurround() {
+    g2.fillStyle = '#000'; g2.beginPath(); g2.rect(0, 0, LCW, LCH); g2.arc(CX, CY, RB.sur * K, 0, TAU); g2.fill('evenodd');
   }
 
   // Temps restant avant que l'image redevienne fixe (s), pour mettre les caméras en pause.
   function busyFor() {
     let t = shake > 0 ? shake / 1.1 : 0;
+    if (fxDim < .98) t = Math.max(t, .7);  // l'éclairage de la cible remonte encore
     effects.forEach(e => { t = Math.max(t, e.dur - e.t); });
     parts.forEach(p => { t = Math.max(t, p.max - p.life); });
     return t;
@@ -297,12 +459,28 @@
   window.FX = {
     MMW, MMH, K, LCW, LCH, CX, CY, CAL_MM, init, frame, dart, busyFor,
     setPlaying(v) { playing = !!v; },
+    // Écran du hub hors partie : accueil, partie ou entrainement (animation d'attente).
+    setScene(v) { scene = v || 'accueil'; },
+    // Message du hub : écran (scene), nom du jeu en partie (title), check-out proposé (checkout).
+    setGame(d) {
+      if (!d) return;
+      scene = d.scene || 'accueil'; title = d.scene === 'jeu' ? String(d.title || '') : '';
+      const co = Array.isArray(d.checkout) ? d.checkout.join(' ') : '';
+      if (co && co !== lastCheckout && playing) checkoutFx(d.checkout);
+      lastCheckout = co;
+    },
+    // Rayons mesurés en calibration (mm). Le fil extérieur du double reste la référence (170).
+    setRings(r) {
+      if (!r) return;
+      const D = { tIn: 99, tOut: 107, dIn: 162, board: 225.5, sur: 380 };
+      Object.keys(D).forEach(k => { RB[k] = typeof r[k] === 'number' && r[k] > 20 && r[k] < 600 ? r[k] : D[k]; });
+    },
     setProjector(p) { if (p && isFinite(p.x) && isFinite(p.y) && isFinite(p.z)) PROJ = p; },
     // Démonstration complète d'un 180 (fin de tour, pas de fléchette attendue juste après).
     big180() {
       blackout(.5, .1); flash(0, 0, 700); shatter(2.4); shake = 1;
       headAt('p07', { x: 0, y: 0, w: 330, h: 330 }, 1.6, 'pop');
-      headCarousel(['p07', 'p03', 'p07', 'p11', 'p07', 'p04', 'p07', 'p08'], 3); sprayTag('180', 0, 0, 200, { dur: 3, rot: -.1 });
+      headCarousel(['p07', 'p03', 'p07', 'p11', 'p07', 'p04', 'p07', 'p08'], 3); sprayTag('180', 0, 0, 200, { dur: 3, rot: -.1 }); ringTag('180', { n: 6, dur: 3, speed: 1.4 });
       confetti(200); [[-420, 250], [420, 250], [-200, 300], [220, 290]].forEach(([x, y], i) => setTimeout(() => fireworks(x, y, [C.fluo, C.crep, C.sunset, C.ciel][i]), 400 + i * 300));
     },
   };

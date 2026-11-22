@@ -4,7 +4,7 @@ import '../history/history_store.dart';
 import '../stats/owner_stats.dart';
 
 /// Ce que le coach sait d'un joueur, lu dans l'historique :
-/// séances du coach (positions exactes), séries sur un double (positions), X01 en double out (cases).
+/// séances du coach et de Doubles Pro (positions exactes), séries sur un double (positions), X01 en double out (cases).
 class CoachStore {
   CoachStore._(this.stats);
 
@@ -37,6 +37,14 @@ class CoachStore {
         }
         final l = e.p['levels'];
         if (l is Map) levels = CoachLevels.fromJson(l.cast<String, Object?>());
+      } else if (e.kind == GameMode.doublesPro.name) {
+        // Doubles Pro : chaque fléchette sur un double, avec sa position.
+        for (final s in (e.p['shots'] as List? ?? const [])) {
+          if (s is! Map) continue;
+          final aim = parseDart('${s['a']}'), d = parseDart('${s['d']}');
+          if (!aim.isDouble) continue;
+          tries.add(DoubleTry(aim, d == aim, x: (s['x'] as num?)?.toDouble(), y: (s['y'] as num?)?.toDouble()));
+        }
       } else if (e.target && e.targetKey != null && e.targetKey!.startsWith('D')) {
         final aim = parseDart(e.targetKey!);
         if (!aim.isDouble) continue;

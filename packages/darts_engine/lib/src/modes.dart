@@ -24,7 +24,10 @@ enum GameMode {
   cricketCountUp,
 
   /// Coach adaptatif des check-out (séance générée depuis le profil).
-  coach;
+  coach,
+
+  /// Doubles Pro : diagnostic, chaînes, aléatoire, échelle de pression.
+  doublesPro;
 
   /// Entraînement solo (un seul joueur, écran d'entraînement).
   bool get solo => index >= GameMode.catch40.index;

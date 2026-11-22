@@ -688,11 +688,17 @@ class Detector:
             pos, pre = settling
             calm, _ = self._observe(frames, cals, {n: CHANGE_MIN for n in frames}, bg=pre)
             gap = np.linalg.norm(np.float64(fuse(calm)) - pos) if _pair_agrees(calm) else None
-            if gap is None or gap < SETTLE_MM:
+            # Une autre fléchette arrivée avant le calme (caméras en pause pendant l'animation de la
+            # première, ou lancer très rapproché) : vue par rapport à l'image où la première a été
+            # comptée, ailleurs qu'elle. Sans ce contrôle, le nouveau fond l'avalait sans la compter.
+            other = (np.linalg.norm(np.float64(fuse(obs)) - pos) if obs and _pair_agrees(obs) else None)
+            if (gap is None or gap < SETTLE_MM) and (other is None or other < SETTLE_MM):
                 self.log("fléchette au calme : " + (f"{gap:.1f} mm de la position comptée" if gap is not None
                                                      else "pas revue"))
                 self._rebase(frames, smalls)
                 return
+            if other is not None and other >= SETTLE_MM:
+                self.log(f"fléchette au calme, et une autre arrivée entre-temps à {other:.0f} mm")
         gone = self._removed(frames) if obs else None
         if gone is not None:
             # Une fléchette en place a été retirée (sa zone est redevenue comme avant elle) : pas une nouvelle.

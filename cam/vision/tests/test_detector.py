@@ -405,6 +405,47 @@ def test_early_while_vibrating():
         detector.CALM_S = saved
 
 
+def test_second_dart_before_first_settles():
+    """Fléchette comptée pendant sa vibration, puis caméras en pause (animation du projecteur) :
+    une 2e fléchette arrive juste à côté avant l'image calme. Elle est comptée aussi, pas avalée."""
+    np.random.seed(4)
+    cams = {n: pose(d) for n, d in detector.PRESET_DIRS.items()}
+    cals = {n: calib_for(R, t) for n, (R, t) in cams.items()}
+    got, logs = [], []
+    det = detector.Detector(lambda x, y, info: got.append((x, y)), lambda: None, log=logs.append)
+    tex = board_texture()
+    thrown = []
+
+    def frames():
+        return {n: render(R, t, tex, thrown) for n, (R, t) in cams.items()}
+
+    saved, dt, now = detector.CALM_S, 1 / 30, 0.0
+    detector.CALM_S = 0.15
+    try:
+        for _ in range(8):
+            det.step(frames(), cals, now)
+            now += dt
+        a, b = (40, 60), (40, 100)
+        thrown.append(a)
+        for i in range(8):
+            amp = 12 * math.exp(-i / 8)
+            thrown[-1] = (a[0], a[1], amp * (1 if i % 2 else -1), 0.0)
+            det.step(frames(), cals, now)
+            now += dt
+        assert len(got) == 1, logs[-6:]
+        # Pause : aucune image pendant 2 s, la 1re finit de vibrer et la 2e arrive.
+        thrown[-1] = a
+        thrown.append(b)
+        now += 2.0
+        for _ in range(12):
+            det.step(frames(), cals, now)
+            now += dt
+        assert len(got) == 2, (got, logs[-6:])
+        assert math.hypot(got[1][0] - b[0], got[1][1] - b[1]) < 8, got
+    finally:
+        detector.CALM_S = saved
+
+
 def test_match_light_ignores_exposure_keeps_dart():
     # Caméra dont l'exposition a bougé (gain + décalage) : plus de "gros changement", la fléchette reste.
     import numpy as np

@@ -11,6 +11,7 @@ import '../game_config.dart';
 import '../history/history_store.dart';
 import '../theme/tokens.dart';
 import 'correction_screen.dart';
+import '../widgets/cancel_dart.dart';
 import '../widgets/celebration.dart';
 import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
@@ -125,6 +126,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
         _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)));
       case 'c':
         _applyCorrection(GameLog.correctionOf(e));
+      case 'u':
+        _applyRemoval(e['i'] as int);
       case 'e':
         _nextVolley();
       case 'f':
@@ -205,6 +208,41 @@ class _TrainingScreenState extends State<TrainingScreen> {
     );
     if (c == null || !mounted) return;
     _applyCorrection(c);
+  }
+
+  /// Annuler : la fléchette est retirée du tour (coup fantôme, annulation), le joueur la relance.
+  Future<void> _cancel() async {
+    if (_showEnd || _stopped) return;
+    final c = await askCancelDart(context, _g.currentTurn, List.of(_hits));
+    if (c == null || !mounted) return;
+    _applyRemoval(c.index);
+  }
+
+  void _applyRemoval(int index) {
+    _log.add(GameLog.removal(index));
+    final before = _g.currentTurn.length;
+    setState(() {
+      _g.removeDart(index);
+      final kept = hitsWithout(_hits, index, _g.currentTurn);
+      _hits
+        ..clear()
+        ..addAll(kept);
+      // Les fléchettes de la volée sont les dernières de la série : on les remplace.
+      _throws.removeRange(_throws.length - before.clamp(0, _throws.length), _throws.length);
+      for (final h in kept) {
+        _throws.add({'d': h.dart.label, 'x': (h.position.dx * 10).round() / 10, 'y': (h.position.dy * 10).round() / 10});
+      }
+      _tagDart = null;
+    });
+    _endTimer?.cancel();
+    if (_g.isFinished) {
+      AppState.lastResult = _result;
+      _endTimer = Timer(const Duration(milliseconds: 1400), () {
+        if (mounted) setState(() => _showEnd = true);
+      });
+    } else if (_showEnd) {
+      setState(() => _showEnd = false);
+    }
   }
 
   void _applyCorrection(Correction c) {
@@ -469,12 +507,20 @@ class _TrainingScreenState extends State<TrainingScreen> {
         else
           KpiTile(label: 'Record de volée', value: best == null ? '-' : '$best', unit: 'points'),
         const Spacer(),
-        TdButton(
-          label: 'Corriger',
-          icon: LucideIcons.pencil,
-          variant: TdButtonVariant.secondary,
-          height: Td.ciblePi,
-          onPressed: _correct,
+        Row(
+          spacing: Td.s2,
+          children: [
+            Expanded(
+              child: TdButton(
+                label: 'Corriger',
+                icon: LucideIcons.pencil,
+                variant: TdButtonVariant.secondary,
+                height: Td.ciblePi,
+                onPressed: _correct,
+              ),
+            ),
+            Expanded(child: CancelDartButton(onPressed: _cancel)),
+          ],
         ),
         TdButton(
           label: 'Hors cible',

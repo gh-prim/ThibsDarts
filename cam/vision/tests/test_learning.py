@@ -89,3 +89,16 @@ if __name__ == "__main__":
     test_bias_is_learned()
     test_no_change_without_bias()
     print("ok")
+
+
+def test_cancelled_dart_leaves_validation():
+    with tempfile.TemporaryDirectory() as tmp:
+        lr = learning.Learner(tmp, detector.fuse, seg)
+        obs = observe((0.0, -103.0), {})
+        lr.add("fantome-1", obs, 0.0, -103.0)
+        assert lr.cancel("fantome-1", "fantome") == {"id": "fantome-1", "cancelled": "fantome"}
+        assert lr.cancel("inconnue", "fantome") is None
+        assert learning.score(lr.model, lr.examples, detector.fuse, seg) == (0, 0.0)
+        assert lr.stats()["ghosts"] == 1
+        # Gardé après un redémarrage.
+        assert learning.Learner(tmp, detector.fuse, seg).examples[0]["cancelled"] == "fantome"

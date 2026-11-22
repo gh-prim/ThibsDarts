@@ -94,6 +94,9 @@ class GameLog {
   static Map<String, Object?> correction(Correction c) =>
       dart('c', c.dart, x: c.position?.dx, y: c.position?.dy, more: {'i': c.index});
 
+  /// Fléchette [index] du tour retirée (coup fantôme, annulation).
+  static Map<String, Object?> removal(int index) => {'t': 'u', 'i': index};
+
   static Correction correctionOf(Map<String, Object?> e) =>
       Correction(e['i'] as int, dartOf(e), position: offsetOf(e));
 

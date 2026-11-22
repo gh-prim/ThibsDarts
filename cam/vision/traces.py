@@ -20,6 +20,8 @@ import numpy as np
 import detector
 
 KEEP = 30
+# Coups fantômes gardés pour l'analyse (hors des 30 dernières traces).
+KEEP_GHOSTS = 300
 # Une couleur par caméra (BGR), la même que sur le Pi 4.
 CAM_COLORS = {"Bas": (255, 200, 40), "Haut gauche": (200, 80, 255), "Haut droite": (80, 220, 80)}
 OTHER_COLOR = (180, 180, 180)
@@ -100,6 +102,29 @@ class TraceStore:
         dirs = sorted((e for e in os.scandir(self.dir) if e.is_dir()), key=lambda e: e.stat().st_mtime)
         for e in dirs[:-KEEP]:
             shutil.rmtree(e.path, ignore_errors=True)
+
+    def keep_ghost(self, dart_id, extra):
+        """Coup fantôme signalé sur le hub : la trace est copiée dans <données>/fantomes/ (gardée),
+        une ligne ajoutée à <données>/fantomes.jsonl. Renvoie la ligne, None si trace inconnue."""
+        d = self._path(dart_id)
+        trace = self.get(dart_id)
+        if d is None or trace is None:
+            return None
+        root = os.path.join(os.path.dirname(self.dir), "fantomes")
+        os.makedirs(root, exist_ok=True)
+        dest = os.path.join(root, dart_id)
+        shutil.copytree(d, dest, dirs_exist_ok=True)
+        line = {"id": dart_id, "ts": int(time.time() * 1000), "segment": trace["segment"],
+                "x": trace["x"], "y": trace["y"],
+                "cams": {c: v.get("segment") if v["seen"] else None for c, v in trace["cams"].items()}, **extra}
+        with open(os.path.join(dest, "fantome.json"), "w") as f:
+            json.dump(line, f, ensure_ascii=False)
+        with open(os.path.join(os.path.dirname(self.dir), "fantomes.jsonl"), "a") as f:
+            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+        dirs = sorted((e for e in os.scandir(root) if e.is_dir()), key=lambda e: e.stat().st_mtime)
+        for e in dirs[:-KEEP_GHOSTS]:
+            shutil.rmtree(e.path, ignore_errors=True)
+        return line
 
     def _path(self, dart_id):
         if not re.fullmatch(r"[0-9a-f-]{8,40}", dart_id or ""):

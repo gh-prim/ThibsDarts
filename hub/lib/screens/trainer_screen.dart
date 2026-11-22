@@ -18,6 +18,7 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
+import '../widgets/cancel_dart.dart';
 import '../widgets/volume_button.dart';
 
 /// Record d'un entraînement dans l'historique (meilleur score), null si jamais joué.
@@ -126,6 +127,8 @@ class _TrainerScreenState extends State<TrainerScreen> {
         _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)));
       case 'c':
         _applyCorrection(GameLog.correctionOf(e));
+      case 'u':
+        _applyRemoval(e['i'] as int);
       case 'e':
         _nextVolley();
       case 'r':
@@ -202,6 +205,27 @@ class _TrainerScreenState extends State<TrainerScreen> {
     );
     if (c == null || !mounted) return;
     _applyCorrection(c);
+  }
+
+  /// Annuler : la fléchette est retirée du tour (coup fantôme, annulation), le joueur la relance.
+  Future<void> _cancel() async {
+    if (_showEnd) return;
+    final c = await askCancelDart(context, _g.currentTurn, List.of(_hits));
+    if (c == null || !mounted) return;
+    _applyRemoval(c.index);
+  }
+
+  void _applyRemoval(int index) {
+    _log.add(GameLog.removal(index));
+    setState(() {
+      _g.removeDart(index);
+      final kept = hitsWithout(_hits, index, _g.currentTurn);
+      _hits
+        ..clear()
+        ..addAll(kept);
+      _tagDart = null;
+    });
+    _scheduleEnd();
   }
 
   void _applyCorrection(Correction c) {
@@ -466,12 +490,20 @@ class _TrainerScreenState extends State<TrainerScreen> {
       ),
       ..._progress(),
       const Spacer(),
-      TdButton(
-        label: 'Corriger',
-        icon: LucideIcons.pencil,
-        variant: TdButtonVariant.secondary,
-        height: Td.ciblePi,
-        onPressed: _correct,
+      Row(
+        spacing: Td.s2,
+        children: [
+          Expanded(
+            child: TdButton(
+              label: 'Corriger',
+              icon: LucideIcons.pencil,
+              variant: TdButtonVariant.secondary,
+              height: Td.ciblePi,
+              onPressed: _correct,
+            ),
+          ),
+          Expanded(child: CancelDartButton(onPressed: _cancel)),
+        ],
       ),
       TdButton(
         label: 'Hors cible',

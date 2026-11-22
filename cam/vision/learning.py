@@ -119,6 +119,8 @@ def score(model, examples, fuse, segment):
     """(segments justes, erreur moyenne en mm sur les exemples corrigés) avec ce modèle."""
     good, errs = 0, []
     for e in examples:
+        if e.get("cancelled"):
+            continue
         obs = [dict(o, tip=np.float64(o["tip"]), dir=None if o.get("dir") is None else np.float64(o["dir"]))
                for o in e["obs"]]
         if not obs:
@@ -186,6 +188,18 @@ class Learner:
             self._save_examples()
             return self._refit()
 
+    def cancel(self, dart_id, reason):
+        """Fléchette annulée sur le hub (fantome, annulation) : sa valeur n'est plus supposée juste,
+        elle sort de la validation. Rien à apprendre de sa position."""
+        with self.lock:
+            e = next((e for e in reversed(self.examples) if e["id"] == dart_id), None)
+            if e is None:
+                return None
+            e["cancelled"] = reason
+            e["truth"] = None
+            self._save_examples()
+            return {"id": dart_id, "cancelled": reason}
+
     def reset(self):
         with self.lock:
             self.model = Model()
@@ -224,6 +238,7 @@ class Learner:
                     "recalibrate": med is not None and len(v) >= MIN_SAMPLES and med > RECALIBRATE_MM,
                 }
             return {"examples": len(self.examples), "corrected": sum(e["corrected"] for e in self.examples),
+                    "ghosts": sum(e.get("cancelled") == "fantome" for e in self.examples),
                     "with_position": len(corrected), "cams": cams, "model": self.model.to_json(),
                     "last": self.history}
 

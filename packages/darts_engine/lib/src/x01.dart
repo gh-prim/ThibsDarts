@@ -114,6 +114,12 @@ class X01Game {
     _replay(List.of(_turn)..removeLast());
   }
 
+  /// Retire la fléchette [index] du tour en cours (coup fantôme, annulation) : le joueur la relance.
+  ThrowOutcome? removeDart(int index) {
+    if (index < 0 || index >= _turn.length) return null;
+    return _replay(List.of(_turn)..removeAt(index));
+  }
+
   /// Corrige la fléchette [index] (0 à 2) du tour en cours et recalcule le tour.
   /// Si la correction fait finir ou buster plus tôt, les fléchettes suivantes sont ignorées.
   ThrowOutcome? correctDart(int index, DartThrow dart) {

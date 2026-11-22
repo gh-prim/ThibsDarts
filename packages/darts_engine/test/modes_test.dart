@@ -122,6 +122,19 @@ void main() {
     expect(g.currentTurn.length, 1);
   });
 
+  test('retirer une fléchette : rejoue sans elle et rouvre le tour', () {
+    final g = ClockGame(['A', 'B']);
+    g.throwDart(const DartThrow(1));
+    g.throwDart(const DartThrow(2));
+    g.throwDart(const DartThrow(3));
+    expect(g.awaitingNextPlayer, isTrue);
+    g.removeDart(2);
+    expect(g.target[0], 3);
+    expect(g.currentTurn.length, 2);
+    expect(g.awaitingNextPlayer, isFalse);
+    expect(g.currentName, 'A');
+  });
+
   test('killer : se tuer finit le tour', () {
     final g = KillerGame(['A', 'B', 'C'], numbers: [20, 6, 3], lives: 1);
     g.throwDart(const DartThrow.double(20));

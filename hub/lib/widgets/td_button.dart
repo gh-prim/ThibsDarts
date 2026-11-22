@@ -58,12 +58,17 @@ class _TdButtonState extends State<TdButton> {
             // Arête de verre (inset 0 1px 0 blanc 22%) simulée par un léger dégradé.
             boxShadow: primary ? const [BoxShadow(color: Color(0x73FF7A2F), blurRadius: 32)] : null,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (widget.icon != null) ...[Icon(widget.icon, color: fg, size: 26), const SizedBox(width: Td.s2)],
-              Text(widget.label, style: TdText.button.copyWith(color: fg)),
-            ],
+          alignment: Alignment.center,
+          // Bouton étroit (3 par ligne) : le libellé rétrécit au lieu de déborder.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null) ...[Icon(widget.icon, color: fg, size: 26), const SizedBox(width: Td.s2)],
+                Text(widget.label, style: TdText.button.copyWith(color: fg)),
+              ],
+            ),
           ),
         ),
       ),

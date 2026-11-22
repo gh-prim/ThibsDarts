@@ -25,6 +25,7 @@ import '../widgets/td_button.dart';
 import 'coach_screen.dart';
 import 'doubles_pro_screen.dart';
 import 'correction_screen.dart';
+import '../widgets/cancel_dart.dart';
 import 'game_screen.dart';
 import 'trainer_screen.dart';
 import 'training_screen.dart';
@@ -155,6 +156,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
         _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)), bot: e['b'] == true);
       case 'c':
         _applyCorrection(GameLog.correctionOf(e));
+      case 'u':
+        _applyRemoval(e['i'] as int);
       case 'e':
         _endTurn();
       case 'r':
@@ -254,6 +257,27 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     );
     if (c == null || !mounted) return;
     _applyCorrection(c);
+  }
+
+  /// Annuler : la fléchette est retirée du tour (coup fantôme, annulation), le joueur la relance.
+  Future<void> _cancel() async {
+    if (_showWin || _botTurn) return;
+    final c = await askCancelDart(context, _g.currentTurn, List.of(_hits));
+    if (c == null || !mounted) return;
+    _applyRemoval(c.index);
+  }
+
+  void _applyRemoval(int index) {
+    _log.add(GameLog.removal(index));
+    setState(() {
+      _g.removeDart(index);
+      final kept = hitsWithout(_hits, index, _g.currentTurn);
+      _hits
+        ..clear()
+        ..addAll(kept);
+      _tagDart = null;
+    });
+    _scheduleWin();
   }
 
   void _applyCorrection(Correction c) {
@@ -689,12 +713,20 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   Widget _buttons({bool endTurn = true}) => Column(
     spacing: Td.s2,
     children: [
-      TdButton(
-        label: 'Corriger',
-        icon: LucideIcons.pencil,
-        variant: TdButtonVariant.secondary,
-        height: Td.ciblePi,
-        onPressed: _correct,
+      Row(
+        spacing: Td.s2,
+        children: [
+          Expanded(
+            child: TdButton(
+              label: 'Corriger',
+              icon: LucideIcons.pencil,
+              variant: TdButtonVariant.secondary,
+              height: Td.ciblePi,
+              onPressed: _correct,
+            ),
+          ),
+          Expanded(child: CancelDartButton(onPressed: _cancel)),
+        ],
       ),
       TdButton(
         label: 'Hors cible',
@@ -776,6 +808,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                       onPressed: _correct,
                     ),
                   ),
+                  Expanded(child: CancelDartButton(onPressed: _cancel)),
                   Expanded(
                     child: TdButton(
                       label: 'Hors cible',

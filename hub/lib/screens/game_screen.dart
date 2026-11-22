@@ -26,6 +26,7 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
+import '../widgets/cancel_dart.dart';
 import '../widgets/volume_button.dart';
 
 /// Partie 501 (planches J501*). Les fléchettes arrivent du Pi 5 (CamLink) ;
@@ -136,6 +137,8 @@ class _GameScreenState extends State<GameScreen> {
         _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)), bot: e['b'] == true);
       case 'c':
         _applyCorrection(GameLog.correctionOf(e));
+      case 'u':
+        _applyRemoval(e['i'] as int);
       case 'e':
         _endTurn();
       case 'r':
@@ -400,6 +403,33 @@ class _GameScreenState extends State<GameScreen> {
     );
     if (c == null || !mounted) return;
     _applyCorrection(c);
+  }
+
+  /// Annuler : la fléchette est retirée du tour (coup fantôme, annulation), le joueur la relance.
+  Future<void> _cancel() async {
+    if (_showWin || _botTurn) return;
+    final c = await askCancelDart(context, _game.currentTurn, List.of(_hits));
+    if (c == null || !mounted) return;
+    _applyRemoval(c.index);
+  }
+
+  void _applyRemoval(int index) {
+    _log.add(GameLog.removal(index));
+    final hadWinner = _game.winner;
+    setState(() {
+      if (hadWinner != null) _legsWon.update(hadWinner.name, (n) => n - 1);
+      _last = _game.removeDart(index);
+      if (_game.winner != null) {
+        _legsWon.update(_game.winner!.name, (n) => n + 1, ifAbsent: () => 1);
+        _recordResult();
+      }
+      final kept = hitsWithout(_hits, index, _game.currentTurn);
+      _hits
+        ..clear()
+        ..addAll(kept);
+      _tagDart = null;
+    });
+    _scheduleWin();
   }
 
   void _applyCorrection(Correction c) {
@@ -717,12 +747,20 @@ class _GameScreenState extends State<GameScreen> {
                   Column(
                     spacing: Td.s2,
                     children: [
-                      TdButton(
-                        label: 'Corriger',
-                        icon: LucideIcons.pencil,
-                        variant: TdButtonVariant.secondary,
-                        height: Td.ciblePi,
-                        onPressed: _correct,
+                      Row(
+                        spacing: Td.s2,
+                        children: [
+                          Expanded(
+                            child: TdButton(
+                              label: 'Corriger',
+                              icon: LucideIcons.pencil,
+                              variant: TdButtonVariant.secondary,
+                              height: Td.ciblePi,
+                              onPressed: _correct,
+                            ),
+                          ),
+                          Expanded(child: CancelDartButton(onPressed: _cancel)),
+                        ],
                       ),
                       TdButton(
                         label: 'Hors cible',

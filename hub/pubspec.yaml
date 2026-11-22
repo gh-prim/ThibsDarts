@@ -28,6 +28,7 @@ flutter:
     - assets/brand/
     - assets/sounds/
     - assets/fete180/
+    - assets/volee0/
   fonts:
     - family: Inter
       fonts:

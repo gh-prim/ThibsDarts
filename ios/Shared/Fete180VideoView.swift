@@ -2,12 +2,14 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// Vidéo 180 (clip Blender, 6 s, avec son) en plein écran. onEnd part à la fin ou au toucher.
+/// Clip de fête (Blender, avec son) en plein écran : "fete180" (180) ou "volee0" (volée à 0).
+/// onEnd part à la fin ou au toucher.
 struct Fete180VideoView: View {
+    var clip = "fete180"
     var onEnd: () -> Void
 
     var body: some View {
-        Fete180Player(onEnd: onEnd)
+        Fete180Player(clip: clip, onEnd: onEnd)
             .background(Color.black)
             .ignoresSafeArea()
             .contentShape(Rectangle())
@@ -16,6 +18,7 @@ struct Fete180VideoView: View {
 }
 
 private struct Fete180Player: UIViewRepresentable {
+    var clip: String
     var onEnd: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -23,7 +26,7 @@ private struct Fete180Player: UIViewRepresentable {
     func makeUIView(context: Context) -> PlayerView {
         let view = PlayerView()
         view.backgroundColor = .black
-        guard let url = Bundle.main.url(forResource: "fete180", withExtension: "mp4") else {
+        guard let url = Bundle.main.url(forResource: clip, withExtension: "mp4") else {
             DispatchQueue.main.async { onEnd() }
             return view
         }

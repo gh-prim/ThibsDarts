@@ -9,13 +9,14 @@ import 'package:flutter/widgets.dart';
 import '../system/sounds.dart';
 import '../theme/tokens.dart';
 
-/// Vidéo 180 (clip Blender, 6 s) plein écran sur le petit écran, avec son.
+/// Clip de fête (Blender) plein écran sur le petit écran, avec son : 'fete180' (180) ou 'volee0' (volée à 0).
 /// flutter-pi n'a pas de lecteur vidéo : les images JPEG 1024 x 576 sont mises bout à bout dans
-/// assets/fete180/fete180.frames (index dans fete180.json) et décodées quelques images en avance.
-/// Le son (assets/sounds/fete180.wav) part avec la première image. Toucher l'écran coupe la vidéo.
+/// assets/CLIP/CLIP.frames (index dans CLIP.json) et décodées quelques images en avance.
+/// Le son (assets/sounds/CLIP.wav) part avec la première image. Toucher l'écran coupe la vidéo.
 class Fete180Video extends StatefulWidget {
-  const Fete180Video({super.key, required this.onDone});
+  const Fete180Video({super.key, this.clip = 'fete180', required this.onDone});
 
+  final String clip;
   final VoidCallback onDone;
 
   @override
@@ -28,12 +29,12 @@ class _Clip {
   final List<List<int>> frames;
   final int fps;
 
-  static Future<_Clip>? _loading;
+  static final Map<String, Future<_Clip>> _loading = {};
 
-  /// Chargé une fois, gardé en mémoire (6 Mo) pour les 180 suivants.
-  static Future<_Clip> load() => _loading ??= () async {
-    final index = jsonDecode(await rootBundle.loadString('assets/fete180/fete180.json')) as Map<String, dynamic>;
-    final data = await rootBundle.load('assets/fete180/fete180.frames');
+  /// Chargé une fois, gardé en mémoire (6 à 8 Mo) pour les fois suivantes.
+  static Future<_Clip> load(String name) => _loading[name] ??= () async {
+    final index = jsonDecode(await rootBundle.loadString('assets/$name/$name.json')) as Map<String, dynamic>;
+    final data = await rootBundle.load('assets/$name/$name.frames');
     final frames = [for (final f in index['frames'] as List) (f as List).cast<int>()];
     return _Clip(data, frames, index['fps'] as int? ?? 30);
   }();
@@ -55,11 +56,11 @@ class _Fete180VideoState extends State<Fete180Video> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _Clip.load().then((c) {
+    _Clip.load(widget.clip).then((c) {
       if (!mounted) return;
       _clip = c;
       _fill(0);
-      Sounds.play('fete180');
+      Sounds.play(widget.clip);
       _ticker.start();
     }).catchError((Object e) {
       debugPrint('Fete180Video: $e');

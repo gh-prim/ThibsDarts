@@ -60,6 +60,7 @@ class _GameScreenState extends State<GameScreen> {
   /// Tours des manches déjà jouées, par joueur (pour les stats de victoire).
   final Map<String, List<List<List<DartThrow>>>> _pastLegs = {};
   bool _show180 = false;
+  bool _showVolee0 = false;
   bool _showWin = false;
   Timer? _botTimer;
   late final DartBot? _bot = _cfg.hasBot ? DartBot(BotLevel.of(_cfg.botLevel!)) : null;
@@ -206,6 +207,10 @@ class _GameScreenState extends State<GameScreen> {
         _show180 = true;
         if (!_log.replaying) CamLink.instance.fx('180');
       }
+      if (t.length == 3 && t.every((x) => x.isMiss)) {
+        _showVolee0 = true;
+        if (!_log.replaying) CamLink.instance.fx('volee0');
+      }
       _hits.add(BoardHit(d, pos, _hits.length + 1, traceId: traceId));
       _tagDart = d;
       _tagKey++;
@@ -247,6 +252,7 @@ class _GameScreenState extends State<GameScreen> {
       _tagDart = null;
       _showWin = false;
       _show180 = false;
+      _showVolee0 = false;
     });
     _botPlay();
   }
@@ -763,6 +769,12 @@ class _GameScreenState extends State<GameScreen> {
             Positioned.fill(
               child: Fete180Video(onDone: () {
                 if (mounted) setState(() => _show180 = false);
+              }),
+            )
+          else if (_showVolee0)
+            Positioned.fill(
+              child: Fete180Video(clip: 'volee0', onDone: () {
+                if (mounted) setState(() => _showVolee0 = false);
               }),
             ),
         ],

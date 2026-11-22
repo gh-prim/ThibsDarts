@@ -18,6 +18,7 @@ import 'settings_screen.dart';
 import 'stats_screen.dart';
 import 'salon_screen.dart';
 import 'tournament_screen.dart';
+import '../widgets/volume_button.dart';
 
 /// Accueil : le Pi attend une partie.
 class HomeScreen extends StatefulWidget {
@@ -111,6 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: Td.s3),
                   const MusicButton(size: 48),
+                  const SizedBox(width: Td.s2),
+                  const VolumeButton(size: 48),
                   const SizedBox(width: Td.s2),
                   _PillButton(icon: LucideIcons.trophy, label: 'Mes stats', onTap: () => _open(const StatsScreen())),
                   const SizedBox(width: Td.s2),

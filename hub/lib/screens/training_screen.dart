@@ -19,6 +19,7 @@ import '../widgets/logo.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
+import '../widgets/volume_button.dart';
 
 /// Record d'entraînement dans l'historique : réussites sur une série ([target], [darts]),
 /// ou meilleure volée libre quand [target] est null. Null si jamais joué.
@@ -450,6 +451,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
               onLongPress: () => Navigator.of(context).pop(),
               child: const Logo(variant: LogoVariant.icon, height: 44),
             ),
+            const SizedBox(width: Td.s2),
+            const VolumeButton(),
             const Spacer(),
             Text('Entraînement', style: TdText.inter(15, 20, 400, Td.ink2)),
           ],

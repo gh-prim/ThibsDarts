@@ -16,6 +16,7 @@ import '../widgets/mjpeg_view.dart';
 import '../widgets/stage.dart';
 import '../widgets/steps_progress.dart';
 import '../widgets/td_button.dart';
+import '../widgets/volume_button.dart';
 
 /// En-tête des écrans de réglages : bouton retour et titre.
 class _Header extends StatelessWidget {
@@ -38,6 +39,8 @@ class _Header extends StatelessWidget {
         ),
       ),
       Text(title, style: TdText.title),
+      const Spacer(),
+      const VolumeButton(size: 56),
     ],
   );
 }

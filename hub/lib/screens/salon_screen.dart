@@ -10,6 +10,7 @@ import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'mode_game_screen.dart';
 import 'setup_screen.dart' show SetupQrCode;
+import '../widgets/volume_button.dart';
 
 /// Salon (planche Salon) : QR code pour rejoindre depuis l'iPhone, joueurs, Invité, Lancer.
 class SalonScreen extends StatefulWidget {
@@ -107,6 +108,7 @@ class _SalonScreenState extends State<SalonScreen> {
                 ],
               ),
             ),
+            const VolumeButton(),
           ],
         ),
         const SizedBox(height: Td.s3),

@@ -14,6 +14,7 @@ import '../widgets/dartboard.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
+import '../widgets/volume_button.dart';
 
 // Planche "Stats de Thibs Pi" : Résumé, X01, Entraînement, Potes, Cible, et Ton mois.
 
@@ -132,6 +133,8 @@ class _StatsScreenState extends State<StatsScreen> {
           width: 580,
           child: TdSegmented(options: _tabs, value: _tab, touch: true, onChanged: (v) => setState(() => _tab = v)),
         ),
+        const SizedBox(width: Td.s3),
+        const VolumeButton(),
       ],
     );
   }

@@ -7,6 +7,7 @@ import '../cam/cam_link.dart';
 import '../theme/tokens.dart';
 import '../widgets/controls.dart';
 import '../widgets/stage.dart';
+import '../widgets/volume_button.dart';
 
 /// Réglages > Mode Debug : actif partout (parties, entraînements). Le Pi 5 garde les photos de
 /// chaque décision de la détection, et la vérité donnée sur le hub (correction, fantôme, fléchette
@@ -53,6 +54,8 @@ class DebugScreen extends StatelessWidget {
                   const Icon(LucideIcons.bug, size: 28, color: Td.fluo),
                   const SizedBox(width: Td.s2),
                   Text('Mode Debug', style: TdText.inter(28, 34, 700, Td.ink)),
+                  const Spacer(),
+                  const VolumeButton(),
                 ],
               ),
               Expanded(

@@ -62,6 +62,7 @@ class _GameScreenState extends State<GameScreen> {
   bool _show180 = false;
   bool _showVolee0 = false;
   bool _showPlein20 = false;
+  bool _showBust = false;
   bool _showWin = false;
   Timer? _botTimer;
   late final DartBot? _bot = _cfg.hasBot ? DartBot(BotLevel.of(_cfg.botLevel!)) : null;
@@ -208,6 +209,10 @@ class _GameScreenState extends State<GameScreen> {
         _show180 = true;
         if (!_log.replaying) CamLink.instance.fx('180');
       }
+      if (_last == ThrowOutcome.bust) {
+        _showBust = true;
+        if (!_log.replaying) CamLink.instance.fx('bust');
+      }
       if (!_show180 && _last != ThrowOutcome.bust && t.length == 3 && t.every((x) => x.sector == 20)) {
         _showPlein20 = true;
         if (!_log.replaying) CamLink.instance.fx('plein20');
@@ -259,6 +264,7 @@ class _GameScreenState extends State<GameScreen> {
       _show180 = false;
       _showVolee0 = false;
       _showPlein20 = false;
+      _showBust = false;
     });
     _botPlay();
   }
@@ -787,6 +793,12 @@ class _GameScreenState extends State<GameScreen> {
             Positioned.fill(
               child: Fete180Video(clip: 'plein20', onDone: () {
                 if (mounted) setState(() => _showPlein20 = false);
+              }),
+            )
+          else if (_showBust)
+            Positioned.fill(
+              child: Fete180Video(clip: 'bust', onDone: () {
+                if (mounted) setState(() => _showBust = false);
               }),
             ),
         ],

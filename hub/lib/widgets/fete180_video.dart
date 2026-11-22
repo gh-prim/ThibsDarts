@@ -9,7 +9,7 @@ import 'package:flutter/widgets.dart';
 import '../system/sounds.dart';
 import '../theme/tokens.dart';
 
-/// Clip de fête (Blender) plein écran sur le petit écran, avec son : 'fete180' (180), 'volee0' (volée à 0) ou 'plein20' (3 fléchettes dans le 20).
+/// Clip de fête (Blender) plein écran sur le petit écran, avec son : 'fete180' (180), 'volee0' (volée à 0) 'plein20' (3 fléchettes dans le 20) ou 'bust'.
 /// flutter-pi n'a pas de lecteur vidéo : les images JPEG 1024 x 576 sont mises bout à bout dans
 /// assets/CLIP/CLIP.frames (index dans CLIP.json) et décodées quelques images en avance.
 /// Le son (assets/sounds/CLIP.wav) part avec la première image. Toucher l'écran coupe la vidéo.

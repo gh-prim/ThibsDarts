@@ -157,6 +157,7 @@ struct LiveGameView: View {
     @State private var seen180: String?
     @State private var seen0: String?
     @State private var seen20: String?
+    @State private var seenBust: String?
 
     private var me: String? { info.players.first { $0.id == info.you }?.name }
     private var title: String {
@@ -193,6 +194,9 @@ struct LiveGameView: View {
         .overlay {
             if game.winner == nil, is180, seen180 != turnKey {
                 Fete180VideoView { seen180 = turnKey }
+                    .transition(.opacity)
+            } else if game.winner == nil, game.isX01, game.bust, seenBust != turnKey {
+                Fete180VideoView(clip: "bust") { seenBust = turnKey }
                     .transition(.opacity)
             } else if game.winner == nil, isPlein20, seen20 != turnKey {
                 Fete180VideoView(clip: "plein20") { seen20 = turnKey }

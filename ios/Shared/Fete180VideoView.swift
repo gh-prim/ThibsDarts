@@ -2,7 +2,7 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// Clip de fête (Blender, avec son) en plein écran : "fete180" (180), "volee0" (volée à 0) ou "plein20" (3 dans le 20).
+/// Clip de fête (Blender, avec son) en plein écran : "fete180" (180), "volee0" (volée à 0) "plein20" (3 dans le 20) ou "bust".
 /// onEnd part à la fin ou au toucher.
 struct Fete180VideoView: View {
     var clip = "fete180"

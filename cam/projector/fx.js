@@ -18,7 +18,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const P2 = (x, y) => [CX + x * K, CY - y * K];
 
-  let g2 = null, effects = [], parts = [], shake = 0, boardLight = 1, playing = false, fxDim = 1, scene = 'accueil', title = '', lastCheckout = '', coUntil = 0;
+  let g2 = null, effects = [], parts = [], shake = 0, training = false, boardLight = 1, playing = false, fxDim = 1, scene = 'accueil', title = '', lastCheckout = '', coUntil = 0;
   // Position du projecteur par rapport au centre de la cible (mm, z = distance au mur) : sert à placer
   // l'ombre de l'arceau et des caméras, qu'on laisse noires pour ne pas éclairer les objectifs.
   let PROJ = { x: -700, y: -530, z: 1550 };
@@ -275,7 +275,9 @@
     ne.forEach(e => { e.sp = sp; }); np.forEach(p => { p.sp = sp; });
     return typeof r === 'number' ? r / sp : r;
   }
+  // Renvoie false quand rien n'est projeté (entraînement, hors cible) : pas de pause des caméras.
   function dart(h) {
+    if (training && !h.m) return false;
     if (clock && playing) return clockDart(h);
     quick(() => dartFx(h));
   }
@@ -658,6 +660,7 @@
       const hk = d.scene === 'stats' && Array.isArray(d.heat) ? JSON.stringify(d.heat) : '';
       if (hk !== heatKey) { heatKey = hk; heatCv = hk ? buildHeat(d.heat) : null; }
       scene = d.scene || 'accueil'; title = d.scene === 'jeu' ? String(d.title || '') : '';
+      training = d.scene === 'jeu' && !!d.training;
       const ct = d.scene === 'jeu' && Number.isInteger(d.clock) && d.clock >= 1 && d.clock <= 20 ? d.clock : 0;
       if (!ct) clock = null;
       else if (!clock) { clock = { target: ct, prev: 0, switchAt: 0 }; if (playing) clockMove(0, ct, 0); }

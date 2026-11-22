@@ -165,6 +165,7 @@ class CamLink {
   /// Around the clock : [clock] = numéro visé par le joueur en cours (animations du projecteur).
   /// [wait] : tour fini, le hub ignore les fléchettes jusqu'au retrait : le projecteur aussi.
   /// Coach : [coachCell] = case visée allumée en fixe ("D16"), [coachZone] = part du double éclairée (0,1 à 1).
+  /// [training] : entraînement, une fléchette hors cible ne déclenche aucune animation (pas de temps perdu).
   void setGameInfo(
     String title, {
     List<String>? checkout,
@@ -172,6 +173,7 @@ class CamLink {
     bool wait = false,
     String? coachCell,
     double coachZone = 1,
+    bool training = false,
   }) => _setProjector({
     'scene': 'jeu',
     'title': title,
@@ -179,6 +181,7 @@ class CamLink {
     'clock': ?clock,
     if (coachCell != null) 'coach': {'cell': coachCell, 'zone': double.parse(coachZone.toStringAsFixed(2))},
     if (wait) 'wait': true,
+    if (training) 'training': true,
   });
 
   void _setProjector(Map<String, dynamic> body) {

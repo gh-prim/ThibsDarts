@@ -116,8 +116,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
       const a = ORDER.indexOf(n) * 18 * Math.PI / 180, r = n === 25 ? 0 : m === 3 ? 103 : m === 2 ? 166 : 135;
       x = Math.sin(a) * r; y = Math.cos(a) * r;
     } else y = -y;
-    FX.dart({ n, m, x, y });
-    light(true);
+    if (FX.dart({ n, m, x, y }) !== false) light(true);
   });
   // Clips de fête (180, volée à 0) : chargés une fois en mémoire (blob), rejoués quand le hub les annonce.
   const clips = {};

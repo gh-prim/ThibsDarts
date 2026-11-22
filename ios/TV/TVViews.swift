@@ -87,6 +87,10 @@ struct TVLiveView: View {
                 Fete180VideoView { withAnimation(Td.sortie) { model.fete180 = false } }
                     .transition(.opacity)
             }
+            if model.bust {
+                Fete180VideoView(clip: "bust") { withAnimation(Td.sortie) { model.bust = false } }
+                    .transition(.opacity)
+            }
             if model.plein20 {
                 Fete180VideoView(clip: "plein20") { withAnimation(Td.sortie) { model.plein20 = false } }
                     .transition(.opacity)

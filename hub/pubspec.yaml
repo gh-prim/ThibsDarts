@@ -30,6 +30,7 @@ flutter:
     - assets/fete180/
     - assets/volee0/
     - assets/plein20/
+    - assets/bust/
   fonts:
     - family: Inter
       fonts:

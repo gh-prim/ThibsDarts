@@ -263,9 +263,10 @@ class _CoachScreenState extends State<CoachScreen> {
         checkout: route == null || route.length < 2 ? null : [for (final d in route) d.label],
         coachCell: playing ? aim?.label : null,
         coachZone: g.step.kind == CoachStepKind.doubles ? g.zone : 1,
+        training: true,
       );
     } else {
-      CamLink.instance.setGameInfo('Coach', wait: true);
+      CamLink.instance.setGameInfo('Coach', wait: true, training: true);
     }
     CamLink.instance.setPlaying(playing);
     final pressure = playing && g.step.kind == CoachStepKind.pressure && !g.awaitingNextPlayer;

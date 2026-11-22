@@ -97,7 +97,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       PausedGame.clear();
     }
     CamLink.instance
-      ..setGameInfo(widget.config.title)
+      ..setGameInfo(widget.config.title, training: true)
       ..debugGame = widget.config.label
       ..onDart = _camDart
       ..onTakeout = _camTakeout

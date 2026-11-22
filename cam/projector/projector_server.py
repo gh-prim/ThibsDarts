@@ -64,7 +64,8 @@ class Hub:
         # Le check-out seul, non : son effet est passager (caméras en pause via /light), l'image revient pareille.
         changed_game = False
         if kind == "game" and isinstance(data, dict):
-            decor = (data.get("scene"), data.get("title"))
+            # Statistiques : une autre cible choisie = nouvelle heatmap, donc nouveau fond aussi.
+            decor = (data.get("scene"), data.get("title"), data.get("aim"), len(data.get("heat") or []))
             changed_game = getattr(self, "decor", None) != decor
             self.decor = decor
         if (kind in ("pointer", "calib", "debug") or changed_state or changed_game) and self.client:

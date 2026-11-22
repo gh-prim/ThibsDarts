@@ -4,6 +4,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../cam/cam_link.dart';
 import '../game_config.dart';
 import '../history/history_store.dart';
 import '../stats/owner_stats.dart';
@@ -11,6 +12,7 @@ import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/controls.dart';
 import '../widgets/dartboard.dart';
+import '../widgets/heatmap.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
@@ -63,6 +65,21 @@ class _StatsScreenState extends State<StatsScreen> {
   late final OwnerStats _s = OwnerStats(widget.history ?? HistoryStore.instance.all(), now: widget.now);
   late String _tab = widget.initialTab;
   String _aim = 'T20';
+
+  @override
+  void initState() {
+    super.initState();
+    _project();
+  }
+
+  /// Vidéoprojecteur : la heatmap de la cible choisie, tant que les stats sont ouvertes.
+  void _project() => CamLink.instance.setStatsHeat(_aim, _s.aimReport(_aim).points);
+
+  @override
+  void dispose() {
+    CamLink.instance.setScene('accueil');
+    super.dispose();
+  }
 
   void _openMonth() => Navigator.of(context).push(
     MaterialPageRoute<void>(builder: (_) => MonthStatsScreen(stats: _s, year: _s.now.year, month: _s.now.month)),
@@ -906,7 +923,10 @@ class _StatsScreenState extends State<StatsScreen> {
                 options: OwnerStats.aims,
                 value: _aim,
                 touch: true,
-                onChanged: (v) => setState(() => _aim = v),
+                onChanged: (v) {
+                  setState(() => _aim = v);
+                  _project();
+                },
               ),
               Container(
                 padding: const EdgeInsets.all(Td.s4),
@@ -946,19 +966,22 @@ class _StatsScreenState extends State<StatsScreen> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, c) {
-              final side = math.min(470.0, math.min(c.maxWidth, c.maxHeight));
-              return Center(
-                child: SizedBox(
-                  width: side,
-                  height: side,
-                  child: Dartboard(
-                    hits: [
-                      for (final (i, h) in a.recent.indexed) BoardHit(h.dart, Offset(h.x, h.y), i + 1),
-                    ],
-                    aimed: t == null || t.sector == 25 ? null : DartThrow(t.sector, t.multiplier),
-                    heat: a.heat,
+              final side = math.min(470.0, math.min(c.maxWidth, c.maxHeight - 30));
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                spacing: 8,
+                children: [
+                  SizedBox(
+                    width: side,
+                    height: side,
+                    child: Dartboard(
+                      dim: true,
+                      aimed: t == null || t.sector == 25 ? null : DartThrow(t.sector, t.multiplier),
+                      heatPoints: [for (final p in a.points) Offset(p.x, p.y)],
+                    ),
                   ),
-                ),
+                  if (!a.isEmpty) const _HeatLegend(),
+                ],
               );
             },
           ),
@@ -995,6 +1018,26 @@ class _StatsScreenState extends State<StatsScreen> {
       ],
     );
   }
+}
+
+/// Légende de la heatmap : Peu, dégradé vert à rouge, Beaucoup.
+class _HeatLegend extends StatelessWidget {
+  const _HeatLegend();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    spacing: 8,
+    children: [
+      Text('Peu', style: TdText.inter(12, 16, 600, Td.ink3)),
+      Container(
+        width: 140,
+        height: 8,
+        decoration: BoxDecoration(gradient: heatLegend, borderRadius: BorderRadius.circular(4)),
+      ),
+      Text('Beaucoup', style: TdText.inter(12, 16, 600, Td.ink3)),
+    ],
+  );
 }
 
 /// Badge sunset (composant Badge, ton sunset).

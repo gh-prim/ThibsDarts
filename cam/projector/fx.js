@@ -420,6 +420,52 @@
     });
   }
 
+  /* ---------- écran Statistiques du hub : heatmap des fléchettes posée sur la vraie cible ---------- */
+  // heat = [[x, y], ...] en mm, y vers le bas (comme le hub). Densité lissée, vert -> jaune -> orange -> rouge.
+  // Image fixe : calculée une fois à chaque nouveau message, puis juste recopiée.
+  const HEAT_N = 96, HEAT_HALF = 205, HEAT_SIGMA = 11;
+  const HEAT_STOPS = [[61, 220, 151], [255, 225, 77], [255, 122, 47], [255, 45, 45]];
+  let heatCv = null, heatKey = '';
+  function heatColor(v) {
+    const t = Math.min(1, v) * (HEAT_STOPS.length - 1), i = Math.min(HEAT_STOPS.length - 2, Math.floor(t)), f = t - i;
+    const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
+    return [0, 1, 2].map(j => Math.round(a[j] + (b[j] - a[j]) * f));
+  }
+  function buildHeat(points) {
+    const n = HEAT_N, cell = HEAT_HALF * 2 / n, reach = Math.ceil(HEAT_SIGMA * 3 / cell), k = -1 / (2 * HEAT_SIGMA * HEAT_SIGMA);
+    const g = new Float32Array(n * n);
+    points.forEach(([px, py]) => {
+      if (!isFinite(px) || !isFinite(py)) return;
+      const cx = Math.floor((px + HEAT_HALF) / cell), cy = Math.floor((py + HEAT_HALF) / cell);
+      for (let y = Math.max(0, cy - reach); y <= Math.min(n - 1, cy + reach); y++) {
+        const dy = (y + .5) * cell - HEAT_HALF - py;
+        for (let x = Math.max(0, cx - reach); x <= Math.min(n - 1, cx + reach); x++) {
+          const dx = (x + .5) * cell - HEAT_HALF - px; g[y * n + x] += Math.exp((dx * dx + dy * dy) * k);
+        }
+      }
+    });
+    let top = 0; g.forEach(v => { if (v > top) top = v; });
+    if (top <= 0) return null;
+    const cv = document.createElement('canvas'); cv.width = cv.height = n;
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(n, n);
+    for (let i = 0; i < n * n; i++) {
+      const v = g[i] / top; if (v < .02) continue;
+      const [r, gg, b] = heatColor(v);
+      img.data[i * 4] = r; img.data[i * 4 + 1] = gg; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = Math.round(Math.min(1, (v - .02) * 2.5) * 255);
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+  function statsHeat(bl) {
+    // Cible très légèrement éclairée pour la repérer, puis la heatmap par-dessus, coupée au bord de la cible.
+    g2.fillStyle = `rgba(255,244,230,${.12 * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.dOut * K, 0, TAU); g2.fill();
+    if (!heatCv) return;
+    g2.save(); g2.globalAlpha = bl; g2.imageSmoothingEnabled = true; g2.imageSmoothingQuality = 'high';
+    g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.clip();
+    g2.drawImage(heatCv, CX - HEAT_HALF * K, CY - HEAT_HALF * K, HEAT_HALF * 2 * K, HEAT_HALF * 2 * K);
+    g2.restore();
+  }
+
   /* ---------- attente hors partie : la cible en "loader", les têtes qui tournent sur le surround ---------- */
   const rings = () => [[RB.obull, RB.tIn], [RB.tIn, RB.tOut], [RB.tOut, RB.dIn], [RB.dIn, RB.dOut]];
   function idleHeads(t, speed, bl) {
@@ -546,7 +592,7 @@
     const busy = live.some(e => !e.base) || parts.length > 0;
     fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
     boardLight = Math.min(boardLight, fxDim);
-    if (boardLight > 0.01) { if (playing) steady(boardLight); else idle(now / 1000, boardLight); }
+    if (boardLight > 0.01) { if (playing) steady(boardLight); else if (scene === 'stats') statsHeat(boardLight); else idle(now / 1000, boardLight); }
     // Nom du jeu : pleine intensité hors effets, caché pendant le check-out (la route tourne à sa place).
     if (playing && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
@@ -591,6 +637,8 @@
     // Message du hub : écran (scene), nom du jeu en partie (title), check-out proposé (checkout).
     setGame(d) {
       if (!d) return;
+      const hk = d.scene === 'stats' && Array.isArray(d.heat) ? JSON.stringify(d.heat) : '';
+      if (hk !== heatKey) { heatKey = hk; heatCv = hk ? buildHeat(d.heat) : null; }
       scene = d.scene || 'accueil'; title = d.scene === 'jeu' ? String(d.title || '') : '';
       const ct = d.scene === 'jeu' && Number.isInteger(d.clock) && d.clock >= 1 && d.clock <= 20 ? d.clock : 0;
       if (!ct) clock = null;

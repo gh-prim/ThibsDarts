@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
 import 'package:darts_engine/darts_engine.dart';
@@ -149,6 +150,16 @@ class CamLink {
   /// Écran du hub hors partie, pour l'animation d'attente du vidéoprojecteur :
   /// accueil, partie (choix d'une partie) ou entrainement (choix d'un entraînement).
   void setScene(String scene) => _setProjector({'scene': scene});
+
+  /// Écran Statistiques : heatmap des fléchettes ([aim] = cible visée, [points] en unités plateau, y vers le bas),
+  /// projetée sur la cible tant que l'écran est ouvert. Les 600 dernières seulement (message retenu léger).
+  void setStatsHeat(String aim, List<({double x, double y})> points) => _setProjector({
+    'scene': 'stats',
+    'aim': aim,
+    'heat': [
+      for (final p in points.skip(math.max(0, points.length - 600))) [p.x.round(), p.y.round()],
+    ],
+  });
 
   /// En partie : nom du jeu écrit sur le surround, et check-out proposé (cases allumées par le projecteur).
   /// Around the clock : [clock] = numéro visé par le joueur en cours (animations du projecteur).

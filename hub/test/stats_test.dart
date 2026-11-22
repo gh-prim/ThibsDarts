@@ -228,6 +228,9 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 300));
+      // Heatmap : son image se décode hors du temps simulé.
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
       expect(tester.takeException(), isNull, reason: name);
       if (out == null) return;
       final ro = tester.renderObject<RenderRepaintBoundary>(find.byType(RepaintBoundary).first);

@@ -26,6 +26,7 @@ import 'correction_screen.dart';
 import 'game_screen.dart';
 import 'trainer_screen.dart';
 import 'training_screen.dart';
+import '../widgets/volume_button.dart';
 
 /// Écran de jeu pour un X01 ou un autre mode, selon la config.
 /// Avec [paused], la partie mise en pause reprend là où elle en était.
@@ -572,6 +573,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       StopGameButton(onPause: _g.isFinished || _cfg.tournamentMatch != null ? null : _pause),
       const SizedBox(width: Td.s2),
       const MusicButton(),
+      const SizedBox(width: Td.s2),
+      const VolumeButton(),
       const SizedBox(width: Td.s3),
       Expanded(
         child: Text(
@@ -673,6 +676,8 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
                     StopGameButton(size: 40, onPause: _g.isFinished || _cfg.tournamentMatch != null ? null : _pause),
                     const SizedBox(width: Td.s2),
                     const MusicButton(size: 40),
+                    const SizedBox(width: Td.s2),
+                    const VolumeButton(size: 40),
                     const SizedBox(width: Td.s3),
                     Flexible(
                       child: Text(

@@ -26,6 +26,7 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
+import '../widgets/volume_button.dart';
 
 /// Partie 501 (planches J501*). Les fléchettes arrivent du Pi 5 (CamLink) ;
 /// toucher le plateau lance aussi une fléchette à cet endroit.
@@ -593,10 +594,12 @@ class _GameScreenState extends State<GameScreen> {
                       StopGameButton(onPause: _matchOver || _cfg.tournamentMatch != null ? null : _pause),
                       const SizedBox(width: Td.s2),
                       const MusicButton(),
-                      const Spacer(),
-                      Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
+                      const SizedBox(width: Td.s2),
+                      const VolumeButton(),
                     ],
                   ),
+                  const SizedBox(height: Td.s2),
+                  Text('${_cfg.startScore} · Manche $_leg', style: TdText.inter(15, 20, 400, Td.ink2)),
                   const SizedBox(height: Td.s3),
                   for (final pl in players) ...[PlayerCard(player: pl), const SizedBox(height: Td.s2)],
                   const Spacer(),

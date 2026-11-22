@@ -18,6 +18,7 @@ import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import 'correction_screen.dart';
+import '../widgets/volume_button.dart';
 
 /// Record d'un entraînement dans l'historique (meilleur score), null si jamais joué.
 int? trainerRecord(String name, GameMode mode, int option) {
@@ -444,6 +445,7 @@ class _TrainerScreenState extends State<TrainerScreen> {
         spacing: Td.s2,
         children: [
           StopGameButton(onPause: _g.isFinished ? null : _pause),
+          const VolumeButton(),
           Expanded(
             child: Text(
               _headerLabel,

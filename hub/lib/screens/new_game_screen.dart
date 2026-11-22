@@ -18,6 +18,7 @@ import 'mode_game_screen.dart';
 import 'salon_screen.dart';
 import 'trainer_screen.dart';
 import 'training_screen.dart';
+import '../widgets/volume_button.dart';
 
 // Planche "Nouvelle partie Pi", version A des trois écrans.
 
@@ -48,6 +49,8 @@ Widget _header(BuildContext context, String title, {double size = 28, Widget? tr
         ),
       ),
       ?trailing,
+      const SizedBox(width: Td.s3),
+      const VolumeButton(),
     ],
   ),
 );

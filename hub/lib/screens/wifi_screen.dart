@@ -9,6 +9,7 @@ import '../widgets/live_status.dart';
 import '../widgets/stage.dart';
 import '../widgets/steps_progress.dart';
 import '../widgets/td_button.dart';
+import '../widgets/volume_button.dart';
 
 class _Header extends StatelessWidget {
   const _Header({required this.title, this.trailing});
@@ -34,6 +35,7 @@ class _Header extends StatelessWidget {
         child: Text(title, style: TdText.title, overflow: TextOverflow.ellipsis),
       ),
       ?trailing,
+      const VolumeButton(size: 56),
     ],
   );
 }

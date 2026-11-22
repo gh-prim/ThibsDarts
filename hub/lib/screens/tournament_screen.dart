@@ -7,6 +7,7 @@ import '../widgets/avatar.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
+import '../widgets/volume_button.dart';
 
 /// Annonce du prochain match du tournoi (planche Tournoi, annonce du match).
 class TournamentMatchView extends StatelessWidget {
@@ -243,6 +244,8 @@ class TournamentBracketScreen extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(child: Text('Tableau du tournoi', style: TdText.headline)),
+                      const VolumeButton(size: 56),
+                      const SizedBox(width: Td.s3),
                       SizedBox(
                         width: 200,
                         child: TdButton(

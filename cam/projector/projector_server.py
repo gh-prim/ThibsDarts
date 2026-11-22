@@ -28,7 +28,7 @@ DATA_DIR = os.environ.get("DARTOS_DATA", "/data/thibsdarts")
 CALIB_FILE = os.path.join(DATA_DIR, "projector.json")
 LIGHT_TOPIC = "thibsdarts/projector/light"
 HUB_PROJECTOR_TOPIC = "thibsdarts/hub/projector"
-HUB_FX_TOPIC = "thibsdarts/hub/fx"  # événements ponctuels du hub : {"kind": "180" ou "volee0"}
+HUB_FX_TOPIC = "thibsdarts/hub/fx"  # événements ponctuels du hub : {"kind": "180", "volee0" ou "plein20"}
 DEBUG_TOPIC = "thibsdarts/debug/state"  # mode Debug : {"on", "projector"} (projecteur éteint = image noire)
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEGMENTS = {"T20": (20, 3), "D16": (16, 2), "S5": (5, 1), "DB": (25, 2), "SB": (25, 1), "MISS": (0, 0)}

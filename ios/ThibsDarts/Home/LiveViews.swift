@@ -156,6 +156,7 @@ struct LiveGameView: View {
     @State private var dismissedTurn: String?
     @State private var seen180: String?
     @State private var seen0: String?
+    @State private var seen20: String?
 
     private var me: String? { info.players.first { $0.id == info.you }?.name }
     private var title: String {
@@ -193,6 +194,9 @@ struct LiveGameView: View {
             if game.winner == nil, is180, seen180 != turnKey {
                 Fete180VideoView { seen180 = turnKey }
                     .transition(.opacity)
+            } else if game.winner == nil, isPlein20, seen20 != turnKey {
+                Fete180VideoView(clip: "plein20") { seen20 = turnKey }
+                    .transition(.opacity)
             } else if game.winner == nil, isVolee0, seen0 != turnKey {
                 Fete180VideoView(clip: "volee0") { seen0 = turnKey }
                     .transition(.opacity)
@@ -202,6 +206,10 @@ struct LiveGameView: View {
 
     private var is180: Bool {
         game.isX01 && game.darts.count == 3 && game.darts.allSatisfy { $0.label == "T20" }
+    }
+
+    private var isPlein20: Bool {
+        game.isX01 && game.darts.count == 3 && !is180 && game.darts.allSatisfy { ["S20", "D20", "T20"].contains($0.label) }
     }
 
     private var isVolee0: Bool {

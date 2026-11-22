@@ -121,7 +121,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
   });
   // Clips de fête (180, volée à 0) : chargés une fois en mémoire (blob), rejoués quand le hub les annonce.
   const clips = {};
-  for (const name of ['fete180', 'volee0']) {
+  for (const name of ['fete180', 'volee0', 'plein20']) {
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.preload = 'auto';
     fetch(`/media/${name}.mp4`).then(r => r.ok ? r.blob() : null).then(b => { if (b) v.src = URL.createObjectURL(b); }).catch(() => {});
@@ -135,7 +135,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
     v.currentTime = 0;
     v.play().then(() => { FX.video(v); light(true); }).catch(fb);
   }
-  const KINDS = { '180': () => playClip('fete180', () => FX.big180()), 'volee0': () => playClip('volee0') };
+  const KINDS = { '180': () => playClip('fete180', () => FX.big180()), 'volee0': () => playClip('volee0'), 'plein20': () => playClip('plein20') };
   es.addEventListener('test', e => { const d = JSON.parse(e.data); KINDS[d.kind]?.(); });
   // Le hub annonce un 180 ou une volée à 0 en partie (thibsdarts/hub/fx).
   es.addEventListener('fx', e => { const d = JSON.parse(e.data); KINDS[d.kind]?.(); });

@@ -46,14 +46,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    Future<void> shot(String name, GameMode mode, TurnGame g) async {
+    Future<void> shot(String name, GameMode mode, TurnGame g, {int option = 0}) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
           home: RepaintBoundary(
             child: ModeGameScreen(
               key: ValueKey(name),
-              config: GameConfig(players: g.names, mode: mode),
+              config: GameConfig(players: g.names, mode: mode, option: option),
               game: g,
             ),
           ),
@@ -89,6 +89,17 @@ void main() {
       [const DartThrow(4), const DartThrow(5), const DartThrow.double(6)],
     ]);
     await shot('mode-clock', GameMode.clock, clock);
+
+    final clockD = ClockGame(['Thibs'], doubles: true);
+    play(clockD, [
+      [const DartThrow.double(1), const DartThrow(2), const DartThrow.double(2)],
+      [const DartThrow.double(3), const DartThrow.double(4), m],
+      [const DartThrow.triple(5), const DartThrow.double(5), const DartThrow.double(6)],
+    ]);
+    clockD
+      ..throwDart(const DartThrow(7))
+      ..throwDart(const DartThrow.double(7));
+    await shot('mode-clock-doubles', GameMode.clock, clockD, option: 1);
 
     final sh = ShanghaiGame(names);
     play(sh, [

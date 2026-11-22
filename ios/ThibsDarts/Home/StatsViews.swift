@@ -499,7 +499,7 @@ struct HistoryTab: View {
 
     private var modes: [String] {
         // Ordre des planches : X01, puis Cricket, Killer et les autres modes.
-        let order = ["501", "301", "Cricket", "Killer", "Shanghai", "Around the clock", "Halve-it", "Bob's 27"]
+        let order = ["501", "301", "Cricket", "Killer", "Shanghai", "Around the clock", "Around the clock doubles", "Halve-it", "Bob's 27"]
         let played = Set(history.matches.map(\.mode))
         return ["Tout"] + played.sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
     }

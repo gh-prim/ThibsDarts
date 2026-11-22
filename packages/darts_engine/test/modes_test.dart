@@ -40,6 +40,37 @@ void main() {
     expect(g.currentName, 'B');
   });
 
+  test('horloge doubles : seuls les doubles du numéro visé comptent, puis le bull', () {
+    final g = ClockGame(['A'], doubles: true);
+    turn(g, [const DartThrow(1), const DartThrow.triple(1), const DartThrow.double(1)]);
+    expect(g.target[0], 2);
+    expect(g.done(0), 1);
+    expect(g.dartsOf(0), 3);
+    expect([for (final s in g.shots) s.ok], [false, false, true]);
+    for (var n = 2; n <= 20; n++) {
+      g.throwDart(DartThrow.double(n));
+      if (g.awaitingNextPlayer) g.nextPlayer();
+    }
+    expect(g.target[0], 25);
+    expect(g.isFinished, isFalse);
+    g.throwDart(DartThrow.outerBull);
+    expect(g.isFinished, isFalse);
+    g.throwDart(DartThrow.bull);
+    expect(g.winner, 'A');
+    expect(g.done(0), 21);
+    expect(g.shots.last.aim, DartThrow.bull);
+  });
+
+  test('horloge simple : 20 touché finit la partie', () {
+    final g = ClockGame(['A']);
+    for (var n = 1; n <= 20; n++) {
+      g.throwDart(DartThrow(n));
+      if (g.awaitingNextPlayer) g.nextPlayer();
+    }
+    expect(g.winner, 'A');
+    expect(g.done(0), 20);
+  });
+
   test('shanghai : S, D, T au même tour', () {
     final g = ShanghaiGame(['A', 'B']);
     g.throwDart(const DartThrow(1));

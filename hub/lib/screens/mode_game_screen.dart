@@ -84,7 +84,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       variant: _cfg.cricketVariant,
       numbers: CricketGame.numbersFor(_cfg.cricketVariant, _log.random),
     ),
-    GameMode.clock => ClockGame(_cfg.players),
+    GameMode.clock => ClockGame(_cfg.players, doubles: _cfg.clockDoubles),
     GameMode.shanghai => ShanghaiGame(_cfg.players),
     GameMode.killer => KillerGame(
       _cfg.players,
@@ -285,6 +285,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
       setState(() => _showWin = true);
       return;
     }
+    _keepShots();
     setState(() {
       _g.nextPlayer();
       _hits.clear();
@@ -301,6 +302,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     _saved = false;
     setState(() {
       _g = _newGame();
+      _shots.clear();
       _hits.clear();
       _tagDart = null;
       _showWin = false;
@@ -340,6 +342,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     }
     if (_solo) {
       if (g is Bobs27Game && g.isOut(0)) return 'Sous zéro au ${_doubleLabel(g.target)}. On remet ça ?';
+      if (g is ClockGame && g.doubles) return 'D1 à bull en ${g.dartsOf(0)} fléchettes, ${_pct(21, g.dartsOf(0))} % de doubles.';
       if (g is ClockGame || g is ShanghaiGame && g.round <= g.rounds) return 'Bouclé en ${g.round} tours.';
       return 'Partie finie avec ${g.scoreOf(0)} points.';
     }
@@ -353,10 +356,34 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     final ShanghaiGame g => 'Shanghai · Manche ${g.target}',
     final HalveItGame g => 'Halve-it · ${g.round.clamp(1, g.targets.length)} sur ${g.targets.length}',
     final Bobs27Game g => "Bob's 27 · ${_doubleLabel(g.target)}",
+    final ClockGame g when g.doubles => 'Around the clock doubles · ${_doubleLabel(g.target[g.currentIndex])}',
     _ => _cfg.title,
   };
 
   bool _saved = false;
+
+  /// Around the clock doubles : chaque fléchette avec sa position (heatmap, coach), par joueur.
+  final Map<int, List<Map<String, Object?>>> _shots = {};
+
+  /// Range les fléchettes du tour en cours avec leur position, avant de passer au joueur suivant.
+  void _keepShots() {
+    final g = _g;
+    if (g is! ClockGame || !g.doubles) return;
+    final turn = g.currentTurn;
+    if (turn.isEmpty || g.shots.length < turn.length) return;
+    final last = g.shots.sublist(g.shots.length - turn.length);
+    for (var i = 0; i < last.length; i++) {
+      final s = last[i];
+      final pos = i < _hits.length ? _hits[i].position : null;
+      (_shots[s.player] ??= []).add({
+        'a': s.aim.label,
+        'd': s.dart.label,
+        if (pos != null) 'x': double.parse(pos.dx.toStringAsFixed(1)),
+        if (pos != null) 'y': double.parse(pos.dy.toStringAsFixed(1)),
+        'ok': s.ok,
+      });
+    }
+  }
 
   /// Enregistre la partie finie dans l'historique (une fois, en quittant ou avant la revanche).
   void _save() {
@@ -364,12 +391,16 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     final g = _g;
     if (!g.isFinished || _saved) return;
     _saved = true;
+    _keepShots();
+    final dbl = g is ClockGame && g.doubles;
     HistoryStore.instance.add({
       'id': '${DateTime.now().millisecondsSinceEpoch}',
       'at': DateTime.now().toIso8601String(),
       'mode': _cfg.title,
       'kind': _mode.name,
       if (_cfg.cricketVariant != CricketVariant.classic) 'variant': _cfg.cricketVariant.name,
+      if (dbl) 'variant': 'doubles',
+      if (dbl) 'option': 1,
       if (_bot != null) 'bot': _bot.level.average,
       if (_cfg.practice || _bot != null) 'training': true,
       'winner': g.isDraw ? [for (final i in g.winners) g.names[i]].join(' et ') : g.winner,
@@ -379,6 +410,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
             final turns = g.turnsOf(i);
             final (value, label) = switch (g) {
               final CricketGame c => (_marks(c, turns) / (turns.isEmpty ? 1 : turns.length), 'moy.'),
+              final ClockGame c when c.doubles => (c.dartsOf(i).toDouble(), 'fléchettes'),
               final ClockGame c => (c.done(i).toDouble(), 'cibles'),
               KillerGame() => (g.scoreOf(i).toDouble(), 'vies'),
               _ => (g.scoreOf(i).toDouble(), 'pts'),
@@ -391,6 +423,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
               'score': g.scoreOf(i),
               'value': value,
               'valueLabel': label,
+              if (dbl) 'shots': _shots[i] ?? const [],
             };
           }(),
       ],
@@ -404,15 +437,25 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
         if (!d.isMiss && g.numbers.contains(d.sector)) d.multiplier,
   ].fold(0, (a, b) => a + b);
 
-  List<CelebrationStat> get _winStats => [
-    CelebrationStat(_g is KillerGame ? 'Vies restantes' : 'Score', '${_g.scoreOf(_g.winnerIndex!)}'),
-    CelebrationStat('Manches', '${_g.round}'),
-  ];
+  static int _pct(int k, int n) => n == 0 ? 0 : (k * 100 / n).round();
+
+  List<CelebrationStat> get _winStats {
+    final g = _g;
+    if (g is ClockGame && g.doubles) {
+      final n = g.dartsOf(g.winnerIndex!);
+      return [CelebrationStat('Fléchettes', '$n'), CelebrationStat('Doubles', '${_pct(21, n)} %')];
+    }
+    return [
+      CelebrationStat(g is KillerGame ? 'Vies restantes' : 'Score', '${g.scoreOf(g.winnerIndex!)}'),
+      CelebrationStat('Manches', '${g.round}'),
+    ];
+  }
 
   static String _doubleLabel(int sector) => sector == 25 ? 'Bull' : 'D$sector';
 
   /// Sous-ligne de chaque joueur dans la liste.
   String? _detail(int i) => switch (_g) {
+    final ClockGame g when g.doubles => '${g.dartsOf(i)} fléchettes',
     final ClockGame g => 'au ${g.target[i]}',
     final HalveItGame g => switch (g.halves[i]) {
       0 => 'aucun demi',
@@ -437,6 +480,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     final g = _g;
     final me = g.currentName;
     final (label, value, youLabel) = switch (g) {
+      final ClockGame c when c.doubles => ('$me vise le double', c.target[g.currentIndex], 'Tu vises le double'),
       final ClockGame c => ('$me vise le', c.target[g.currentIndex], 'Tu vises le'),
       final ShanghaiGame s => ('Numéro de la manche', s.target, 'Numéro de la manche'),
       final KillerGame k => ('Vies de $me', k.life[g.currentIndex], 'Tes vies'),
@@ -504,7 +548,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     return [
       for (var i = 0; i < 3; i++)
         if (i < turn.length)
-          turn[i].isMiss || !_counts(turn[i])
+          turn[i].isMiss || !_counts(turn[i], i)
               ? SlotData(SlotState.miss, label: turn[i].isMiss ? null : turn[i].label, value: 0)
               : SlotData(SlotState.hit, label: turn[i].label, value: _value(turn[i]))
         else if (i == turn.length && !_g.awaitingNextPlayer && !_g.isFinished)
@@ -515,8 +559,9 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   }
 
   /// La fléchette compte pour ce mode.
-  bool _counts(DartThrow d) => switch (_g) {
+  bool _counts(DartThrow d, int i) => switch (_g) {
     final CricketGame g => g.numbers.contains(d.sector),
+    final ClockGame g when g.doubles => _clockOk(g, i),
     final ClockGame _ => true,
     final ShanghaiGame g => d.sector == g.target,
     final KillerGame _ => d.isDouble,
@@ -525,12 +570,26 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     _ => true,
   };
 
+  /// Around the clock doubles : la fléchette [i] du tour a touché le double visé.
+  bool _clockOk(ClockGame g, int i) {
+    final k = g.shots.length - g.currentTurn.length + i;
+    return k >= 0 && k < g.shots.length && g.shots[k].ok;
+  }
+
   int _value(DartThrow d) => _g is CricketGame ? d.multiplier : d.score;
 
   @override
   Widget build(BuildContext context) {
     // Vidéoprojecteur, Around the clock : le secteur visé par le joueur en cours reste allumé.
-    if (_g case final ClockGame c when !c.isFinished) CamLink.instance.setGameInfo(widget.config.title, clock: c.target[c.currentIndex], wait: c.awaitingNextPlayer);
+    if (_g case final ClockGame c when !c.isFinished) {
+      CamLink.instance.setGameInfo(
+        widget.config.title,
+        clock: c.target[c.currentIndex],
+        clockDoubles: c.doubles,
+        wait: c.awaitingNextPlayer,
+        training: _cfg.practice,
+      );
+    }
     _publish();
     final g = _g;
     final board = Stage(
@@ -837,6 +896,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   }
 
   DartThrow? get _aimed => switch (_g) {
+    final ClockGame g when g.doubles => g.aimOf(g.currentIndex),
     final ShanghaiGame g => _shanghaiNext(g),
     final Bobs27Game g => DartThrow(g.target, 2),
     final GotchaGame g => _gotchaAim(g),
@@ -845,6 +905,7 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
   };
 
   int? get _aimSector => switch (_g) {
+    final ClockGame g when g.doubles => null,
     final ClockGame g => g.target[g.currentIndex],
     final HalveItGame g => int.tryParse(g.target.label) ?? (g.target.label == 'Bull' ? 25 : null),
     _ => null,
@@ -882,6 +943,53 @@ class _ModeGameScreenState extends State<ModeGameScreen> {
     final me = g.currentName;
     final i = g.currentIndex;
     switch (g) {
+      case final ClockGame c when c.doubles:
+        final t = c.target[i], done = c.done(i);
+        final cells = [for (var n = 1; n <= 20; n++) n, 25];
+        return [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: Td.s1,
+            children: [
+              Text('$me, vise le', style: TdText.inter(13, 18, 600, Td.ink2)),
+              Text(
+                t == 25 ? 'BULL' : 'D$t',
+                style: TdText.rounded(88, 900, Td.ink, height: 88).copyWith(letterSpacing: -2),
+              ),
+              Text('${c.dartsOf(i)} fléchettes', style: TdText.inter(15, 20, 400, Td.ink2)),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: Td.s2,
+            children: [
+              Text('Progression, $done sur 21', style: TdText.inter(13, 18, 600, Td.ink2)),
+              GridView.count(
+                crossAxisCount: 7,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+                childAspectRatio: 38 / 26,
+                children: [
+                  for (var k = 0; k < cells.length; k++)
+                    Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: k < done ? Td.sunset : (k == done ? Td.infoFond : Td.verreLeger),
+                        borderRadius: BorderRadius.circular(6),
+                        border: k == done && !c.isFinished ? Border.all(color: Td.ciel, width: 2) : null,
+                      ),
+                      child: Text(
+                        cells[k] == 25 ? 'B' : 'D${cells[k]}',
+                        style: TdText.rounded(12, 800, k < done ? Td.onAccent : (k == done ? Td.ciel : Td.ink3)),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ];
       case final ClockGame c:
         return [
           ScoreDisplay(value: c.target[i], size: 88, label: '$me, vise le', sub: 'Simple, double ou triple'),

@@ -572,6 +572,18 @@ class OwnerStats {
     for (final e in seriesFor(aim))
       for (final t in e.throws)
         (dart: t.dart, x: t.x, y: t.y, target: TrainingTarget.fromKey(e.targetKey ?? '') ?? TrainingTarget.presets.first),
+    // Around the clock doubles : chaque fléchette visait un double, position gardée.
+    if (aim == 'Doubles')
+      for (final e in entries)
+        if (e.kind == GameMode.clock.name)
+          for (final s in (e.p['shots'] as List? ?? const []))
+            if (s is Map && s['x'] is num && s['y'] is num && parseDart('${s['a']}').isDouble)
+              (
+                dart: parseDart('${s['d']}'),
+                x: (s['x'] as num).toDouble(),
+                y: (s['y'] as num).toDouble(),
+                target: TrainingTarget(parseDart('${s['a']}').sector, 2),
+              ),
   ];
 
   // MARK: Ton mois

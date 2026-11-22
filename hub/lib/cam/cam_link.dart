@@ -163,6 +163,7 @@ class CamLink {
 
   /// En partie : nom du jeu écrit sur le surround, et check-out proposé (cases allumées par le projecteur).
   /// Around the clock : [clock] = numéro visé par le joueur en cours (animations du projecteur).
+  /// [clockDoubles] : variante doubles, la case visée est le double du numéro (25 = bull).
   /// [wait] : tour fini, le hub ignore les fléchettes jusqu'au retrait : le projecteur aussi.
   /// Coach : [coachCell] = case visée allumée en fixe ("D16"), [coachZone] = part du double éclairée (0,1 à 1).
   /// [training] : entraînement, une fléchette hors cible ne déclenche aucune animation (pas de temps perdu).
@@ -170,6 +171,7 @@ class CamLink {
     String title, {
     List<String>? checkout,
     int? clock,
+    bool clockDoubles = false,
     bool wait = false,
     String? coachCell,
     double coachZone = 1,
@@ -179,6 +181,7 @@ class CamLink {
     'title': title,
     if (checkout != null && checkout.isNotEmpty) 'checkout': checkout,
     'clock': ?clock,
+    if (clock != null && clockDoubles) 'clockDoubles': true,
     if (coachCell != null) 'coach': {'cell': coachCell, 'zone': double.parse(coachZone.toStringAsFixed(2))},
     if (wait) 'wait': true,
     if (training) 'training': true,

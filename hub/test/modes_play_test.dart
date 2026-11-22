@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:darts_engine/darts_engine.dart';
+import 'package:dartos_hub/coach/coach_store.dart';
 import 'package:dartos_hub/game_config.dart';
+import 'package:dartos_hub/history/history_store.dart';
 import 'package:dartos_hub/setup/owner_store.dart';
 import 'package:dartos_hub/screens/mode_game_screen.dart';
 import 'package:dartos_hub/widgets/dartboard.dart';
@@ -15,7 +17,13 @@ void main() {
 
   const m = DartThrow.miss();
 
-  Future<void> open(WidgetTester t, GameMode mode, {TurnGame? game, List<String> players = const ['A', 'B']}) async {
+  Future<void> open(
+    WidgetTester t,
+    GameMode mode, {
+    TurnGame? game,
+    List<String> players = const ['A', 'B'],
+    int option = 0,
+  }) async {
     await t.runAsync(() async {
       for (final (f, p) in const [
         ('Inter', 'assets/fonts/Inter.ttf'),
@@ -39,7 +47,7 @@ void main() {
                 onPressed: () => Navigator.of(c).push(
                   MaterialPageRoute<void>(
                     builder: (_) => ModeGameScreen(
-                      config: GameConfig(players: players, mode: mode),
+                      config: GameConfig(players: players, mode: mode, option: option),
                       game: game,
                     ),
                   ),
@@ -116,6 +124,44 @@ void main() {
       await turn(t, [const DartThrow(2), m, m]);
     }
     await expectWinner(t, 'A');
+  });
+
+  testWidgets('Around the clock doubles : seuls les doubles comptent, puis le bull', (t) async {
+    await open(t, GameMode.clock, option: 1);
+    expect(find.text('D1'), findsWidgets);
+    // Simple et triple du 1 : rien. Double 1 : on passe au D2.
+    await turn(t, [const DartThrow(1), const DartThrow.triple(1), const DartThrow.double(1)]);
+    expect(find.text('B, vise le'), findsOneWidget);
+    await turn(t, [m, m, m]);
+    expect(find.text('A, vise le'), findsOneWidget);
+    expect(find.text('D2'), findsWidgets);
+    var n = 2;
+    while (n <= 20) {
+      await turn(t, [for (var i = 0; i < 3 && n <= 20; i++) DartThrow.double(n++)]);
+      await turn(t, [m, m, m]);
+    }
+    expect(find.text('BULL'), findsOneWidget);
+    await dart(t, DartThrow.outerBull);
+    await dart(t, DartThrow.bull);
+    await expectWinner(t, 'A');
+    // Historique : fléchettes comptées, chaque fléchette gardée avec sa position (heatmap, coach).
+    for (var i = 0; i < 4; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await t.pump();
+    }
+    final saved = HistoryStore.instance.all().lastWhere((e) => e['kind'] == 'clock' && e['option'] == 1);
+    expect(saved['mode'], 'Around the clock doubles');
+    final a = (saved['players'] as List).first as Map;
+    expect(a['darts'], 24);
+    final shots = a['shots'] as List;
+    expect(shots.length, 24);
+    expect((shots.first as Map)['a'], 'D1');
+    expect((shots.last as Map)['a'], 'BULL');
+    expect((shots.last as Map)['ok'], true);
+    expect((shots.last as Map)['x'], isA<num>());
+    final d1 = CoachStore.of(HistoryStore.playerId('A')).profile.skills['D1']!;
+    expect(d1.attempts, 3);
+    expect(d1.hits, 1);
   });
 
   testWidgets('Shanghai : S, D, T du 1 au premier tour', (t) async {

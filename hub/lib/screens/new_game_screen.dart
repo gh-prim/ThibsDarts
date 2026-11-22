@@ -389,6 +389,7 @@ class _Pick {
     this.opts = const [],
     this.opt,
     this.recUnit = 'pts',
+    this.option = 0,
   });
 
   final String glyph;
@@ -402,6 +403,9 @@ class _Pick {
   final List<String> opts;
   final String? opt;
   final String recUnit;
+
+  /// Réglage fixe du jeu (Around the clock doubles : 1).
+  final int option;
 }
 
 const _botLevels = ['30', '45', '60', '75', '90', '105'];
@@ -419,6 +423,7 @@ const _families = <String, (String, String, List<_Pick>)>{
       _Pick('170', '170', 'La sortie max, en 9 fléchettes.', 'Pars de 170 et finis en 9 fléchettes max. 10 tentatives à la suite.', kind: _Kind.trainer, mode: GameMode.ton70, recUnit: 'réussis sur 10'),
       _Pick('41+', '41-60', 'Simple puis double, 3 fléchettes.', 'Chaque score de 41 à 60, 3 fléchettes pour le finir. Le geste de base : simple, puis double.', kind: _Kind.trainer, mode: GameMode.fortyOne, recUnit: 'réussis sur 20'),
       _Pick('27', 'Bob’s 27', 'D1 à D20 puis bull.', 'Départ à 27, de D1 à D20 puis bull. Un double rapporte sa valeur, un tour à vide la coûte.', kind: _Kind.mode, mode: GameMode.bobs27),
+      _Pick('D1>B', 'Around the clock doubles', 'D1 à D20 puis bull.', 'D1, D2, jusqu’à D20, puis le bull. Seul le double visé compte. Compté en fléchettes.', kind: _Kind.mode, mode: GameMode.clock, option: 1, recUnit: 'fléchettes'),
     ],
   ),
   'Viser': (
@@ -467,6 +472,22 @@ int? _botBeaten(String name, GameMode? mode) {
   return best;
 }
 
+/// Around the clock doubles : moins de fléchettes pour finir D1 à bull, null si jamais fini.
+int? _clockDoublesBest(String name) {
+  final id = HistoryStore.playerId(name);
+  int? best;
+  for (final m in HistoryStore.instance.all()) {
+    if (m['kind'] != GameMode.clock.name || ((m['option'] as num?)?.toInt() ?? 0) != 1) continue;
+    for (final p in m['players'] as List) {
+      final pm = p as Map;
+      if (pm['id'] != id || pm['won'] != true) continue;
+      final n = (pm['darts'] as num?)?.toInt();
+      if (n != null && n > 0 && (best == null || n < best)) best = n;
+    }
+  }
+  return best;
+}
+
 /// "Choisis ton jeu" (Partie) ou "Entraînement" (solo), planche Nouvelle partie Pi, version A.
 class NewGameScreen extends StatefulWidget {
   const NewGameScreen({super.key, this.practice = false});
@@ -501,6 +522,8 @@ class _NewGameScreenState extends State<NewGameScreen> {
   String _botFirst = 'Toi';
   CricketVariant _variant = CricketVariant.classic;
   String _goal = '301';
+  String _clockVariant = 'Classique';
+  bool get _clockDoubles => _mode.mode == GameMode.clock && _clockVariant == 'Doubles';
 
   _Pick get _pick => _families[_fam]!.$3[_sel[_fam]!];
   String? get _opt => _opts[_pick.title] ?? _pick.opt;
@@ -514,7 +537,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
       GameMode.darts99 => o == 'Bull' ? 25 : int.parse(o ?? '20'),
       GameMode.roundTheWorld => _pick.opts.indexOf(o ?? 'Simple') + 1,
       GameMode.countUp => int.parse(o ?? '8'),
-      _ => 0,
+      _ => _pick.option,
     };
   }
   late final List<String> _order = [AppState.owner];
@@ -580,6 +603,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
             doubleOut: _out == 'Double',
             legsToWin: _legs,
             cricketVariant: _mode.mode == GameMode.cricket ? _variant : CricketVariant.classic,
+            option: _clockDoubles ? 1 : 0,
           ),
         ),
       ),
@@ -597,6 +621,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
   String get _rule {
     final start = _mode.start;
     if (_mode.mode == GameMode.cricket) return _cricketVariants[_variant]!.$2;
+    if (_clockDoubles) return 'D1, D2, jusqu’à D20, puis le bull. Seul le double visé compte.';
     if (_mode.mode == GameMode.gotcha) return 'Premier à $_goal pile. Si tu tombes sur le score d’un pote, il repart à 0.';
     if (start == null) return _mode.rule;
     return _out == 'Double'
@@ -699,6 +724,17 @@ class _NewGameScreenState extends State<NewGameScreen> {
                   ],
                 ),
               ],
+              if (_mode.mode == GameMode.clock) ...[
+                const SizedBox(height: Td.s5),
+                _label('Variante'),
+                const SizedBox(height: Td.s3),
+                TdSegmented(
+                  options: const ['Classique', 'Doubles'],
+                  value: _clockVariant,
+                  touch: true,
+                  onChanged: (v) => setState(() => _clockVariant = v),
+                ),
+              ],
               if (_mode.mode == GameMode.gotcha) ...[
                 const SizedBox(height: Td.s5),
                 _label('Score à atteindre'),
@@ -742,6 +778,8 @@ class _NewGameScreenState extends State<NewGameScreen> {
             children: [
               _label(_mode.mode == GameMode.cricket && _variant != CricketVariant.classic
                   ? 'Cricket ${_cricketVariants[_variant]!.$1}'
+                  : _clockDoubles
+                  ? 'Around the clock doubles'
                   : _mode.title),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 380),
@@ -753,7 +791,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        _mode.glyph,
+                        _clockDoubles ? 'D1>B' : _mode.glyph,
                         style: TdText.rounded(140, 900, Td.sunset, height: 132).copyWith(letterSpacing: -4),
                       ),
                     ),
@@ -772,6 +810,7 @@ class _NewGameScreenState extends State<NewGameScreen> {
     final heat = m.mode == GameMode.cricket && _variant == CricketVariant.tactic
         ? CricketGame.numbersFor(CricketVariant.tactic).toSet()
         : m.heat;
+    if (_clockDoubles && m.mode == GameMode.clock) return const Dartboard(aimed: DartThrow.double(1), dim: true);
     return Dartboard(aimed: aimed ?? m.aimed, aimSector: m.aimSector, heat: heat, dim: heat.isEmpty);
   }
 
@@ -838,6 +877,8 @@ class _NewGameScreenState extends State<NewGameScreen> {
         if (p.drill == _Drill.target) unit = 'sur $_darts au ${_target.label}';
       case _Kind.bot:
         r = _botBeaten(_shooter, p.mode);
+      case _Kind.mode when p.mode == GameMode.clock && p.option == 1:
+        r = _clockDoublesBest(_shooter);
       case _Kind.mode:
         r = null;
         unit = 'pas de record';

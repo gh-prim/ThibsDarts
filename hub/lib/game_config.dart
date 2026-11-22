@@ -57,6 +57,9 @@ class GameConfig {
   bool get hasBot => botLevel != null;
 
   /// Écran d'entraînement dédié (série sur cible ou volées libres).
+  /// Around the clock, variante doubles (option 1) : D1 à D20 puis bull.
+  bool get clockDoubles => mode == GameMode.clock && option == 1;
+
   bool get drill => training != null || freeVolleys != null;
 
   String get label => training != null
@@ -75,7 +78,7 @@ class GameConfig {
       CricketVariant.random => 'Cricket Random',
       CricketVariant.tactic => 'Cricket Tactic',
     },
-    GameMode.clock => 'Around the clock',
+    GameMode.clock => clockDoubles ? 'Around the clock doubles' : 'Around the clock',
     GameMode.shanghai => 'Shanghai',
     GameMode.killer => 'Killer',
     GameMode.halveIt => 'Halve-it',
@@ -112,7 +115,7 @@ class GameConfig {
         CricketVariant.random => '6 numéros au hasard',
         CricketVariant.tactic => '20 à 10 et bull',
       },
-      GameMode.clock => 'De 1 à 20',
+      GameMode.clock => clockDoubles ? 'D1 à D20 puis bull' : 'De 1 à 20',
       GameMode.shanghai => '7 manches',
       GameMode.killer => '3 vies',
       GameMode.halveIt => '9 manches',

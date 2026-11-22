@@ -303,18 +303,27 @@
 
 
   /* ---------- Around the clock : un secteur allumé, touché, raté, passage au suivant, tour bouclé ---------- */
-  // clock = { target, prev, switchAt } : numéro visé (1 à 20). switchAt : fin de l'animation en cours.
+  // clock = { target, prev, switchAt, dbl } : numéro visé (1 à 20). switchAt : fin de l'animation en cours.
+  // dbl : variante doubles, la case visée est le double du numéro, puis le bull (25) après le D20.
   let clock = null;
   const secAng = n => (ORDER.indexOf(n) * 18 - 90) * Math.PI / 180;   // angle du milieu du secteur (canevas)
   const secMid = (n, r) => { const a = ORDER.indexOf(n) * 18 * Math.PI / 180; return [Math.sin(a) * r, Math.cos(a) * r]; };
   function sector(n, r0, r1) { segPath(ORDER.indexOf(n), r0, r1); }
+  // Zone visée : le secteur entier, ou seulement le double (le bull au centre).
+  function clockZone(n, dbl) {
+    if (n === 25) { g2.beginPath(); g2.arc(CX, CY, RB.bull * K, 0, TAU); return; }
+    if (dbl) segPath(ORDER.indexOf(n), RB.dIn, RB.dOut); else sector(n, RB.obull, RB.board);
+  }
+  const clockLabel = (n, dbl) => n === 25 ? 'BULL' : dbl ? 'D' + n : String(n);
+  const clockNext = (t, dbl) => t < 20 ? t + 1 : dbl && t === 20 ? 25 : null;
   // Pas d'image fixe propre au mode : la lumière de la cible ne change jamais pendant la volée,
   // sinon les caméras doivent reprendre un fond et avalent une fléchette arrivée entre-temps.
   // Le numéro visé se voit dans les animations (passage au suivant, raté).
   // Passage au numéro suivant : une comète file sur le surround jusqu'au nouveau secteur,
   // qui se remplit du centre vers l'extérieur, puis son numéro claque sur le surround.
-  function clockMove(from, to, delay) {
-    const rm = (RB.board + RB.sur) / 2, a0 = from ? secAng(from) : secAng(to) - 1.2, a1 = secAng(to);
+  function clockMove(from, to, delay, dbl) {
+    if (to === 25) return bullMove(from, delay);
+    const rm = (RB.board + RB.sur) / 2, a0 = from && from !== 25 ? secAng(from) : secAng(to) - 1.2, a1 = secAng(to);
     let d = ((a1 - a0) % TAU + TAU) % TAU; if (d > Math.PI) d -= TAU;
     const dur = .3 + Math.abs(d) / Math.PI * .35;
     fx(dur, (k) => {
@@ -327,50 +336,79 @@
     }, delay);
     const t1 = delay + dur;
     fx(1.6, (k) => {
-      const r = RB.obull + (RB.board - RB.obull) * ease(Math.min(1, k * 4)), al = k < .8 ? 1 : (1 - k) / .2;
-      sector(to, RB.obull, r); g2.fillStyle = `rgba(255,225,77,${.9 * al})`; g2.fill();
+      const al = k < .8 ? 1 : (1 - k) / .2;
+      if (dbl) {
+        // Doubles : la case du double se remplit de l'extérieur, en pulsant.
+        const r = RB.dOut + (RB.board - RB.dOut) * (1 - ease(Math.min(1, k * 4)));
+        segPath(ORDER.indexOf(to), RB.dIn, r); g2.fillStyle = `rgba(255,225,77,${.95 * al})`; g2.fill();
+      } else {
+        const r = RB.obull + (RB.board - RB.obull) * ease(Math.min(1, k * 4));
+        sector(to, RB.obull, r); g2.fillStyle = `rgba(255,225,77,${.9 * al})`; g2.fill();
+      }
       g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,255,255,${al})`; g2.lineWidth = 6; g2.stroke();
     }, t1);
-    const [mx, my] = secMid(to, 200); shock(mx, my, 160, '255,225,77', .6, t1 + .25);
+    const [mx, my] = secMid(to, dbl ? RB.dIn + 4 : 200); shock(mx, my, 160, '255,225,77', .6, t1 + .25);
     fx(1.4, (k, t) => {
       const s = 1 + .9 * (1 - ease(Math.min(1, t / .22))), al = k > .8 ? (1 - k) / .2 : 1;
-      arcText(String(to), secAng(to), (RB.sur - RB.board) * .62 * s, al, C.fluo, C.sunset);
+      arcText(clockLabel(to, dbl), secAng(to), (RB.sur - RB.board) * .62 * s, al, C.fluo, C.sunset);
     }, t1 + .25);
     return t1 + .5;
   }
+  // Passage au bull (après le D20) : des anneaux se resserrent sur le bull, qui s'allume, BULL claque en haut.
+  function bullMove(from, delay) {
+    for (let j = 0; j < 3; j++) fx(.5, (k) => {
+      const r = RB.dOut - (RB.dOut - RB.bull) * ease(k), al = 1 - k * .6;
+      g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,225,77,${al})`; g2.lineWidth = 7;
+      g2.beginPath(); g2.arc(CX, CY, r * K, 0, TAU); g2.stroke();
+    }, delay + j * .12);
+    const t1 = delay + .62;
+    fx(1.6, (k) => {
+      const al = k < .8 ? 1 : (1 - k) / .2, r = RB.bull * (1 + 1.5 * (1 - ease(Math.min(1, k * 4))));
+      g2.beginPath(); g2.arc(CX, CY, r * K, 0, TAU); g2.fillStyle = `rgba(255,225,77,${.95 * al})`; g2.fill();
+      g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,255,255,${al})`; g2.lineWidth = 5; g2.stroke();
+    }, t1);
+    shock(0, 0, 160, '255,225,77', .6, t1 + .1);
+    fx(1.4, (k, t) => {
+      const s = 1 + .9 * (1 - ease(Math.min(1, t / .22))), al = k > .8 ? (1 - k) / .2 : 1;
+      arcText('BULL', -Math.PI / 2, (RB.sur - RB.board) * .62 * s, al, C.fluo, C.sunset);
+    }, t1 + .2);
+    return t1 + .5;
+  }
   // Touché : la case brille (lave), le secteur entier flashe fluo puis reste orange (fait), puis passage au suivant.
-  function clockHit(h, next) {
+  function clockHit(h, next, dbl) {
     flash(h.x, h.y, 70); lava(h, 1); shock(h.x, h.y, 220, '255,225,77', .6); embers(h.x, h.y, 18);
     if (h.m === 3) { fire(h.x, h.y, 70, 1.1); godRays(h.x, h.y, 1); }
     else if (h.m === 2) lightningRing(RB.dIn, RB.dOut, .9);
     fx(.8, (k) => { g2.globalCompositeOperation = 'lighter'; const a = k < .12 ? k / .12 : 1 - (k - .12) / .88;
-      sector(h.n, RB.obull, RB.board); g2.fillStyle = `rgba(255,225,77,${.85 * a})`; g2.fill(); });
-    if (!next) return clockWin(.5);
-    return clockMove(h.n, next, .45);
+      clockZone(h.n, dbl); g2.fillStyle = `rgba(255,225,77,${.85 * a})`; g2.fill(); });
+    if (!next) return clockWin(.5, dbl);
+    return clockMove(h.n, next, .45, dbl);
   }
   // Raté (mauvais numéro ou hors cible) : la case touchée vire au bleu froid avec une croix rose,
   // une ligne pointillée part de l'impact vers le bon secteur, qui clignote deux fois en rose.
-  function clockMiss(h, target) {
+  function clockMiss(h, target, dbl) {
     if (h.m) {
       fx(.9, (k) => { cellPath(h); g2.fillStyle = `rgba(110,150,210,${.7 * (1 - k)})`; g2.fill(); });
       fx(1, (k) => { const [X, Y] = P2(h.x, h.y), s = 16 * K * (1 + .3 * (1 - ease(Math.min(1, k * 4)))), al = k > .6 ? (1 - k) / .4 : 1;
         g2.strokeStyle = `rgba(255,77,141,${al})`; g2.lineWidth = 5; g2.lineCap = 'round';
         g2.beginPath(); g2.moveTo(X - s, Y - s); g2.lineTo(X + s, Y + s); g2.moveTo(X + s, Y - s); g2.lineTo(X - s, Y + s); g2.stroke(); });
     } else { tint(1.1, '40,70,120', .35); rain(110, .7); }
-    const [tx, ty] = secMid(target, 135), sx = h.m ? h.x : tx * 1.9, sy = h.m ? h.y : ty * 1.9;
+    const [tx, ty] = target === 25 ? [0, 0] : secMid(target, dbl ? (RB.dIn + RB.dOut) / 2 : 135), sx = h.m ? h.x : tx * 1.9, sy = h.m ? h.y : ty * 1.9;
     fx(1, (k, t) => { const al = k > .7 ? (1 - k) / .3 : 1, e = ease(Math.min(1, t / .35)), [X0, Y0] = P2(sx, sy), [X1, Y1] = P2(sx + (tx - sx) * e, sy + (ty - sy) * e);
       g2.globalCompositeOperation = 'lighter'; g2.strokeStyle = `rgba(255,225,77,${.9 * al})`; g2.lineWidth = 3; g2.setLineDash([10, 9]); g2.lineDashOffset = -t * 60;
       g2.beginPath(); g2.moveTo(X0, Y0); g2.lineTo(X1, Y1); g2.stroke(); }, .1);
     fx(1.1, (k, t) => { const on = Math.floor((t) / .2) % 2 ? .15 : 1, al = (k > .8 ? (1 - k) / .2 : 1) * on;
-      sector(target, RB.obull, RB.board); g2.fillStyle = `rgba(255,77,141,${.45 * al})`; g2.fill();
+      clockZone(target, dbl); g2.fillStyle = `rgba(255,77,141,${(dbl ? .8 : .45) * al})`; g2.fill();
       g2.strokeStyle = `rgba(255,225,77,${al})`; g2.lineWidth = 6; g2.stroke(); }, .2);
   }
   // Tour bouclé (20 touché) : les 20 secteurs s'allument dans l'ordre de 1 à 20, puis feu d'artifice.
-  function clockWin(delay = 0) {
-    for (let n = 1; n <= 20; n++) fx(.9, (k) => { const a = (1 - k);
-      g2.globalCompositeOperation = 'lighter'; sector(n, RB.obull, RB.board); g2.fillStyle = n % 2 ? `rgba(255,122,47,${.85 * a})` : `rgba(255,77,141,${.85 * a})`; g2.fill();
-      const [x, y] = secMid(n, 300), [X, Y] = P2(x, y); g2.fillStyle = `rgba(255,225,77,${a})`; g2.beginPath(); g2.arc(X, Y, 10 * K, 0, TAU); g2.fill(); }, delay + (n - 1) * .07);
-    const t1 = delay + 1.5;
+  function clockWin(delay = 0, dbl = false) {
+    const cells = dbl ? [...Array(20).keys()].map(i => i + 1).concat(25) : [...Array(20).keys()].map(i => i + 1);
+    cells.forEach((n, i) => fx(.9, (k) => { const a = (1 - k);
+      g2.globalCompositeOperation = 'lighter'; clockZone(n, dbl); g2.fillStyle = n % 2 ? `rgba(255,122,47,${.85 * a})` : `rgba(255,77,141,${.85 * a})`; g2.fill();
+      if (n === 25) return;
+      const [x, y] = secMid(n, 300), [X, Y] = P2(x, y); g2.fillStyle = `rgba(255,225,77,${a})`; g2.beginPath(); g2.arc(X, Y, 10 * K, 0, TAU); g2.fill(); }, delay + i * .07));
+    const t1 = delay + cells.length * .07 + .1;
     fx(1.6, () => {}, t1);
     setTimeout(() => { flash(0, 0, 500); sunsetSpiral(1.6); confetti(160); ringTag('TOUR BOUCLÉ', { n: 2, dur: 3, speed: .9 });
       [[-300, 260], [300, 260], [0, 330]].forEach(([x, y], i) => setTimeout(() => fireworks(x, y, [C.fluo, C.crep, C.sunset][i]), i * 280)); }, t1 * 1000);
@@ -380,11 +418,12 @@
     const t = clock.target, now = performance.now();
     // Tour fini côté hub (en attente du retrait) : la fléchette n'est pas comptée, pas d'animation.
     if (clock.won || clock.wait) return;
-    if (h.m && h.n === t) {
-      const next = t < 20 ? t + 1 : null, end = next ? quick(() => clockHit(h, next)) : clockHit(h, null);
+    const dbl = clock.dbl;
+    if (h.m && h.n === t && (!dbl || h.m === 2)) {
+      const next = clockNext(t, dbl), end = next ? quick(() => clockHit(h, next, dbl)) : clockHit(h, null, dbl);
       clock.prev = t; clock.switchAt = now + (next ? end - .2 : 0) * 1000;
       if (next) clock.target = next; else clock.won = true;
-    } else quick(() => clockMiss(h, t));
+    } else quick(() => clockMiss(h, t, dbl));
   }
 
   /* ---------- image de chaque instant ---------- */
@@ -661,14 +700,15 @@
       if (hk !== heatKey) { heatKey = hk; heatCv = hk ? buildHeat(d.heat) : null; }
       scene = d.scene || 'accueil'; title = d.scene === 'jeu' ? String(d.title || '') : '';
       training = d.scene === 'jeu' && !!d.training;
-      const ct = d.scene === 'jeu' && Number.isInteger(d.clock) && d.clock >= 1 && d.clock <= 20 ? d.clock : 0;
+      const cd = !!d.clockDoubles;
+      const ct = d.scene === 'jeu' && Number.isInteger(d.clock) && (d.clock >= 1 && d.clock <= 20 || cd && d.clock === 25) ? d.clock : 0;
       if (!ct) clock = null;
-      else if (!clock) { clock = { target: ct, prev: 0, switchAt: 0 }; if (playing) clockMove(0, ct, 0); }
+      else if (!clock || clock.dbl !== cd) { clock = { target: ct, prev: 0, switchAt: 0, dbl: cd }; if (playing) clockMove(0, ct, 0, cd); }
       else if (ct !== clock.target) {
         // Autre joueur, ou correction : le nouveau secteur s'allume après l'animation en cours.
         const now = performance.now(), wait = Math.max(0, (clock.switchAt - now) / 1000);
         clock.prev = clock.target; clock.target = ct; clock.won = false;
-        clock.switchAt = now + (wait + clockMove(clock.prev, ct, wait) - .2) * 1000;
+        clock.switchAt = now + (wait + clockMove(clock.prev, ct, wait, cd) - .2) * 1000;
       }
       if (clock) clock.wait = !!d.wait;
       const co2 = d.scene === 'jeu' && d.coach && d.coach.cell ? d.coach : null, ck = co2 ? co2.cell + ':' + co2.zone : '';

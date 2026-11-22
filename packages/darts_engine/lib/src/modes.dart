@@ -318,31 +318,62 @@ class CricketGame extends TurnGame {
 // MARK: Around the clock
 
 /// Tour de l'horloge : toucher 1, 2, ... 20 dans l'ordre (simple, double ou triple).
+/// [doubles] : seulement les doubles, de D1 à D20 puis le bull (21 cibles).
 class ClockGame extends TurnGame {
-  ClockGame(super.names) {
+  ClockGame(super.names, {this.doubles = false}) {
     resetState();
   }
 
+  final bool doubles;
+
+  /// Numéro visé par chaque joueur (1 à 20, 25 pour le bull en doubles).
   late List<int> target;
+  late List<int> _done;
+
+  /// Chaque fléchette : joueur, case visée, case touchée (doubles : heatmap et coach).
+  final List<ClockShot> shots = [];
+
+  /// Nombre de cibles du tour : 20, ou 21 en doubles (bull compris).
+  int get total => doubles ? 21 : 20;
+
+  /// Case à toucher pour avancer (doubles), ou secteur visé en simple.
+  DartThrow aimOf(int player) => doubles ? DartThrow(target[player], 2) : DartThrow(target[player], 1);
 
   @override
-  void resetState() => target = List.filled(names.length, 1);
+  void resetState() {
+    target = List.filled(names.length, 1);
+    _done = List.filled(names.length, 0);
+    shots.clear();
+  }
 
   @override
   int scoreOf(int player) => target[player];
 
   /// Cibles déjà touchées.
-  int done(int player) => target[player] - 1;
+  int done(int player) => _done[player];
+
+  /// Fléchettes lancées par un joueur.
+  int dartsOf(int player) => shots.where((s) => s.player == player).length;
 
   @override
   void onDart(int player, DartThrow d) {
-    if (d.sector != target[player]) return;
-    target[player]++;
-    if (target[player] > 20) {
-      target[player] = 20;
-      finish(player);
-    }
+    final aim = aimOf(player);
+    final ok = doubles ? d == aim : d.sector == target[player];
+    shots.add(ClockShot(player, aim, d, ok));
+    if (!ok) return;
+    _done[player]++;
+    if (_done[player] >= total) return finish(player);
+    target[player] = target[player] == 20 ? 25 : target[player] + 1;
   }
+}
+
+/// Une fléchette d'Around the clock.
+class ClockShot {
+  const ClockShot(this.player, this.aim, this.dart, this.ok);
+  final int player;
+  final DartThrow aim;
+  final DartThrow dart;
+  final bool ok;
 }
 
 // MARK: Shanghai

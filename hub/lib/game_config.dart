@@ -93,6 +93,7 @@ class GameConfig {
     GameMode.countUp => 'Count Up',
     GameMode.cricketCountUp => 'Cricket Count Up',
     GameMode.coach => 'Coach',
+    GameMode.doublesPro => 'Doubles Pro',
   };
 
   /// Ligne du salon : "Cricket · 20 à 15 et bull".

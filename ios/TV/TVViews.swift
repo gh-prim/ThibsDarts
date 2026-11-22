@@ -87,6 +87,10 @@ struct TVLiveView: View {
                 Fete180VideoView { withAnimation(Td.sortie) { model.fete180 = false } }
                     .transition(.opacity)
             }
+            if model.volee0 {
+                Fete180VideoView(clip: "volee0") { withAnimation(Td.sortie) { model.volee0 = false } }
+                    .transition(.opacity)
+            }
             if let m = model.music {
                 TVMiniPlayer(music: m)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)

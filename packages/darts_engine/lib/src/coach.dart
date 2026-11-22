@@ -445,6 +445,15 @@ class CoachSession extends TurnGame {
     throwDart(d);
   }
 
+  /// Retire la fléchette [index] du tour en cours, avec sa position (coup fantôme, annulation).
+  void removeAt(int index) {
+    if (index < 0 || index >= currentTurn.length) return;
+    final i = _k - currentTurn.length + index;
+    if (i < _positions.length) _positions.removeAt(i);
+    _positions.length = math.min(_positions.length, _k - 1);
+    removeDart(index);
+  }
+
   /// Corrige la fléchette [index] du tour en cours, avec sa position si connue.
   void correctAt(int index, DartThrow d, {double? x, double? y}) {
     final before = _k - currentTurn.length;

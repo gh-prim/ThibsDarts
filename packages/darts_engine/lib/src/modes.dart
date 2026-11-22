@@ -153,6 +153,15 @@ abstract class TurnGame {
     _replay(turns, darts);
   }
 
+  /// Retire la fléchette [index] du tour en cours (coup fantôme, annulation) : le joueur la relance.
+  void removeDart(int index) {
+    if (index < 0 || index >= _turn.length) return;
+    final darts = List.of(_turn)..removeAt(index);
+    final turns = [for (final (p, t) in _history) (p, t)];
+    if (_closed) turns.removeLast();
+    _replay(turns, darts);
+  }
+
   void _replay(List<(int, List<DartThrow>)> turns, List<DartThrow> current) {
     _history.clear();
     _turn.clear();

@@ -59,27 +59,32 @@ class CamTraces {
   static Future<Map<String, dynamic>?> learning() => _get('/learning');
 
   /// Envoie la vraie fléchette au Pi 5 (position si touchée sur la cible). Sans attendre la réponse.
-  static void correct(String id, DartThrow dart, Offset? position) {
+  static void correct(String id, DartThrow dart, Offset? position) => _post('/trace/$id/correct', {
+    'number': dart.isMiss ? 0 : dart.sector,
+    'multiplier': dart.isMiss ? 0 : dart.multiplier,
+    if (position != null) 'x': position.dx,
+    if (position != null) 'y': position.dy,
+  });
+
+  /// Fléchette annulée sur le hub ([reason] : fantome ou annulation). Le Pi 5 la sort de l'apprentissage
+  /// et garde la trace d'un coup fantôme pour l'analyse. Sans attendre la réponse.
+  static void cancel(String id, String reason) =>
+      _post('/trace/$id/cancel', {'reason': reason, 'game': ?CamLink.instance.debugGame});
+
+  static void _post(String path, Map<String, Object?> json) {
     final base = _base;
     if (base == null) return;
     unawaited(() async {
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
       try {
-        final req = await client.postUrl(base.replace(path: '/trace/$id/correct'));
-        final body = utf8.encode(
-          jsonEncode({
-            'number': dart.isMiss ? 0 : dart.sector,
-            'multiplier': dart.isMiss ? 0 : dart.multiplier,
-            if (position != null) 'x': position.dx,
-            if (position != null) 'y': position.dy,
-          }),
-        );
+        final req = await client.postUrl(base.replace(path: path));
+        final body = utf8.encode(jsonEncode(json));
         req.headers.contentType = ContentType.json;
         req.contentLength = body.length;
         req.add(body);
         await (await req.close().timeout(const Duration(seconds: 6))).drain<void>();
       } catch (e) {
-        debugPrint('CamTraces: correction non envoyée ($e)');
+        debugPrint('CamTraces: $path non envoyé ($e)');
       } finally {
         client.close(force: true);
       }

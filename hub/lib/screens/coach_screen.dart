@@ -22,6 +22,7 @@ import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import '../widgets/volume_button.dart';
 import 'correction_screen.dart';
+import '../widgets/cancel_dart.dart';
 
 /// Chrono d'une volée sous pression.
 const _pressureSeconds = 20;
@@ -107,6 +108,8 @@ class _CoachScreenState extends State<CoachScreen> {
         _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)));
       case 'c':
         _applyCorrection(GameLog.correctionOf(e));
+      case 'u':
+        _applyRemoval(e['i'] as int);
       case 'e':
         _nextVolley();
       case 'x':
@@ -185,6 +188,27 @@ class _CoachScreenState extends State<CoachScreen> {
     );
     if (c == null || !mounted) return;
     _applyCorrection(c);
+  }
+
+  /// Annuler : la fléchette est retirée du tour (coup fantôme, annulation), le joueur la relance.
+  Future<void> _cancel() async {
+    if (_showEnd || !_started) return;
+    final c = await askCancelDart(context, _g.currentTurn, List.of(_hits));
+    if (c == null || !mounted) return;
+    _applyRemoval(c.index);
+  }
+
+  void _applyRemoval(int index) {
+    _log.add(GameLog.removal(index));
+    setState(() {
+      _g.removeAt(index);
+      final kept = hitsWithout(_hits, index, _g.currentTurn);
+      _hits
+        ..clear()
+        ..addAll(kept);
+      _tagDart = null;
+    });
+    _afterDart();
   }
 
   void _applyCorrection(Correction c) {
@@ -480,12 +504,20 @@ class _CoachScreenState extends State<CoachScreen> {
           ),
         const Spacer(),
         if (_started) ...[
-          TdButton(
-            label: 'Corriger',
-            icon: LucideIcons.pencil,
-            variant: TdButtonVariant.secondary,
-            height: 56,
-            onPressed: _correct,
+          Row(
+            spacing: Td.s2,
+            children: [
+              Expanded(
+                child: TdButton(
+                  label: 'Corriger',
+                  icon: LucideIcons.pencil,
+                  variant: TdButtonVariant.secondary,
+                  height: 56,
+                  onPressed: _correct,
+                ),
+              ),
+              Expanded(child: CancelDartButton(onPressed: _cancel, height: 56)),
+            ],
           ),
           TdButton(
             label: 'Hors cible',

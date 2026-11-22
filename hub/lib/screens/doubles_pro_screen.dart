@@ -22,6 +22,7 @@ import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
 import '../widgets/volume_button.dart';
 import 'correction_screen.dart';
+import '../widgets/cancel_dart.dart';
 
 /// Doubles Pro : routine fixe sur tous les doubles (diagnostic, chaînes, aléatoire, échelle).
 /// [GameConfig.option] : 0 la séance complète, 1 à 4 un seul bloc.
@@ -160,6 +161,8 @@ class _DoublesProScreenState extends State<DoublesProScreen> {
         _throw(GameLog.dartOf(e), GameLog.offsetOf(e) ?? boardPositionFor(GameLog.dartOf(e)));
       case 'c':
         _applyCorrection(GameLog.correctionOf(e));
+      case 'u':
+        _applyRemoval(e['i'] as int);
       case 'e':
         _nextVolley();
     }
@@ -231,6 +234,27 @@ class _DoublesProScreenState extends State<DoublesProScreen> {
     );
     if (c == null || !mounted) return;
     _applyCorrection(c);
+  }
+
+  /// Annuler : la fléchette est retirée du tour (coup fantôme, annulation), le joueur la relance.
+  Future<void> _cancel() async {
+    if (_showEnd || !_started) return;
+    final c = await askCancelDart(context, _g.currentTurn, List.of(_hits));
+    if (c == null || !mounted) return;
+    _applyRemoval(c.index);
+  }
+
+  void _applyRemoval(int index) {
+    _log.add(GameLog.removal(index));
+    setState(() {
+      _g.removeAt(index);
+      final kept = hitsWithout(_hits, index, _g.currentTurn);
+      _hits
+        ..clear()
+        ..addAll(kept);
+      _tagDart = null;
+    });
+    _afterDart();
   }
 
   void _applyCorrection(Correction c) {
@@ -975,6 +999,7 @@ class _DoublesProScreenState extends State<DoublesProScreen> {
         spacing: Td.s2,
         children: [
           Expanded(child: _small('Corriger', LucideIcons.pencil, _correct)),
+          Expanded(child: _small('Annuler', LucideIcons.undo2, _cancel)),
           Expanded(
             child: _small(
               'Hors cible',
@@ -1055,13 +1080,18 @@ class _DoublesProScreenState extends State<DoublesProScreen> {
       onTap: onTap,
       child: SizedBox(
         height: 56,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          spacing: 6,
-          children: [
-            Icon(icon, size: 18, color: onTap == null ? Td.desactiveInk : Td.ink),
-            Text(label, style: TdText.inter(17, 22, 600, onTap == null ? Td.desactiveInk : Td.ink)),
-          ],
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 6,
+              children: [
+                Icon(icon, size: 18, color: onTap == null ? Td.desactiveInk : Td.ink),
+                Text(label, style: TdText.inter(17, 22, 600, onTap == null ? Td.desactiveInk : Td.ink)),
+              ],
+            ),
+          ),
         ),
       ),
     ),

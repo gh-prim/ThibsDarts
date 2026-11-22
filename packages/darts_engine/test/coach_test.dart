@@ -135,6 +135,16 @@ void main() {
     expect(g.shots.single.x, closeTo(x, 1e-9));
   });
 
+  test('retirer une fléchette fantôme', () {
+    final g = session();
+    final (x, y) = mid(16);
+    g.throwAt(const DartThrow.single(5), 0, 0);
+    g.throwAt(const DartThrow.double(16), x, y);
+    g.removeAt(0);
+    expect(g.currentTurn, [const DartThrow.double(16)]);
+    expect(g.shots.single.x, closeTo(x, 1e-9));
+  });
+
   test('niveaux : aller-retour JSON', () {
     final l = CoachLevels(zones: {'D16': 1.234}, checkout: 2.5, pressure: 1);
     final b = CoachLevels.fromJson(l.toJson());

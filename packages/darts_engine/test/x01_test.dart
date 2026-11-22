@@ -61,6 +61,19 @@ void main() {
       expect(g.throwDart(const DartThrow.double(6)), ThrowOutcome.checkout);
     });
 
+    test('retirer une fléchette fantôme rouvre le tour', () {
+      final g = X01Game(playerNames: ['Thibs'], startScore: 100);
+      g.throwDart(const DartThrow.single(20));
+      g.throwDart(const DartThrow.triple(20));
+      g.throwDart(const DartThrow.single(5));
+      expect(g.awaitingNextPlayer, isTrue);
+      g.removeDart(1);
+      expect(g.currentTurn, [const DartThrow.single(20), const DartThrow.single(5)]);
+      expect(g.currentPlayer.remaining, 75);
+      expect(g.awaitingNextPlayer, isFalse);
+      expect(g.currentPlayer.turns, isEmpty);
+    });
+
     test('corriger une fléchette recalcule le tour', () {
       final g = X01Game(playerNames: ['Thibs'], startScore: 100);
       g.throwDart(const DartThrow.single(20));

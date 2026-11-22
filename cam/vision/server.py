@@ -357,6 +357,18 @@ class Registry:
         self.detector.model = None if self.learner.model.empty else self.learner.model
         return result
 
+    def cancel(self, dart_id, reason, game=None):
+        """Fléchette annulée sur le hub : sortie de l'apprentissage ; un coup fantôme garde sa trace."""
+        found = self.learner.cancel(dart_id, reason) is not None
+        ghost = None
+        if reason == "fantome":
+            ghost = self.traces.keep_ghost(dart_id, {"game": game} if game else {})
+            print(f"coup fantôme signalé : {ghost['segment'] if ghost else dart_id}", flush=True)
+            self._event({"type": "fantome", "id": dart_id})
+        if not found and ghost is None:
+            return None
+        return {"id": dart_id, "reason": reason, "kept": ghost is not None}
+
     def on_takeout(self):
         self._event({"type": "takeout"})
         if self.client:
@@ -545,6 +557,15 @@ class Handler(BaseHTTPRequestHandler):
         query = {k: v[-1] for k, v in parse_qs(self.path.partition("?")[2]).items()}
         if parts == ["traces"]:
             return self._send(200, json.dumps(registry.traces.list(), ensure_ascii=False).encode())
+        # GET /fantomes : coups fantômes signalés depuis le hub (le plus récent en premier).
+        if parts == ["fantomes"]:
+            lines = []
+            try:
+                with open(os.path.join(DATA_DIR, "fantomes.jsonl")) as f:
+                    lines = [json.loads(x) for x in f if x.strip()]
+            except (OSError, ValueError):
+                pass
+            return self._send(200, json.dumps(lines[::-1][:200], ensure_ascii=False).encode())
         if parts == ["learning"]:
             return self._send(200, json.dumps(registry.learner.stats(), ensure_ascii=False).encode())
         # GET /trace/<id> : mesures de chaque caméra pour cette fléchette.
@@ -604,6 +625,20 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, KeyError, TypeError):
                 return self._send(400, b'{"error": "correction"}')
             result = registry.correct(parts[1], n, m, x, y)
+            if result is None:
+                return self._send(404, b'{"error": "fl\xc3\xa9chette inconnue"}')
+            return self._send(200, json.dumps(result, ensure_ascii=False).encode())
+        # POST /trace/<id>/cancel {"reason": "fantome" | "annulation", "game"?} : fléchette annulée sur le hub.
+        if len(parts) == 3 and parts[0] == "trace" and parts[2] == "cancel":
+            try:
+                b = self._body()
+                reason = str(b.get("reason") or "annulation")
+                game = b.get("game")
+            except ValueError:
+                return self._send(400, b'{"error": "json"}')
+            if reason not in ("fantome", "annulation"):
+                return self._send(400, b'{"error": "raison"}')
+            result = registry.cancel(parts[1], reason, str(game)[:80] if game else None)
             if result is None:
                 return self._send(404, b'{"error": "fl\xc3\xa9chette inconnue"}')
             return self._send(200, json.dumps(result, ensure_ascii=False).encode())

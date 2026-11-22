@@ -29,11 +29,12 @@ void main() {
       await _font('Nunito', 'assets/fonts/Nunito.ttf');
       await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
     });
+    // Capture de tout l'écran, fenêtres comprises.
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
-        home: const RepaintBoundary(
-          child: TrainingScreen(config: GameConfig(players: ['Thibs'], freeVolleys: 0)),
+      RepaintBoundary(
+        child: MaterialApp(
+          theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
+          home: const TrainingScreen(config: GameConfig(players: ['Thibs'], freeVolleys: 0)),
         ),
       ),
     );
@@ -55,6 +56,27 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     expect(find.text('Corriger une fléchette'), findsNothing);
     expect(find.text('S20'), findsWidgets);
+
+    // Annuler : choix de la raison, la fléchette est retirée de la volée.
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    expect(find.text('Annuler une fléchette'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    if (out != null) {
+      final ro = tester.renderObject<RenderRepaintBoundary>(find.byType(RepaintBoundary).first);
+      await tester.runAsync(() async {
+        final img = await ro.toImage();
+        final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+        File('$out/annuler-raison.png').writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
+    await tester.tap(find.text('Coup fantôme'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    expect(find.text('Annuler une fléchette'), findsNothing);
+    expect(find.text('S20'), findsNothing);
+    final log = File('${OwnerStore.instance.dir.path}/annulations.jsonl').readAsLinesSync();
+    expect(log.last, contains('"reason":"fantome"'));
+    expect(log.last, contains('"dart":"S20"'));
 
     if (out != null) {
       final ro = tester.renderObject<RenderRepaintBoundary>(find.byType(RepaintBoundary).first);

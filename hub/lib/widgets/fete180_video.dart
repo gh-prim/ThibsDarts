@@ -11,8 +11,8 @@ import '../theme/tokens.dart';
 
 /// Clip de fête (Blender) plein écran sur le petit écran, avec son : 'fete180' (180) ou 'volee0' (volée à 0).
 /// flutter-pi n'a pas de lecteur vidéo : les images JPEG 1024 x 576 sont mises bout à bout dans
-/// assets/<clip>/<clip>.frames (index dans <clip>.json) et décodées quelques images en avance.
-/// Le son (assets/sounds/<clip>.wav) part avec la première image. Toucher l'écran coupe la vidéo.
+/// assets/CLIP/CLIP.frames (index dans CLIP.json) et décodées quelques images en avance.
+/// Le son (assets/sounds/CLIP.wav) part avec la première image. Toucher l'écran coupe la vidéo.
 class Fete180Video extends StatefulWidget {
   const Fete180Video({super.key, this.clip = 'fete180', required this.onDone});
 

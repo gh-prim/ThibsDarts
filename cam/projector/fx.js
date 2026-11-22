@@ -262,8 +262,24 @@
     g2.fillStyle = `rgba(${col},${a})`; g2.fillRect(-50, -50, LCW + 100, LCH + 100); }); }
 
   /* ---------- une fléchette (x, y en mm, y vers le haut) ---------- */
+  // Effets d'une seule fléchette : tout ce qui est lancé par fn() est rejoué en accéléré
+  // pour durer au plus DART_MAX secondes (180, bust, victoire gardent leur durée).
+  const DART_MAX = .8;
+  function quick(fn) {
+    const e0 = effects.length, p0 = parts.length, r = fn();
+    const ne = effects.slice(e0), np = parts.slice(p0);
+    let end = 0;
+    ne.forEach(e => { end = Math.max(end, e.dur - e.t); });
+    np.forEach(p => { end = Math.max(end, p.max - p.life); });
+    const sp = end > DART_MAX ? end / DART_MAX : 1;
+    ne.forEach(e => { e.sp = sp; }); np.forEach(p => { p.sp = sp; });
+    return typeof r === 'number' ? r / sp : r;
+  }
   function dart(h) {
     if (clock && playing) return clockDart(h);
+    quick(() => dartFx(h));
+  }
+  function dartFx(h) {
     if (!h.m) {
       tint(1.8, '40,70,120', .45); rain(200, 1.2); 
       ringTag('MISS', { n: 4, c1: '#9aa0a6', c2: '#4FA3FF', stroke: '#dfe6ee', speed: -.5, head: 'p09', grey: true });
@@ -363,10 +379,10 @@
     // Tour fini côté hub (en attente du retrait) : la fléchette n'est pas comptée, pas d'animation.
     if (clock.won || clock.wait) return;
     if (h.m && h.n === t) {
-      const next = t < 20 ? t + 1 : null, end = clockHit(h, next);
+      const next = t < 20 ? t + 1 : null, end = next ? quick(() => clockHit(h, next)) : clockHit(h, null);
       clock.prev = t; clock.switchAt = now + (next ? end - .2 : 0) * 1000;
       if (next) clock.target = next; else clock.won = true;
-    } else clockMiss(h, t);
+    } else quick(() => clockMiss(h, t));
   }
 
   /* ---------- image de chaque instant ---------- */
@@ -580,8 +596,9 @@
   const CAL_MM = [[0, RB.dOut], [RB.dOut, 0], [0, -RB.dOut], [-RB.dOut, 0]];
 
   function frame(dt, now, mode) {
+    const dt0 = dt;
     boardLight = 1;
-    effects.forEach(e => { e.t += dt; });
+    effects.forEach(e => { e.t += dt * (e.sp || 1); });
     const live = effects.filter(e => e.t >= 0 && e.t < e.dur);
     g2.setTransform(1, 0, 0, 1, 0, 0); g2.globalCompositeOperation = 'source-over'; g2.globalAlpha = 1; g2.filter = 'none';
     if (mode === 'pattern') { pattern(); return; }
@@ -590,17 +607,18 @@
     if (shake > 0) { shake = Math.max(0, shake - dt * 1.1); g2.translate(rnd(-1, 1) * 18 * shake, rnd(-1, 1) * 18 * shake); }
     // Pendant une animation, l'éclairage blanc de la cible baisse fortement : sinon il noie les couleurs.
     const busy = live.some(e => !e.base) || parts.length > 0;
-    fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 5));
+    fxDim += ((busy ? .12 : 1) - fxDim) * Math.min(1, dt * (busy ? 14 : 10));
     boardLight = Math.min(boardLight, fxDim);
     if (boardLight > 0.01) { if (playing) steady(boardLight); else if (scene === 'stats') statsHeat(boardLight); else idle(now / 1000, boardLight); }
     // Nom du jeu : pleine intensité hors effets, caché pendant le check-out (la route tourne à sa place).
     if (playing && mode !== 'pattern') gameDecor(now < coUntil ? 0 : 1);
     live.forEach(e => { if (!e.base) { g2.save(); e.draw(e.t / e.dur, e.t); g2.restore(); } });
     effects = effects.filter(e => e.t < e.dur);
-    parts = parts.filter(p => { p.life += dt; return p.life < p.max; });
+    parts = parts.filter(p => { p.life += dt * (p.sp || 1); return p.life < p.max; });
     g2.save(); g2.globalCompositeOperation = 'lighter';
     parts.forEach(p => {
       if (p.life < 0) return;
+      const dt = dt0 * (p.sp || 1);
       p.x += p.vx * dt; p.y += p.vy * dt;
       const k = p.life / p.max, [X, Y] = P2(p.x, p.y);
       if (p.kind === 'fire') { p.vy += 60 * dt; p.vx *= .98; const s = p.size * (1 - k * .6) * K * 1.6, col = k < .25 ? '255,245,170' : k < .55 ? '255,122,47' : '255,77,141';
@@ -623,9 +641,9 @@
   // Temps restant avant que l'image redevienne fixe (s), pour mettre les caméras en pause.
   function busyFor() {
     let t = shake > 0 ? shake / 1.1 : 0;
-    if (fxDim < .98) t = Math.max(t, .7);  // l'éclairage de la cible remonte encore
-    effects.forEach(e => { t = Math.max(t, e.dur - e.t); });
-    parts.forEach(p => { t = Math.max(t, p.max - p.life); });
+    if (fxDim < .98) t = Math.max(t, .4);  // l'éclairage de la cible remonte encore
+    effects.forEach(e => { t = Math.max(t, (e.dur - e.t) / (e.sp || 1)); });
+    parts.forEach(p => { t = Math.max(t, (p.max - p.life) / (p.sp || 1)); });
     return t;
   }
 

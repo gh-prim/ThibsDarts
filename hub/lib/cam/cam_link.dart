@@ -41,7 +41,11 @@ class CamLink {
   /// ajoutée à la main). Le Pi 5 la range avec les photos de la détection.
   void debugTruth(String kind, {DartThrow? detected, DartThrow? real, String? traceId, Offset? position}) {
     if (!debugOn) return;
-    String? name(DartThrow? d) => d == null ? null : d.isMiss ? 'MISS' : d.label;
+    String? name(DartThrow? d) => d == null
+        ? null
+        : d.isMiss
+        ? 'MISS'
+        : d.label;
     _publish(debugTruthTopic, {
       'kind': kind,
       'detected': ?name(detected),
@@ -126,7 +130,8 @@ class CamLink {
   void turnEnded() {
     final client = _client;
     if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) return;
-    final payload = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({'ts': DateTime.now().millisecondsSinceEpoch}));
+    final payload = MqttClientPayloadBuilder()
+      ..addUTF8String(jsonEncode({'ts': DateTime.now().millisecondsSinceEpoch}));
     client.publishMessage(turnTopic, MqttQos.atLeastOnce, payload.payload!);
   }
 
@@ -148,11 +153,20 @@ class CamLink {
   /// En partie : nom du jeu écrit sur le surround, et check-out proposé (cases allumées par le projecteur).
   /// Around the clock : [clock] = numéro visé par le joueur en cours (animations du projecteur).
   /// [wait] : tour fini, le hub ignore les fléchettes jusqu'au retrait : le projecteur aussi.
-  void setGameInfo(String title, {List<String>? checkout, int? clock, bool wait = false}) => _setProjector({
+  /// Coach : [coachCell] = case visée allumée en fixe ("D16"), [coachZone] = part du double éclairée (0,1 à 1).
+  void setGameInfo(
+    String title, {
+    List<String>? checkout,
+    int? clock,
+    bool wait = false,
+    String? coachCell,
+    double coachZone = 1,
+  }) => _setProjector({
     'scene': 'jeu',
     'title': title,
     if (checkout != null && checkout.isNotEmpty) 'checkout': checkout,
     'clock': ?clock,
+    if (coachCell != null) 'coach': {'cell': coachCell, 'zone': double.parse(coachZone.toStringAsFixed(2))},
     if (wait) 'wait': true,
   });
 
@@ -174,10 +188,7 @@ class CamLink {
   bool fx(String kind) => _publish(fxTopic, {'kind': kind, 'ts': DateTime.now().millisecondsSinceEpoch});
 
   /// Mode Debug : captures [on] et vidéoprojecteur [projector] (null : inchangé).
-  bool setDebug({bool? on, bool? projector}) => _publish(debugSetTopic, {
-    'on': ?on,
-    'projector': ?projector,
-  });
+  bool setDebug({bool? on, bool? projector}) => _publish(debugSetTopic, {'on': ?on, 'projector': ?projector});
 
   /// Bouton Signaler : le Pi 5 garde les images du moment.
   bool debugMark() => _publish(debugMarkTopic, {'ts': DateTime.now().millisecondsSinceEpoch, 'game': ?debugGame});

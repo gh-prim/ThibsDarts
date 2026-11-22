@@ -411,6 +411,7 @@ const _families = <String, (String, String, List<_Pick>)>{
     'Finir',
     'Les sorties. Là où les manches se gagnent.',
     [
+      _Pick('60%', 'Coach', 'Séance du jour, adaptée.', 'Tes 2 doubles les plus faibles, des sorties qui finissent dessus, puis un double acquis sous pression. Chaque niveau se règle à 60 % de réussite.', kind: _Kind.trainer, mode: GameMode.coach, recUnit: '% zone'),
       _Pick('61+', 'Catch 40', 'Finis 61 à 100, 6 fléchettes max.', 'Chaque score de 61 à 100 à finir sur un double. 3 points si tu sors en 3 fléchettes, 2 en 4 à 6, 0 sinon.', kind: _Kind.trainer, mode: GameMode.catch40, recUnit: 'pts sur 120'),
       _Pick('121', '9 Darts Double Out', 'Finis 121 en 9 fléchettes.', 'Trois volées pour finir 121, ou 81 si tu veux souffler. Double obligatoire à la fin. 10 tentatives.', kind: _Kind.trainer, mode: GameMode.nineDarts, optLabel: 'Score de départ', opts: ['121', '81'], opt: '121', recUnit: 'réussis sur 10'),
       _Pick('?', 'Checkout au hasard', 'Un score tiré, 3 volées.', 'Le Pi tire un score, tu as 3 volées pour le finir. 10 scores, on compte les réussites.', kind: _Kind.trainer, mode: GameMode.randomCheckout, optLabel: 'Plage de scores', opts: ['2-60', '61-110', '111-170'], opt: '61-110', recUnit: 'réussis sur 10'),

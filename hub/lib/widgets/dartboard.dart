@@ -69,10 +69,22 @@ class Dartboard extends StatelessWidget {
     this.heat = const {},
     this.dim = false,
     this.onTapBoard,
+    this.zone = 1,
+    this.doubleRates = const {},
+    this.bias = const [],
   });
 
   final List<BoardHit> hits;
   final DartThrow? aimed;
+
+  /// Coach : part du double visé à toucher, autour de son milieu (1 = tout le double).
+  final double zone;
+
+  /// Coach : réussite de chaque double ("D16" -> 0 à 100), anneau des doubles en couleur.
+  final Map<String, int> doubleRates;
+
+  /// Coach : écart moyen des fléchettes, une flèche par double (départ, arrivée en unités plateau).
+  final List<(Offset, Offset)> bias;
 
   /// Secteur visé en entier (simple, double et triple), 25 pour le bull.
   final int? aimSector;
@@ -98,7 +110,16 @@ class Dartboard extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: CustomPaint(
-                    painter: _BoardPainter(hits: hits, aimed: aimed, aimSector: aimSector, heat: heat, dim: dim),
+                    painter: _BoardPainter(
+                      hits: hits,
+                      aimed: aimed,
+                      aimSector: aimSector,
+                      heat: heat,
+                      dim: dim,
+                      zone: zone,
+                      doubleRates: doubleRates,
+                      bias: bias,
+                    ),
                   ),
                 ),
                 for (final h in hits)
@@ -119,7 +140,20 @@ class Dartboard extends StatelessWidget {
 }
 
 class _BoardPainter extends CustomPainter {
-  _BoardPainter({required this.hits, required this.aimed, required this.dim, this.aimSector, this.heat = const {}});
+  _BoardPainter({
+    required this.hits,
+    required this.aimed,
+    required this.dim,
+    this.aimSector,
+    this.heat = const {},
+    this.zone = 1,
+    this.doubleRates = const {},
+    this.bias = const [],
+  });
+
+  final double zone;
+  final Map<String, int> doubleRates;
+  final List<(Offset, Offset)> bias;
 
   final List<BoardHit> hits;
   final DartThrow? aimed;
@@ -213,7 +247,12 @@ class _BoardPainter extends CustomPainter {
               : (r == 'S' || r == 's')
               ? (even ? Td.plateauNoir : Td.plateauCreme)
               : (even ? Td.plateauRouge : Td.plateauVert);
-          if (heat.contains(sec) && !hit && !isAim) {
+          final rate = r == 'D' ? doubleRates['D$sec'] : null;
+          if (rate != null && !hit && !isAim) {
+            paint.color = _rateColor(rate);
+          } else if (doubleRates.isNotEmpty && !hit && !isAim) {
+            paint.color = paint.color.withValues(alpha: 0.35);
+          } else if (heat.contains(sec) && !hit && !isAim) {
             paint.color = Color.lerp(paint.color, Td.sunset, r == 'S' || r == 's' ? 0.7 : 0.8)!;
           } else if (dim && !hit && !isAim) {
             paint.color = paint.color.withValues(alpha: 0.55);
@@ -232,10 +271,27 @@ class _BoardPainter extends CustomPainter {
       }
     }
 
+    // Coach : la zone à toucher dans le double visé, en jaune fluo.
+    final a = aimed;
+    if (a != null && a.isDouble && a.sector != 25 && zone < 0.999) {
+      final i = sectors.indexOf(a.sector), half = 9 * zone;
+      final path = _seg(_rDi, _rDo, i * 18.0 - half, i * 18.0 + half);
+      canvas.drawPath(path, Paint()..color = Td.fluo);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..color = Td.ink
+          ..strokeWidth = 1,
+      );
+    }
+
     // Bull
     Color bullC(String k, Color base) => hitKeys.containsKey(k)
         ? Td.crepuscule
-        : aimSector == 25
+        : k == 'B' && doubleRates['BULL'] != null
+        ? _rateColor(doubleRates['BULL']!)
+        : aimSector == 25 || (k == 'B' && aimed == DartThrow.bull)
         ? Td.ciel
         : heat.contains(25)
         ? Color.lerp(base, Td.sunset, 0.75)!
@@ -244,6 +300,20 @@ class _BoardPainter extends CustomPainter {
     canvas.drawCircle(Offset.zero, _rOb, wire);
     canvas.drawCircle(Offset.zero, _rB, Paint()..color = bullC('B', Td.plateauRouge));
     canvas.drawCircle(Offset.zero, _rB, wire);
+
+    // Coach : écart moyen, une flèche par double.
+    final arrow = Paint()
+      ..color = Td.ink
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    for (final (from, to) in bias) {
+      canvas.drawLine(from, to, arrow);
+      final dir = to - from;
+      if (dir.distance < 1) continue;
+      final u = dir / dir.distance, n = Offset(-u.dy, u.dx);
+      canvas.drawLine(to, to - u * 5 + n * 3.5, arrow);
+      canvas.drawLine(to, to - u * 5 - n * 3.5, arrow);
+    }
 
     // Numéros
     for (var i = 0; i < 20; i++) {
@@ -269,9 +339,25 @@ class _BoardPainter extends CustomPainter {
     canvas.restore();
   }
 
+  /// Réussite d'un double : rouge sous 20 %, orange, puis jaune fluo à 50 % et plus.
+  static Color _rateColor(int pct) => pct >= 50
+      ? Td.fluo
+      : pct >= 35
+      ? Td.sunset
+      : pct >= 20
+      ? Td.crepuscule
+      : Td.plateauRouge;
+
   @override
   bool shouldRepaint(_BoardPainter old) =>
-      old.hits != hits || old.aimed != aimed || old.dim != dim || old.aimSector != aimSector || old.heat != heat;
+      old.hits != hits ||
+      old.aimed != aimed ||
+      old.dim != dim ||
+      old.aimSector != aimSector ||
+      old.heat != heat ||
+      old.zone != zone ||
+      old.doubleRates != doubleRates ||
+      old.bias != bias;
 }
 
 /// Impact numéroté (td-impact) : apparaît en zoomant, avec une onde.

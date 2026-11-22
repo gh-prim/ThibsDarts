@@ -374,12 +374,52 @@
     // Image fixe entre deux animations : les caméras la prennent comme fond, elle ne doit pas bouger.
     g2.fillStyle = `rgba(255,244,230,${(playing ? .9 : .55) * bl})`; g2.beginPath(); g2.arc(CX, CY, RB.board * K, 0, TAU); g2.fill();
     ringPath(RB.board, RB.sur); g2.fillStyle = `rgba(255,236,220,${(playing ? .3 : .2) * bl})`; g2.fill();
+    if (playing && coach) coachLight(coach, bl);
     if (title) return;  // en partie, le nom du jeu prend la place des deux arcs
     g2.save(); g2.globalCompositeOperation = 'lighter'; g2.lineWidth = 12;
     g2.strokeStyle = `rgba(255,122,47,${.6 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, -2.2, -0.9); g2.stroke();
     g2.strokeStyle = `rgba(255,77,141,${.55 * bl})`; g2.beginPath(); g2.arc(CX, CY, 355 * K, 0.94, 2.24); g2.stroke();
     g2.restore();
   }
+  /* ---------- coach : la case visée allumée, et pour un double la zone qui se resserre ---------- */
+  // coach = { cell: 'D16', zone: 0.6 } : zone = part du double autour de son milieu (1 = tout le double).
+  // Ne change qu'entre deux volées (fléchettes retirées) : sinon les caméras reprennent un fond.
+  let coach = null, coachKey = '';
+  function zonePath(c, zone) {
+    const i = ORDER.indexOf(c.n), half = 9 * zone;
+    const a = (i * 18 - half - 90) * Math.PI / 180, b = (i * 18 + half - 90) * Math.PI / 180;
+    g2.beginPath(); g2.arc(CX, CY, RB.dOut * K, a, b); g2.arc(CX, CY, RB.dIn * K, b, a, true); g2.closePath();
+  }
+  function coachLight(co, bl) {
+    const c = cellOf(co.cell); if (!c) return;
+    g2.save();
+    if (c.n === 25) { g2.beginPath(); g2.arc(CX, CY, (c.m === 2 ? RB.bull : RB.obull) * K, 0, TAU); }
+    else if (c.m === 3) segPath(ORDER.indexOf(c.n), RB.tIn, RB.tOut);
+    else if (c.m === 2) segPath(ORDER.indexOf(c.n), RB.dIn, RB.dOut);
+    else segPath(ORDER.indexOf(c.n), RB.tOut, RB.dIn);
+    const z = c.m === 2 && c.n !== 25 ? clamp(Number(co.zone) || 1, .1, 1) : 1;
+    g2.fillStyle = `rgba(255,122,47,${(z < 1 ? .55 : 1) * bl})`; g2.fill();
+    if (z < 1) {
+      zonePath(c, z);
+      g2.shadowColor = `rgba(255,225,77,${bl})`; g2.shadowBlur = 24; g2.fillStyle = `rgba(255,225,77,${bl})`; g2.fill();
+      g2.shadowBlur = 0; g2.strokeStyle = `rgba(255,255,255,${bl})`; g2.lineWidth = 3; g2.stroke();
+    } else { g2.strokeStyle = `rgba(255,255,255,${bl})`; g2.lineWidth = 3; g2.stroke(); }
+    g2.restore();
+  }
+  // Nouvelle cible ou zone resserrée : la zone part du double entier et se referme sur la nouvelle largeur.
+  function coachMove(co) {
+    const c = cellOf(co.cell); if (!c) return;
+    const z = c.m === 2 && c.n !== 25 ? clamp(Number(co.zone) || 1, .1, 1) : 1;
+    fx(.9, (k) => {
+      const e = ease(k), w = 1 - (1 - z) * e;
+      if (c.n === 25) { g2.beginPath(); g2.arc(CX, CY, (RB.obull + 40 * (1 - e)) * K, 0, TAU); }
+      else if (c.m === 2) zonePath(c, w);
+      else cellPath({ n: c.n, m: c.m, x: 0, y: c.m === 1 ? 200 : 0 });
+      g2.save(); g2.shadowColor = 'rgba(255,225,77,1)'; g2.shadowBlur = 40 * (1 - k) + 10;
+      g2.fillStyle = `rgba(255,225,77,${.6 + .4 * Math.sin(k * Math.PI)})`; g2.fill(); g2.restore();
+    });
+  }
+
   /* ---------- attente hors partie : la cible en "loader", les têtes qui tournent sur le surround ---------- */
   const rings = () => [[RB.obull, RB.tIn], [RB.tIn, RB.tOut], [RB.tOut, RB.dIn], [RB.dIn, RB.dOut]];
   function idleHeads(t, speed, bl) {
@@ -562,6 +602,8 @@
         clock.switchAt = now + (wait + clockMove(clock.prev, ct, wait) - .2) * 1000;
       }
       if (clock) clock.wait = !!d.wait;
+      const co2 = d.scene === 'jeu' && d.coach && d.coach.cell ? d.coach : null, ck = co2 ? co2.cell + ':' + co2.zone : '';
+      if (ck !== coachKey) { coach = co2; coachKey = ck; if (co2 && playing) coachMove(co2); }
       const co = Array.isArray(d.checkout) ? d.checkout.join(' ') : '';
       if (co && co !== lastCheckout && playing) checkoutFx(d.checkout);
       lastCheckout = co;

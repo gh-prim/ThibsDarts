@@ -30,6 +30,7 @@ Système de comptage automatique des scores aux fléchettes pour Thibault.
 |---|---|---|
 | Séries libres | X volées sur une cible choisie, % de réussite | V1 |
 | Checkout trainer | Finir des scores tirés au hasard | V2 |
+| Coach | Séance du jour adaptative : 2 doubles faibles (zone qui se resserre), sorties, pression (chrono, fantôme). Niveaux réglés à 60 % de réussite | V2 |
 | Doubles trainer | Tous les doubles, stats par double | V2 |
 | Score 99 | Moyenne sur 33 volées, suivi de progression | V2 |
 | Heatmap | Où tombent les fléchettes, groupement | V2 |

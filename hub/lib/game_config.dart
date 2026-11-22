@@ -92,6 +92,7 @@ class GameConfig {
     GameMode.roundTheWorld => 'Tour du monde',
     GameMode.countUp => 'Count Up',
     GameMode.cricketCountUp => 'Cricket Count Up',
+    GameMode.coach => 'Coach',
   };
 
   /// Ligne du salon : "Cricket · 20 à 15 et bull".

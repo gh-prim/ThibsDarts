@@ -21,7 +21,10 @@ enum GameMode {
   darts99,
   roundTheWorld,
   countUp,
-  cricketCountUp;
+  cricketCountUp,
+
+  /// Coach adaptatif des check-out (séance générée depuis le profil).
+  coach;
 
   /// Entraînement solo (un seul joueur, écran d'entraînement).
   bool get solo => index >= GameMode.catch40.index;

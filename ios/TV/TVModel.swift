@@ -15,6 +15,7 @@ final class TVModel: ObservableObject {
     /// Fête 180 en cours.
     @Published var fete180 = false
     @Published var volee0 = false
+    @Published var plein20 = false
     /// Tournoi de la cible (null sans tournoi).
     @Published private(set) var tournament: TournamentInfo?
     /// Le prochain match a changé à cette date : l'annonce passe d'abord, puis le tableau.
@@ -38,6 +39,7 @@ final class TVModel: ObservableObject {
     private var last180Key: String?
 
     private var last0Key: String?
+    private var last20Key: String?
     private var misses = 0
 
     init() {
@@ -150,6 +152,19 @@ final class TVModel: ObservableObject {
                 Task {
                     try? await Task.sleep(for: .seconds(9))
                     if self.last180Key == key { withAnimation(Td.sortie) { self.fete180 = false } }
+                }
+            }
+        }
+        // 3 fléchettes dans le 20 en X01 (hors 180)
+        if g.isX01, g.darts.count == 3, g.darts.allSatisfy({ ["S20", "D20", "T20"].contains($0.label) }),
+           !g.darts.allSatisfy({ $0.label == "T20" }) {
+            let key = "\(g.leg)-\(g.current)-\(g.players.map(\.remaining))-20"
+            if key != last20Key {
+                last20Key = key
+                withAnimation(Td.sortie) { plein20 = true }
+                Task {
+                    try? await Task.sleep(for: .seconds(9))
+                    if self.last20Key == key { withAnimation(Td.sortie) { self.plein20 = false } }
                 }
             }
         }

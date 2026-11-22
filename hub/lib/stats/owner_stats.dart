@@ -690,6 +690,9 @@ class AimReport {
       if (int.tryParse(s.label) != null) int.parse(s.label) else if (s.label == 'Bull') 25,
   };
 
+  /// Positions de toutes les fléchettes (unités plateau), pour la heatmap.
+  List<({double x, double y})> get points => [for (final t in all) (x: t.x, y: t.y)];
+
   /// Les 15 dernières fléchettes.
   List<({DartThrow dart, double x, double y, TrainingTarget target})> get recent =>
       all.skip(math.max(0, all.length - 15)).toList();

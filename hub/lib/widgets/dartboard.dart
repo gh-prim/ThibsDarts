@@ -4,6 +4,7 @@ import 'package:darts_engine/darts_engine.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'heatmap.dart';
 
 /// Ordre des secteurs, en partant du haut, sens horaire.
 const sectors = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
@@ -72,10 +73,14 @@ class Dartboard extends StatelessWidget {
     this.zone = 1,
     this.doubleRates = const {},
     this.bias = const [],
+    this.heatPoints,
   });
 
   final List<BoardHit> hits;
   final DartThrow? aimed;
+
+  /// Stats : positions réelles des fléchettes, en heatmap (dégradé vert à rouge) sur le plateau.
+  final List<Offset>? heatPoints;
 
   /// Coach : part du double visé à toucher, autour de son milieu (1 = tout le double).
   final double zone;
@@ -122,6 +127,7 @@ class Dartboard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (heatPoints != null) Positioned.fill(child: HeatLayer(points: heatPoints!)),
                 for (final h in hits)
                   Positioned(
                     left: c.maxWidth / 2 + h.position.dx * scale - 30,

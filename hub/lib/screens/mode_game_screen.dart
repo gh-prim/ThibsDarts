@@ -22,6 +22,7 @@ import '../widgets/mode_widgets.dart';
 import '../widgets/player_card.dart';
 import '../widgets/stage.dart';
 import '../widgets/td_button.dart';
+import 'coach_screen.dart';
 import 'correction_screen.dart';
 import 'game_screen.dart';
 import 'trainer_screen.dart';
@@ -34,6 +35,8 @@ Widget gameScreenFor(GameConfig cfg, {PausedGame? paused}) => cfg.drill
     ? TrainingScreen(config: cfg, paused: paused)
     : cfg.mode == null
     ? GameScreen(config: cfg, paused: paused)
+    : cfg.mode == GameMode.coach
+    ? CoachScreen(config: cfg, paused: paused)
     : cfg.mode!.solo
     ? TrainerScreen(config: cfg, paused: paused)
     : ModeGameScreen(config: cfg, paused: paused);

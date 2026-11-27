@@ -17,6 +17,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
+import 'package:dartos_hub/main.dart' show ScreenFit;
+
 Future<void> _font(String family, String path) async {
   final l = FontLoader(family)..addFont(rootBundle.load(path));
   await l.load();
@@ -49,7 +53,7 @@ void main() {
       await _font('PermanentMarker', 'assets/fonts/PermanentMarker.ttf');
       await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
     });
-    final size = Platform.environment['SMALL'] == null ? const Size(1024, 600) : const Size(800, 480);
+    final size = Platform.environment['SMALL'] == null ? testScreen : const Size(800, 480);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -57,6 +61,7 @@ void main() {
     Future<void> shot(String name, Widget w, {List<String>? taps}) async {
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => ScreenFit(child: child!),
           theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
           home: RepaintBoundary(
             child: KeyedSubtree(key: ValueKey(name), child: w),

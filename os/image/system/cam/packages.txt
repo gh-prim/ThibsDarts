@@ -1,0 +1,8 @@
+# Paquets du Pi 5 (cam). Une ligne par paquet. Les mises a jour installent ceux qui manquent.
+python3-opencv
+python3-numpy
+python3-paho-mqtt
+v4l-utils
+cage
+chromium
+wlr-randr

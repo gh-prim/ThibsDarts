@@ -1,0 +1,3 @@
+# Lignes ajoutees a /boot/firmware/config.txt (bloc "thibsdarts" en fin de fichier, section [all]).
+# Modifier ici puis publier une release : les Pi appliquent et redemarrent tout seuls.
+# Exemple ecran HDMI sans EDID : hdmi_force_hotplug=1

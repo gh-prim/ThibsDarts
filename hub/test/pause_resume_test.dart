@@ -10,6 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
+import 'package:dartos_hub/main.dart' show ScreenFit;
+
 /// Pause depuis la croix, puis reprise (comme après un redémarrage) : même état, la partie continue.
 void main() {
   late Directory dir;
@@ -30,11 +34,12 @@ void main() {
   });
 
   Future<void> open(WidgetTester t, Widget Function() screen) async {
-    t.view.physicalSize = const Size(1024, 600);
+    t.view.physicalSize = testScreen;
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(
       MaterialApp(
+        builder: (context, child) => ScreenFit(child: child!),
         theme: ThemeData(fontFamily: 'Inter'),
         home: Builder(
           builder: (c) => Scaffold(

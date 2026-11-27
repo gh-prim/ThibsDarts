@@ -10,6 +10,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
+import 'package:dartos_hub/main.dart' show ScreenFit;
+
 Future<void> _font(String family, String path) async {
   final l = FontLoader(family)..addFont(rootBundle.load(path));
   await l.load();
@@ -19,7 +23,7 @@ void main() {
   setUpAll(() => OwnerStore.useDirectory(Directory.systemTemp.createTempSync('dartos-training').path));
 
   testWidgets('volées libres : hors cible et corriger', (tester) async {
-    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.physicalSize = testScreen;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final out = Platform.environment['SHOTS'];
@@ -33,6 +37,7 @@ void main() {
     await tester.pumpWidget(
       RepaintBoundary(
         child: MaterialApp(
+          builder: (context, child) => ScreenFit(child: child!),
           theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
           home: const TrainingScreen(config: GameConfig(players: ['Thibs'], freeVolleys: 0)),
         ),

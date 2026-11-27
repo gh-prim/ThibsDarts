@@ -1,0 +1,6 @@
+# Services actives au demarrage (en plus de thibsdarts-firstboot et thibsdarts-update.timer).
+# Une ligne "mask <unite>" masque une unite.
+thibsdarts-cam
+thibsdarts-vision
+thibsdarts-pair
+thibsdarts-kiosk

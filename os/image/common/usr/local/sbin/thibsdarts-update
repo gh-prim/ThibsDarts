@@ -2,8 +2,10 @@
 # Mise a jour automatique de ThibsDarts depuis les releases GitHub.
 #
 # Les versions installees vivent dans /data/system/releases/<tag>, et /data/system/current
-# pointe sur celle qui tourne (/opt/thibsdarts -> /data/system/current). Le systeme (rootfs)
-# est en lecture seule et n'est jamais modifie.
+# pointe sur celle qui tourne (/opt/thibsdarts -> /data/system/current).
+# Le systeme (rootfs en lecture seule, config.txt, paquets, services) est mis a jour aussi :
+# chaque paquet contient system/ et system/apply l'installe, puis le Pi redemarre. Au demarrage
+# suivant on verifie que tout tourne ; sinon retour au systeme et a la version d'avant.
 #
 # Usage : thibsdarts-update [--force]   (--force : ignore la partie en cours et la liste noire)
 set -euo pipefail
@@ -21,6 +23,7 @@ exec 9>/run/thibsdarts-update.lock
 flock -n 9 || exit 0
 
 log() { echo "thibsdarts-update: $*"; }
+status() { { echo "$1" >"$SYS/status.tmp" && mv -f "$SYS/status.tmp" "$SYS/status"; } 2>/dev/null || true; }
 
 current_tag() { cat "$SYS/current/VERSION" 2>/dev/null || echo none; }
 
@@ -70,6 +73,42 @@ prune() {
   done
 }
 
+# Systeme installe au passage precedent : le Pi vient de redemarrer, on verifie qu'il est sain.
+if [ -f "$SYS/pending" ]; then
+  TAG="" PREV="" SYSID="" BACKUP=""
+  # shellcheck source=/dev/null
+  . "$SYS/pending"
+  if healthy; then
+    rm -f "$SYS/pending"
+    if [ -n "$PREV" ] && [ "$PREV" != "$(readlink "$SYS/current" || true)" ]; then ln -sfn "$PREV" "$SYS/previous"; fi
+    rm -rf "$SYS/system-backup"
+    prune
+    status idle
+    log "ok, systeme de $TAG installe"
+  else
+    log "systeme de $TAG pas sain apres redemarrage : retour en arriere"
+    echo "$SYSID" >>"$SYS/bad-system"
+    [ -n "$TAG" ] && echo "$TAG" >>"$BAD"
+    if [ -x "$BACKUP/apply" ]; then "$BACKUP/apply" --restore "$BACKUP" || log "retour du systeme rate"; fi
+    if [ -n "$PREV" ] && [ -d "$SYS/$PREV" ]; then
+      ln -sfn "$PREV" "$SYS/current.new" && mv -T "$SYS/current.new" "$SYS/current"
+    fi
+    rm -f "$SYS/pending"
+    sync
+    status reboot
+    systemctl reboot
+  fi
+  exit 0
+fi
+
+# Systeme de la version courante pas encore applique (ancienne image, ou echec reseau) : on le fait.
+if [ -x "$SYS/current/system/apply" ] &&
+  [ "$(cat /etc/thibsdarts/system-id 2>/dev/null)" != "$(cat "$SYS/current/system/ID" 2>/dev/null)" ] && ! playing; then
+  rc=0
+  "$SYS/current/system/apply" --reboot || rc=$?
+  [ $rc = 10 ] && exit 0
+fi
+
 tag=$(latest_tag) || { log "GitHub injoignable"; exit 0; }
 cur=$(current_tag)
 [ "$tag" = "$cur" ] && exit 0
@@ -84,6 +123,7 @@ if [ $FORCE = 0 ] && playing; then
 fi
 
 log "mise a jour $cur -> $tag"
+status download
 asset="thibsdarts-$ROLE-$tag.tar.gz"
 base="https://github.com/$REPO/releases/download/$tag"
 tmp=$(mktemp -d "$SYS/tmp.XXXXXX") # sur /data : la RAM (overlay) est trop petite
@@ -92,6 +132,7 @@ trap 'rm -rf "$tmp"' EXIT
 if ! curl -fsSL --retry 3 --max-time 600 -o "$tmp/$asset" "$base/$asset" ||
   ! curl -fsSL --retry 3 --max-time 60 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"; then
   log "fichiers de $tag pas encore publies, nouvel essai plus tard"
+  status idle
   exit 0
 fi
 awk -v a="$asset" '$2 == a' "$tmp/SHA256SUMS" >"$tmp/sum"
@@ -107,11 +148,22 @@ mv "$tmp/x" "$REL/$tag"
 
 prev=$(readlink "$SYS/current" || true)
 switch_to "$tag"
+
+# Systeme (OS, config.txt, paquets, services) : si quelque chose change, le Pi redemarre et la
+# verification se fait au demarrage suivant (bloc pending plus haut).
+if [ -x "$SYS/current/system/apply" ]; then
+  rc=0
+  "$SYS/current/system/apply" --prev "$prev" --reboot || rc=$?
+  [ $rc = 10 ] && exit 0
+  [ $rc = 0 ] || log "systeme de $tag pas installe (code $rc), on continue avec l'app seule"
+fi
+
 restart_services
 if healthy; then
   [ -n "$prev" ] && ln -sfn "$prev" "$SYS/previous"
   prune
   log "ok, $tag installee"
+  status idle
   exit 0
 fi
 
@@ -121,4 +173,5 @@ if [ -n "$prev" ]; then
   ln -sfn "$prev" "$SYS/current.new" && mv -T "$SYS/current.new" "$SYS/current" && sync
 fi
 restart_services
+status idle
 exit 1

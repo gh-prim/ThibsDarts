@@ -34,7 +34,7 @@ touch "$WORK/pi-gen/stage2/SKIP_IMAGES"
 
 # Nos fichiers vont dans le dossier pi-gen : en mode Docker, seul ce dossier est copie dans le conteneur.
 mkdir -p "$WORK/pi-gen/thibsdarts"
-cp -R "$HERE/common" "$HERE/roles" "$HERE/stage-thibsdarts" "$WORK/pi-gen/thibsdarts/"
+cp -R "$HERE/common" "$HERE/roles" "$HERE/system" "$HERE/stage-thibsdarts" "$WORK/pi-gen/thibsdarts/"
 cp "$SEED" "$WORK/pi-gen/thibsdarts/seed.tar.gz"
 if [ "$(uname -s)" = Linux ] && [ "${DOCKER:-0}" != 1 ]; then
   USE_DOCKER=0 PG="$WORK/pi-gen" DEPLOY="$OUT"

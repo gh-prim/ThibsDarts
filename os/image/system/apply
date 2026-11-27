@@ -1,0 +1,281 @@
+#!/bin/bash
+# Met a jour le systeme d'un Pi (pas seulement l'app) depuis un paquet ThibsDarts, sans reflasher.
+#
+# Le paquet thibsdarts-<role>-<tag>.tar.gz contient system/ :
+#   ID            empreinte du contenu systeme (rien a faire si /etc/thibsdarts/system-id est egal)
+#   root/         fichiers copies sur le systeme (os/image/common + os/image/roles/<role>)
+#   packages.txt  paquets Debian a avoir (ceux qui manquent sont installes)
+#   units.txt     services a activer / masquer
+#   config.txt    lignes du bloc thibsdarts de /boot/firmware/config.txt
+#   migrations/   scripts lances une seule fois
+#   apply         ce script
+#
+# Le systeme est en lecture seule (overlayroot) : on ecrit dans la vraie couche (/media/root-ro)
+# remontee en ecriture, puis on redemarre. Avant d'ecrire, les fichiers remplaces sont sauves dans
+# /data/system/system-backup ; thibsdarts-update les remet si le Pi ne redemarre pas sain.
+#
+# Usage :
+#   apply [--prev releases/<tag>] [--reboot] [--force]   applique (--reboot : redemarre si modifie)
+#   apply --restore <dossier de sauvegarde>               remet le systeme d'avant
+# Sortie : 0 rien de modifie, 10 systeme modifie (redemarrage necessaire), 1 erreur (rien modifie).
+set -Eeuo pipefail
+
+# shellcheck source=/dev/null
+. "${TD_CONF:-/etc/thibsdarts/thibsdarts.conf}" # ROLE
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# TD_* : chemins de remplacement pour les tests (os/image/system/test.sh).
+SYS="${TD_SYS:-/data/system}"
+BOOT="${TD_BOOT:-/boot/firmware}"
+STATUS="$SYS/status"
+BAD_SYS="$SYS/bad-system"
+
+log() { echo "thibsdarts-system: $*"; }
+status() { { echo "$1" >"$STATUS.tmp" && mv -f "$STATUS.tmp" "$STATUS"; } 2>/dev/null || true; }
+
+# Vraie racine a modifier : la couche basse si overlayroot est actif, sinon / directement.
+R="${TD_ROOT:-}"
+if [ -z "$R" ] && [ "$(findmnt -no FSTYPE /)" = overlay ] && mountpoint -q /media/root-ro; then R=/media/root-ro; fi
+ROOT="${R:-/}"
+
+remounted=()
+binds=()
+rw() {
+  if findmnt -no OPTIONS "$1" | tr , '\n' | grep -qx ro; then
+    mount -o remount,rw "$1"
+    remounted+=("$1")
+  fi
+}
+cleanup() {
+  local i
+  for ((i = ${#binds[@]} - 1; i >= 0; i--)); do umount -l "${binds[$i]}" 2>/dev/null || true; done
+  binds=()
+  sync
+  for i in "${remounted[@]}"; do mount -o remount,ro "$i" 2>/dev/null || true; done
+  remounted=()
+}
+trap cleanup EXIT
+
+# Lance une commande dans le vrai systeme (chroot sur la couche basse si overlayroot).
+in_root() {
+  if [ -z "$R" ] || [ "${TD_CHROOT:-1}" = 0 ]; then "$@"; return; fi
+  if [ ${#binds[@]} = 0 ]; then
+    local d
+    for d in proc sys dev dev/pts run "${BOOT#/}"; do
+      mkdir -p "$R/$d"
+      mount --bind "/$d" "$R/$d"
+      binds+=("$R/$d")
+    done
+    mkdir -p "$SYS/apt" "$R/mnt/thibsdarts-apt"
+    mount --bind "$SYS/apt" "$R/mnt/thibsdarts-apt"
+    binds+=("$R/mnt/thibsdarts-apt")
+  fi
+  chroot "$R" "$@"
+}
+
+same_file() { # $1 dans le paquet, $2 sur le systeme
+  if [ -L "$1" ]; then [ -L "$2" ] && [ "$(readlink "$1")" = "$(readlink "$2")" ]; return; fi
+  [ -f "$2" ] && [ ! -L "$2" ] && cmp -s "$1" "$2" &&
+    [ "$(stat -c %a "$1")" = "$(stat -c %a "$2")" ]
+}
+
+list() { [ -f "$1" ] && sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^[[:space:]]*$/d' "$1" || true; }
+
+# --- Retour arriere ------------------------------------------------------------------------
+restore() {
+  local bk="$1" f
+  [ -d "$bk" ] || { log "sauvegarde absente : $bk"; exit 1; }
+  log "retour au systeme d'avant ($bk)"
+  status system
+  rw "$ROOT"
+  rw "$BOOT"
+  if [ -s "$bk/files.tar" ]; then tar -xpf "$bk/files.tar" -C "$ROOT"; fi
+  if [ -s "$bk/new-files" ]; then
+    while IFS= read -r f; do rm -f "$ROOT/$f"; done <"$bk/new-files"
+  fi
+  if [ -f "$bk/config.txt" ]; then cp "$bk/config.txt" "$BOOT/config.txt"; fi
+  if [ -f "$bk/cmdline.txt" ]; then cp "$bk/cmdline.txt" "$BOOT/cmdline.txt"; fi
+  if [ -f "$bk/system-id" ]; then cp "$bk/system-id" "$ROOT/etc/thibsdarts/system-id"; else rm -f "$ROOT/etc/thibsdarts/system-id"; fi
+  for f in system-version migrations.done; do
+    if [ -f "$bk/$f" ]; then cp "$bk/$f" "$ROOT/etc/thibsdarts/$f"; else rm -f "$ROOT/etc/thibsdarts/$f"; fi
+  done
+  if [ -f "$bk/initramfs" ]; then in_root update-initramfs -u -k all; fi
+  cleanup
+  log "systeme d'avant remis"
+}
+
+if [ "${1:-}" = "--restore" ]; then
+  restore "${2:?dossier de sauvegarde}"
+  exit 0
+fi
+
+PREV=
+REBOOT=0
+FORCE=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --prev) PREV="$2"; shift ;;
+  --reboot) REBOOT=1 ;;
+  --force) FORCE=1 ;;
+  *) log "option inconnue : $1"; exit 1 ;;
+  esac
+  shift
+done
+
+ID="$(cat "$HERE/ID")"
+TAG="$(cat "$HERE/../VERSION" 2>/dev/null || echo "?")"
+if [ "$(cat "$ROOT/etc/thibsdarts/system-id" 2>/dev/null)" = "$ID" ]; then exit 0; fi
+if [ $FORCE = 0 ] && grep -qxF "$ID" "$BAD_SYS" 2>/dev/null; then
+  log "systeme de $TAG deja refuse, on garde l'actuel"
+  exit 0
+fi
+if [ -f "$SYS/pending" ]; then
+  log "un systeme attend deja sa verification apres redemarrage"
+  exit 0
+fi
+
+log "systeme de $TAG ($ID) sur ${ROOT}"
+status system
+BK="$SYS/system-backup/$ID"
+rm -rf "$SYS/system-backup" && mkdir -p "$BK"
+cp "$HERE/apply" "$BK/apply"
+for f in system-id system-version migrations.done; do
+  if [ -f "$ROOT/etc/thibsdarts/$f" ]; then cp "$ROOT/etc/thibsdarts/$f" "$BK/$f"; fi
+done
+cp "$BOOT/config.txt" "$BK/config.txt"
+cp "$BOOT/cmdline.txt" "$BK/cmdline.txt"
+
+changed=0
+applied=0
+# Une erreur en cours de route : on remet tout comme avant et on refuse ce systeme.
+fail() {
+  local rc=$?
+  trap - ERR
+  log "echec (code $rc) : retour au systeme d'avant"
+  echo "$ID" >>"$BAD_SYS"
+  if [ $applied = 1 ]; then restore "$BK" || true; fi
+  status idle
+  exit 1
+}
+trap fail ERR
+
+# 1. Fichiers -------------------------------------------------------------------------------
+: >"$BK/existing" && : >"$BK/new-files"
+initramfs=0
+while IFS= read -r -d '' f; do
+  f="${f#./}"
+  same_file "$HERE/root/$f" "$ROOT/$f" && continue
+  if [ -e "$ROOT/$f" ] || [ -L "$ROOT/$f" ]; then echo "$f" >>"$BK/existing"; else echo "$f" >>"$BK/new-files"; fi
+  case "$f" in usr/share/plymouth/* | etc/initramfs-tools/*) initramfs=1 ;; esac
+done < <(cd "$HERE/root" && find . \( -type f -o -type l \) -print0)
+
+rw "$ROOT"
+rw "$BOOT"
+applied=1
+if [ -s "$BK/existing" ]; then tar -cpf "$BK/files.tar" -C "$ROOT" -T "$BK/existing"; fi
+while IFS= read -r f; do
+  mkdir -p "$(dirname "$ROOT/$f")"
+  # Copie puis renommage : un script en cours d'execution (thibsdarts-update) garde l'ancien fichier.
+  cp -a --no-preserve=ownership "$HERE/root/$f" "$ROOT/$f.td-new"
+  mv -fT "$ROOT/$f.td-new" "$ROOT/$f"
+  changed=1
+done < <(cat "$BK/existing" "$BK/new-files")
+if [ $initramfs = 1 ]; then touch "$BK/initramfs"; fi
+
+# 2. Paquets Debian -------------------------------------------------------------------------
+missing=()
+while IFS= read -r p; do
+  dpkg-query --admindir="$ROOT/var/lib/dpkg" -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' ||
+    missing+=("$p")
+done < <(list "$HERE/packages.txt")
+if [ ${#missing[@]} -gt 0 ]; then
+  log "paquets a installer : ${missing[*]}"
+  status packages
+  # Listes et paquets telecharges sur /data : la partition systeme a peu de place libre.
+  if [ -n "$R" ]; then A=/mnt/thibsdarts-apt; else A="$SYS/apt"; mkdir -p "$A"; fi
+  mkdir -p "$SYS/apt/lists/partial" "$SYS/apt/cache/archives/partial"
+  apt_opts=(-o "Dir::State::Lists=$A/lists" -o "Dir::Cache=$A/cache" -o Dpkg::Options::=--force-confold)
+  in_root env DEBIAN_FRONTEND=noninteractive apt-get "${apt_opts[@]}" update
+  in_root env DEBIAN_FRONTEND=noninteractive apt-get "${apt_opts[@]}" install -y --no-install-recommends "${missing[@]}"
+  rm -rf "$SYS/apt"
+  changed=1
+  status system
+fi
+
+# 3. Services -------------------------------------------------------------------------------
+sysctl_root=()
+if [ -n "$R" ]; then sysctl_root=(--root="$R"); fi
+while IFS= read -r u; do
+  case "$u" in
+  mask\ *)
+    u="${u#mask }"
+    [ "$(systemctl "${sysctl_root[@]}" is-enabled "$u" 2>/dev/null || true)" = masked ] && continue
+    systemctl "${sysctl_root[@]}" mask "$u"
+    ;;
+  *)
+    case "$(systemctl "${sysctl_root[@]}" is-enabled "$u" 2>/dev/null || true)" in enabled | static) continue ;; esac
+    systemctl "${sysctl_root[@]}" enable "$u"
+    ;;
+  esac
+  changed=1
+done < <(printf '%s\n' thibsdarts-firstboot thibsdarts-update.timer; list "$HERE/units.txt")
+
+# 4. Bloc thibsdarts de config.txt ----------------------------------------------------------
+want="$(list "$HERE/config.txt")"
+cfg="$(sed '/^# >>> thibsdarts/,/^# <<< thibsdarts/d' "$BOOT/config.txt")"
+if [ -n "$want" ]; then
+  cfg="$(printf '%s\n\n# >>> thibsdarts (ecrit par les mises a jour ThibsDarts, ne pas modifier)\n[all]\n%s\n# <<< thibsdarts' "$cfg" "$want")"
+fi
+if [ "$cfg" != "$(cat "$BOOT/config.txt")" ]; then
+  printf '%s\n' "$cfg" >"$BOOT/config.txt.td-new"
+  mv -f "$BOOT/config.txt.td-new" "$BOOT/config.txt"
+  changed=1
+fi
+
+# 5. Migrations -----------------------------------------------------------------------------
+done_file="$ROOT/etc/thibsdarts/migrations.done"
+for m in "$HERE"/migrations/*.sh; do
+  [ -f "$m" ] || continue
+  name="$(basename "$m")"
+  grep -qxF "$name" "$done_file" 2>/dev/null && continue
+  log "migration $name"
+  in_root env ROLE="$ROLE" BOOT="$BOOT" /bin/bash -euo pipefail -s <"$m"
+  echo "$name" >>"$done_file"
+  changed=1
+done
+
+# 6. Fin ------------------------------------------------------------------------------------
+if [ $initramfs = 1 ]; then
+  log "reconstruction de l'initramfs (ecran de demarrage)"
+  in_root update-initramfs -u -k all
+fi
+echo "$ID" >"$ROOT/etc/thibsdarts/system-id"
+echo "$TAG" >"$ROOT/etc/thibsdarts/system-version"
+trap - ERR
+cleanup
+
+if [ $changed = 0 ]; then
+  log "rien a changer"
+  rm -rf "$SYS/system-backup"
+  status idle
+  exit 0
+fi
+
+# Verification au prochain demarrage par thibsdarts-update (retour arriere si pas sain).
+[ -n "$PREV" ] || PREV="$(readlink "$SYS/previous" 2>/dev/null || true)"
+cat >"$SYS/pending.tmp" <<EOF
+TAG=$TAG
+PREV=$PREV
+SYSID=$ID
+BACKUP=$BK
+EOF
+mv -f "$SYS/pending.tmp" "$SYS/pending"
+sync
+log "systeme de $TAG installe, redemarrage necessaire"
+if [ $REBOOT = 1 ]; then
+  status reboot
+  sleep 3 # le temps que l'ecran affiche le redemarrage
+  systemctl reboot
+else
+  status idle
+fi
+exit 10

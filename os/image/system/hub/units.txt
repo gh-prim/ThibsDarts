@@ -1,0 +1,5 @@
+# Services actives au demarrage (en plus de thibsdarts-firstboot et thibsdarts-update.timer).
+# Une ligne "mask <unite>" masque une unite.
+thibsdarts-hub
+mosquitto
+mask getty@tty1

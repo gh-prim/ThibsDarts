@@ -82,7 +82,7 @@ jobs:
             gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
           gh release upload "$TAG" thibsdarts-*.tar.gz SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
 
-  # Faut-il une nouvelle image ? Le systeme (os/image) n'est jamais mis a jour par les paquets.
+  # Faut-il une nouvelle image ? Seulement pour installer un Pi neuf : les paquets mettent aussi le systeme a jour (system/apply).
   need-image:
     needs: publish
     runs-on: ubuntu-latest

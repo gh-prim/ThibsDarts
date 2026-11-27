@@ -11,6 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
+import 'package:dartos_hub/main.dart' show ScreenFit;
+
 /// Joue des parties entières sur le vrai écran de jeu, en touchant le plateau.
 void main() {
   setUpAll(() => OwnerStore.useDirectory(Directory.systemTemp.createTempSync('dartos-modes').path));
@@ -34,11 +38,12 @@ void main() {
         await (FontLoader(f)..addFont(rootBundle.load(p))).load();
       }
     });
-    t.view.physicalSize = const Size(1024, 600);
+    t.view.physicalSize = testScreen;
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(
       MaterialApp(
+        builder: (context, child) => ScreenFit(child: child!),
         theme: ThemeData(fontFamily: 'Inter'),
         home: Builder(
           builder: (c) => Scaffold(

@@ -14,7 +14,7 @@ Environment=DARTOS_PIXEL_ASPECT=1.052
 WorkingDirectory=/opt/thibsdarts/hub
 # Plymouth lache l'ecran mais laisse la tete de Thibs affichee jusqu'a la premiere image de l'app.
 ExecStartPre=-+/usr/bin/plymouth quit --retain-splash
-ExecStart=/opt/thibsdarts/hub/flutter-pi --release /opt/thibsdarts/hub
+ExecStart=/usr/local/bin/thibsdarts-hub-run
 Restart=on-failure
 RestartSec=3
 

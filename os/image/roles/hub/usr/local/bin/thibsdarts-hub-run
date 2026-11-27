@@ -1,0 +1,25 @@
+#!/bin/sh
+# Lance le hub (flutter-pi). Sur un grand ecran (plus de 1280x800, ex. EVICIV 10,1" 1920x1200),
+# le GPU du Pi 4 ne tient pas 60 images/s en dessinant 2,3 millions de pixels : animations
+# saccadees et retard sous le doigt. On demande alors a l'ecran le mode 1280x800 (sa propre
+# electronique agrandit l'image) : 2,25 fois moins de pixels a dessiner, meme mise en page
+# (l'interface 10" fait deja 1280x800 logiques).
+# DARTOS_VIDEOMODE force un mode (ex. 1920x1200 pour la pleine resolution, "native" pour ne rien forcer).
+BUNDLE=/opt/thibsdarts/hub
+MODE="${DARTOS_VIDEOMODE:-}"
+if [ -z "$MODE" ]; then
+  for s in /sys/class/drm/card*-HDMI-A-*/status; do
+    [ "$(cat "$s" 2>/dev/null)" = connected ] || continue
+    modes="$(dirname "$s")/modes"
+    first=$(head -n1 "$modes" 2>/dev/null)
+    w=${first%%x*}; h=${first#*x}; h=${h%%[!0-9]*}
+    if [ -n "$w" ] && [ -n "$h" ] && [ "$w" -gt 1280 ] && [ "$h" -gt 800 ] && grep -qx 1280x800 "$modes"; then
+      MODE=1280x800
+    fi
+    break
+  done
+fi
+if [ -n "$MODE" ] && [ "$MODE" != native ]; then
+  exec "$BUNDLE/flutter-pi" --release --videomode "$MODE" "$BUNDLE"
+fi
+exec "$BUNDLE/flutter-pi" --release "$BUNDLE"

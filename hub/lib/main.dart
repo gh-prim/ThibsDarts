@@ -56,10 +56,14 @@ class DartOsApp extends StatelessWidget {
 /// Taille de référence de toute l'interface : la dalle 7" 1024x600 des planches de design.
 const designSize = Size(1024, 600);
 
+/// Surface logique sur un écran 10" (1280x800 ou plus).
+const largeSize = Size(1280, 800);
+
+/// Vrai quand l'interface a la surface d'un écran 10" : de quoi agrandir cible et graphiques.
+bool isLargeScreen(BuildContext context) => MediaQuery.sizeOf(context).height >= 760;
+
 /// Mise à l'échelle de l'interface selon la résolution réelle de l'écran, lue au démarrage.
-/// Le côté limitant (largeur ou hauteur) est ramené à la planche 1024x600, l'autre côté gagne
-/// un peu de place : 1280x800 (10") donne 1024x640, 1920x1080 donne 1067x600, 1920x1200 donne
-/// 1024x640. Tout (textes, graphiques, cible, cibles tactiles) grandit du même facteur.
+/// Voir [layout] : 7" = planche 1024x600, 10" = 1280x800 logiques (1920x1200 : x1,5).
 class ScreenFit extends StatelessWidget {
   const ScreenFit({super.key, required this.child, this.aspect});
 
@@ -69,12 +73,21 @@ class ScreenFit extends StatelessWidget {
   final double? aspect;
 
   /// Taille logique de l'interface et facteur d'agrandissement pour un écran de [physical] pixels.
-  static ({Size size, double scale}) layout(Size physical, double aspect) {
+  /// Dalle 7" (1024x600 ou moins) : la planche telle quelle. Écran 10" (1280x800 et plus, ex.
+  /// EVICIV 10,1" 1920x1200) : surface logique de 1280x800, soit 25 % de place en plus pour la
+  /// cible et les graphiques, avec des éléments un peu plus grands qu'en 7" (x1,5 en 1920x1200).
+  /// DARTOS_UI_WIDTH force la largeur logique (ex. 1024 pour garder la mise en page du 7").
+  static ({Size size, double scale}) layout(Size physical, double aspect, {double? width}) {
     final w = physical.width * aspect; // en pixels carrés
     final h = physical.height;
-    final scale = math.min(w / designSize.width, h / designSize.height);
+    final ref = width != null
+        ? Size(width, width * designSize.height / designSize.width)
+        : (w >= largeSize.width && h >= largeSize.height ? largeSize : designSize);
+    final scale = math.min(w / ref.width, h / ref.height);
     return (size: Size(w / scale, h / scale), scale: scale);
   }
+
+  static final double? _forcedWidth = double.tryParse(Platform.environment['DARTOS_UI_WIDTH'] ?? '');
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +95,7 @@ class ScreenFit extends StatelessWidget {
     final physical = mq.size * mq.devicePixelRatio;
     if (physical.isEmpty) return child;
     final is7 = physical.width.round() == 1024 && physical.height.round() == 600;
-    final fit = layout(physical, aspect ?? (is7 ? pixelAspect : 1));
+    final fit = layout(physical, aspect ?? (is7 ? pixelAspect : 1), width: _forcedWidth);
     return FittedBox(
       fit: BoxFit.fill,
       child: SizedBox.fromSize(

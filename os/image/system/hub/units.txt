@@ -2,4 +2,5 @@
 # Une ligne "mask <unite>" masque une unite.
 thibsdarts-hub
 mosquitto
+avahi-daemon
 mask getty@tty1

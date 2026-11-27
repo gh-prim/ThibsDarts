@@ -1,5 +1,6 @@
 # Paquets du Pi 4 (hub). Une ligne par paquet. Les mises a jour installent ceux qui manquent.
 mosquitto
+avahi-daemon
 libgl1-mesa-dri
 libegl1
 libgles2

@@ -27,6 +27,9 @@ abstract class WifiManager {
 
   /// Renvoie true si la connexion a marché.
   Future<bool> connect(String ssid, String password);
+
+  /// Vrai si le Pi est sur un réseau de la maison (Wi-Fi ou câble), hotspot de setup exclu.
+  Future<bool> connected();
 }
 
 /// Raspberry Pi : NetworkManager via nmcli.
@@ -115,6 +118,18 @@ class NmcliWifi implements WifiManager {
     return false;
   }
 
+  @override
+  Future<bool> connected() async {
+    final r = await _nmcli(['-t', '-f', 'TYPE,STATE,CONNECTION', 'dev']);
+    for (final line in (r.stdout as String).split('\n')) {
+      final parts = line.split(':');
+      if (parts.length < 3) continue;
+      final type = parts[0], state = parts[1], con = parts.sublist(2).join(':');
+      if ((type == 'wifi' || type == 'ethernet') && state == 'connected' && con != _hotspotName) return true;
+    }
+    return false;
+  }
+
   Future<String?> _savedConnection(String ssid) async {
     final r = await _nmcli(['-t', '-f', 'NAME,TYPE', 'con', 'show']);
     for (final line in (r.stdout as String).split('\n')) {
@@ -151,4 +166,7 @@ class SimulatedWifi implements WifiManager {
     await Future<void>.delayed(const Duration(seconds: 2));
     return password != 'faux';
   }
+
+  @override
+  Future<bool> connected() async => true;
 }

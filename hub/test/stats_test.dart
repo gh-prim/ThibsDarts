@@ -12,6 +12,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
+import 'package:dartos_hub/main.dart' show ScreenFit;
+
 final now = DateTime(2026, 11, 9, 22, 30);
 
 /// Trois mois d'historique inventé, au format de history.jsonl.
@@ -215,7 +219,7 @@ void main() {
       await _font('Nunito', 'assets/fonts/Nunito.ttf');
       await _font('packages/lucide_icons_flutter/Lucide', 'packages/lucide_icons_flutter/assets/lucide.ttf');
     });
-    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.physicalSize = testScreen;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final out = Platform.environment['SHOTS'];
@@ -223,6 +227,7 @@ void main() {
     Future<void> shot(String name, Widget screen) async {
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => ScreenFit(child: child!),
           theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton),
           home: RepaintBoundary(key: ValueKey(name), child: screen),
         ),

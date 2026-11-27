@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../cam/cam_link.dart';
 import '../cam/cam_pairing.dart';
+import '../system/system_update.dart';
 import '../system/release.dart';
 import 'debug_screen.dart';
 import 'wifi_screen.dart';
@@ -699,7 +700,7 @@ class _SystemScreenState extends State<SystemScreen> {
       final hubStarted = hubOld && await Release.updateNow();
       msg = hubOld && !hubStarted && !Release.managed
           ? '$latest disponible, mais ce Pi 4 est installé à la main : déploie avec os/quick.'
-          : 'Installation de $latest. ThibsDarts redémarre tout seul dans 1 à 2 minutes.';
+          : 'Installation de $latest. ThibsDarts redémarre tout seul dans 1 à 3 minutes.';
     }
     if (cam == null) msg += ' Pi 5 hors ligne : il se mettra à jour tout seul en revenant.';
     if (!mounted) return;
@@ -746,7 +747,12 @@ class _SystemScreenState extends State<SystemScreen> {
                 spacing: Td.s4,
                 children: [
                   Expanded(
-                    child: _VersionCard(label: 'Pi 4 · écran', version: Release.current, latest: _latest),
+                    child: _VersionCard(
+                      label: 'Pi 4 · écran',
+                      version: Release.current,
+                      latest: _latest,
+                      system: Release.managed ? SystemUpdate.installedVersion ?? 'inconnu' : null,
+                    ),
                   ),
                   Expanded(
                     child: _VersionCard(label: 'Pi 5 · caméras', version: camVersion(), latest: _latest),
@@ -804,11 +810,14 @@ class _SystemScreenState extends State<SystemScreen> {
 }
 
 class _VersionCard extends StatelessWidget {
-  const _VersionCard({required this.label, required this.version, required this.latest});
+  const _VersionCard({required this.label, required this.version, required this.latest, this.system});
 
   final String label;
   final String? version;
   final String? latest;
+
+  /// Version dont le système (OS, config.txt, paquets) est installé.
+  final String? system;
 
   @override
   Widget build(BuildContext context) {
@@ -831,6 +840,7 @@ class _VersionCard extends StatelessWidget {
               upToDate ? 'À jour' : '$latest disponible',
               style: TdText.label.copyWith(color: upToDate ? Td.succes : Td.fluo),
             ),
+          if (system != null) Text('Système $system', style: TdText.caption),
         ],
       ),
     );

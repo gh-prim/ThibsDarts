@@ -11,6 +11,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
 Future<void> _font(String family, String path) async {
   final l = FontLoader(family)..addFont(rootBundle.load(path));
   await l.load();
@@ -31,7 +33,7 @@ void main() {
     final data = Directory.systemTemp.createTempSync('dartos');
     File('${data.path}/owner.json').writeAsStringSync('{"firstName":"Thibault","lastName":"","nickname":"Thibs"}');
     OwnerStore.useDirectory(data.path);
-    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.physicalSize = testScreen;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const DartOsApp());

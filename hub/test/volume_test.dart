@@ -11,6 +11,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'screen_size.dart';
+
+import 'package:dartos_hub/main.dart' show ScreenFit;
+
 /// WAV PCM 16 bits minimal avec les échantillons donnés.
 Uint8List _wav(List<int> samples) {
   final b = BytesBuilder();
@@ -64,7 +68,7 @@ void main() {
   });
 
   testWidgets('icône, appui ouvre le volume, muet', (tester) async {
-    tester.view.physicalSize = const Size(1024, 600);
+    tester.view.physicalSize = testScreen;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.runAsync(() async {
@@ -79,7 +83,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(fontFamily: 'Inter', scaffoldBackgroundColor: Td.beton, brightness: Brightness.dark),
-        builder: (context, child) => RepaintBoundary(key: const Key('shot'), child: child),
+        builder: (context, child) => ScreenFit(
+          child: RepaintBoundary(key: const Key('shot'), child: child),
+        ),
         home: const Scaffold(body: Center(child: VolumeButton())),
       ),
     );

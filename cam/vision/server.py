@@ -778,6 +778,33 @@ def base_url():
     return f"http://{local_ip()}:{PORT}"
 
 
+def _read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def system_bootstrap(registry):
+    """Premier passage du système (OS, paquets, services) sur un Pi dont thibsdarts-update est trop
+    ancien pour connaître system/apply. Un thibsdarts-update récent s'en charge tout seul."""
+    time.sleep(60)  # laisse l'ancien thibsdarts-update finir son contrôle de santé
+    pkg = "/opt/thibsdarts/system"
+    while True:
+        want = _read(f"{pkg}/ID")
+        updater = _read("/usr/local/sbin/thibsdarts-update") or ""
+        if (DRY_POWER or want is None or want == _read("/etc/thibsdarts/system-id")
+                or "system/apply" in updater or os.path.exists("/data/system/pending")):
+            return
+        if not registry.playing:
+            print("système pas encore installé : system/apply", flush=True)
+            subprocess.Popen(["sudo", "-n", "systemd-run", "--collect", "--unit=thibsdarts-system-now",
+                              f"{pkg}/apply", "--reboot"])
+            return
+        time.sleep(600)
+
+
 def main():
     registry.refs = identity.RefStore(DATA_DIR)
     registry.calibs = detector.CalibStore(DATA_DIR)
@@ -895,6 +922,7 @@ def main():
             time.sleep(3)
 
     threading.Thread(target=watch, daemon=True).start()
+    threading.Thread(target=system_bootstrap, args=(registry,), daemon=True).start()
     threading.Thread(target=registry.detect_loop, daemon=True).start()
     try:
         # Vidéoprojecteur (page HDMI + /calib sur le port 8082) dans le même service : livré par OTA.

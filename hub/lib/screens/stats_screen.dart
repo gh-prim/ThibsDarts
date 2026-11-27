@@ -966,7 +966,9 @@ class _StatsScreenState extends State<StatsScreen> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, c) {
-              final side = math.min(470.0, math.min(c.maxWidth, c.maxHeight - 30));
+              // 470 sur la dalle 7", plus grand sur un écran 10" (hauteur 800).
+              final cap = 470.0 * MediaQuery.sizeOf(context).height / 600;
+              final side = math.min(cap, math.min(c.maxWidth, c.maxHeight - 30));
               return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 spacing: 8,

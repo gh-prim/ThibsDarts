@@ -18,6 +18,8 @@ final class SetupModel: ObservableObject {
     @Published var selected: WifiNetwork?
     @Published var password = ""
     @Published var wifiState: FieldState = .normal
+    /// Texte sous le mot de passe pendant que l'iPhone cherche le Pi sur le Wi-Fi de la maison.
+    @Published var wifiHint: String?
 
     @Published var firstName = ""
     @Published var lastName = ""
@@ -56,10 +58,19 @@ final class SetupModel: ObservableObject {
                 let url = try await client.locate(preferred: l.host, port: l.port)
                 try await client.pair(at: url, code: l.code, device: UIDevice.current.name)
                 try? await Task.sleep(for: .milliseconds(600))
-                // Setup interrompu après le Wi-Fi (app fermée, iPhone resté sur le hotspot) : on reprend au profil.
-                if let s = try? await client.status(), s.phase == "profile" {
-                    withAnimation(Td.sortie) { step = .profile }
-                    return
+                // Setup interrompu après le Wi-Fi (app fermée, Pi redémarré, iPhone resté sur le hotspot) : on reprend.
+                if let s = try? await client.status() {
+                    if s.phase == "profile" {
+                        withAnimation(Td.sortie) { step = .profile }
+                        return
+                    }
+                    if s.phase == "wifiConnecting" {
+                        if let name = s.ssid { selected = WifiNetwork(name: name, signal: 4, locked: true) }
+                        wifiState = .loading
+                        withAnimation(Td.sortie) { step = .password }
+                        Task { try? await waitForWifi() }
+                        return
+                    }
                 }
                 withAnimation(Td.sortie) { step = .wifi }
                 loadNetworks()
@@ -105,6 +116,7 @@ final class SetupModel: ObservableObject {
     func sendWifi() {
         guard let net = selected else { return }
         wifiState = .loading
+        wifiHint = nil
         error = nil
         Task {
             do {
@@ -117,34 +129,59 @@ final class SetupModel: ObservableObject {
     }
 
     /// Le Pi coupe son hotspot pour rejoindre la maison : l'iPhone revient sur son Wi-Fi
-    /// et retrouve le Pi en Bonjour.
+    /// et retrouve le Pi (dernière adresse, dartos-hub.local, Bonjour, puis tout le réseau).
+    /// Le Pi peut aussi redémarrer pour une mise à jour : on attend, il reprend au profil.
     private func waitForWifi() async throws {
-        let deadline = Date().addingTimeInterval(60)
+        let start = Date()
+        let deadline = start.addingTimeInterval(240)
         var leftHotspot = false
+        var rejoinedHotspot = false
         while Date() < deadline {
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .milliseconds(1500))
             do {
                 let s = try await client.status()
-                if s.wifi == "ok" {
+                if s.wifi == "ok" || s.phase == "profile" {
+                    wifiHint = nil
                     wifiState = .success
                     try? await Task.sleep(for: .milliseconds(900))
                     withAnimation(Td.sortie) { step = .profile }
                     return
                 }
-                if s.wifi == "error" {
+                // Le Pi n'a pas pu rejoindre la maison : il a rouvert son hotspot.
+                if s.wifi == "error" || (leftHotspot && (s.phase == "waiting" || s.phase == "paired")) {
+                    wifiHint = nil
                     wifiState = .error
                     return
                 }
+            } catch PiError.http(401, _) {
+                // Pi redémarré sans sa session : on se réappaire avec le code du QR.
+                try? await repair()
             } catch {
                 if !leftHotspot, let ssid = link?.ssid {
                     leftHotspot = true
                     client.leaveHotspot(ssid: ssid)
                     try? await Task.sleep(for: .seconds(4))
                 }
-                try? await client.relocate(port: link?.port ?? 8420)
+                wifiHint = "On cherche le Pi sur ton Wi-Fi..."
+                if (try? await client.relocate(port: link?.port ?? 8420)) != nil { continue }
+                // Toujours rien après 75 s : le Wi-Fi a peut-être raté et le Pi a rouvert son hotspot.
+                if !rejoinedHotspot, Date().timeIntervalSince(start) > 75, let ssid = link?.ssid {
+                    rejoinedHotspot = true
+                    if await client.joinHotspot(ssid: ssid, key: link?.key) {
+                        try? await Task.sleep(for: .seconds(3))
+                        _ = try? await client.relocate(port: link?.port ?? 8420)
+                    }
+                }
             }
         }
+        wifiHint = "Pi introuvable. Mets ton iPhone sur le Wi-Fi de la maison et rescanne le QR du Pi."
         wifiState = .error
+    }
+
+    /// Nouvelle session avec le même code (le Pi le garde même s'il redémarre).
+    private func repair() async throws {
+        guard let code = link?.code, let base = client.base else { return }
+        try await client.pair(at: base, code: code, device: UIDevice.current.name)
     }
 
     // MARK: Étape 3 : profil et photo
@@ -169,18 +206,38 @@ final class SetupModel: ObservableObject {
         error = nil
         Task {
             defer { busy = false }
-            do {
-                try await client.uploadPhoto(jpeg)
-                ownerKey = try await client.sendProfile(
-                    firstName: firstName.trimmingCharacters(in: .whitespaces),
-                    lastName: lastName.trimmingCharacters(in: .whitespaces),
-                    nickname: nickname.trimmingCharacters(in: .whitespaces),
-                    pin: pin
-                )
-                UserDefaults.standard.set(true, forKey: "setupDone")
-                withAnimation(Td.sortie) { step = .done }
-            } catch {
-                self.error = error.localizedDescription
+            // Le Pi peut redémarrer (mise à jour) pendant qu'on remplit le profil : on le retrouve et on réessaie.
+            let deadline = Date().addingTimeInterval(240)
+            while true {
+                do {
+                    try await client.uploadPhoto(jpeg)
+                    ownerKey = try await client.sendProfile(
+                        firstName: firstName.trimmingCharacters(in: .whitespaces),
+                        lastName: lastName.trimmingCharacters(in: .whitespaces),
+                        nickname: nickname.trimmingCharacters(in: .whitespaces),
+                        pin: pin
+                    )
+                    error = nil
+                    UserDefaults.standard.set(true, forKey: "setupDone")
+                    withAnimation(Td.sortie) { step = .done }
+                    return
+                } catch {
+                    let retry: Bool
+                    switch error as? PiError {
+                    case .unreachable?: retry = true
+                    case .http(401, _)?: retry = true
+                    default: retry = false
+                    }
+                    guard retry, Date() < deadline else {
+                        self.error = error.localizedDescription
+                        return
+                    }
+                    self.error = "Le Pi ne répond pas, on le cherche..."
+                    try? await Task.sleep(for: .seconds(3))
+                    if (try? await client.relocate(port: link?.port ?? 8420)) != nil {
+                        do { _ = try await client.status() } catch PiError.http(401, _) { try? await repair() } catch {}
+                    }
+                }
             }
         }
     }

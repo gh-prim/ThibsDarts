@@ -1,0 +1,10 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- Annonce le hub en Bonjour : l'app iOS le retrouve sur le Wi-Fi de la maison. -->
+<service-group>
+  <name replace-wildcards="yes">%h</name>
+  <service>
+    <type>_thibsdarts._tcp</type>
+    <port>8420</port>
+  </service>
+</service-group>

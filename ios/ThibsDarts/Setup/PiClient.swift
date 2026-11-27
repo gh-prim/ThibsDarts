@@ -38,6 +38,7 @@ struct SetupStatus: Decodable {
     let phase: String
     let wifi: String
     let ssid: String?
+    let host: String?
 }
 
 
@@ -73,26 +74,76 @@ final class PiClient {
         NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid)
     }
 
-    /// Trouve le Pi : adresse du QR, Bonjour, passerelle du hotspot, puis le Mac en simulateur.
+    /// Dernière adresse du Pi sur le Wi-Fi de la maison (donnée par le Pi).
+    var lanHost: String?
+
+    /// Trouve le Pi. D'abord les adresses connues en parallèle (QR, dernière adresse, dartos-hub.local,
+    /// Bonjour, passerelle du hotspot), puis tout le réseau de l'iPhone en /24.
     func locate(preferred host: String?, port: Int) async throws -> URL {
         var candidates: [String] = []
         if let host { candidates.append(host) }
+        if let lanHost { candidates.append(lanHost) }
+        candidates.append("dartos-hub.local")
         candidates += await Bonjour.find(timeout: 2.5)
         candidates.append("10.42.0.1")
         #if targetEnvironment(simulator)
         candidates.append("127.0.0.1")
         #endif
-        for h in candidates {
-            let hostPart = h.contains(":") && !h.contains("]") ? "[\(h)]" : h
-            guard let url = URL(string: "http://\(hostPart):\(port)") else { continue }
-            if await hello(url) { return url }
+        var seen = Set<String>()
+        let first = candidates.filter { seen.insert($0).inserted }.compactMap { url(host: $0, port: port) }
+        if let found = await firstReachable(first, width: first.count) { return remember(found) }
+        if let ip = Discovery.localIPv4() {
+            let parts = ip.split(separator: ".")
+            if parts.count == 4 {
+                let prefix = parts.prefix(3).joined(separator: ".")
+                let sweep = (1...254).map { "\(prefix).\($0)" }
+                    .filter { $0 != ip && !seen.contains($0) }
+                    .compactMap { url(host: $0, port: port) }
+                if let found = await firstReachable(sweep, width: 48) { return remember(found) }
+            }
         }
         throw PiError.unreachable
     }
 
+    private func url(host h: String, port: Int) -> URL? {
+        let hostPart = h.contains(":") && !h.contains("]") ? "[\(h)]" : h
+        return URL(string: "http://\(hostPart):\(port)")
+    }
+
+    /// Garde l'adresse IP du Pi : un nom .local peut mettre du temps à se résoudre ensuite.
+    private func remember(_ url: URL) -> URL {
+        if let h = url.host, h != "10.42.0.1", !h.hasSuffix(".local"), h != "127.0.0.1" { lanHost = h }
+        return url
+    }
+
+    /// Premier Pi qui répond, en testant `width` adresses à la fois.
+    private func firstReachable(_ urls: [URL], width: Int) async -> URL? {
+        guard !urls.isEmpty else { return nil }
+        return await withTaskGroup(of: URL?.self) { group in
+            var next = 0
+            while next < min(max(width, 1), urls.count) {
+                let u = urls[next]
+                next += 1
+                group.addTask { await self.hello(u) ? u : nil }
+            }
+            while let r = await group.next() {
+                if let r {
+                    group.cancelAll()
+                    return r
+                }
+                if next < urls.count {
+                    let u = urls[next]
+                    next += 1
+                    group.addTask { await self.hello(u) ? u : nil }
+                }
+            }
+            return nil
+        }
+    }
+
     private func hello(_ url: URL) async -> Bool {
         var req = URLRequest(url: url.appendingPathComponent("api/setup/hello"))
-        req.timeoutInterval = 2.5
+        req.timeoutInterval = 2
         guard let (data, res) = try? await session.data(for: req),
               (res as? HTTPURLResponse)?.statusCode == 200,
               let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
@@ -128,7 +179,9 @@ final class PiClient {
     func status() async throws -> SetupStatus {
         let (status, data) = try await send("GET", "api/setup/status")
         guard status == 200 else { throw PiError.http(status, "état") }
-        return try JSONDecoder().decode(SetupStatus.self, from: data)
+        let s = try JSONDecoder().decode(SetupStatus.self, from: data)
+        if let h = s.host, !h.hasPrefix("10.42."), h != "127.0.0.1" { lanHost = h }
+        return s
     }
 
     func uploadPhoto(_ jpeg: Data) async throws {

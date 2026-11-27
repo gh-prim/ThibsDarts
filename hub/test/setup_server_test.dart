@@ -105,4 +105,27 @@ void main() {
       reason: 'jamais en clair',
     );
   }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test('reprend au profil après un redémarrage du Pi (mise à jour pendant le setup)', () async {
+    var (s, j) = await call('POST', '/api/setup/pair', body: {'code': c.code, 'device': 'iPhone'});
+    final token = j['token'] as String;
+    (s, j) = await call('POST', '/api/setup/wifi', token: token, body: {'ssid': 'Maison', 'password': 'golden-hour'});
+    await Future<void>.delayed(const Duration(seconds: 3));
+    expect(c.phase, SetupPhase.profile);
+    final code = c.code;
+    await c.stop();
+
+    // Nouveau process : même code, même session, toujours au profil.
+    c = SetupController(wifi: SimulatedWifi(), store: OwnerStore.instance);
+    await c.start(resumeWait: Duration.zero);
+    expect(c.code, code);
+    expect(c.phase, SetupPhase.profile);
+    expect(c.qrPayload, isNot(contains('s=')), reason: 'pas de hotspot à rejoindre');
+    (s, j) = await call('GET', '/api/setup/status', token: token);
+    expect(s, 200);
+    expect(j['phase'], 'profile');
+    expect(j['wifi'], 'ok');
+    (s, j) = await call('POST', '/api/setup/pair', body: {'code': code, 'device': 'iPhone'});
+    expect(s, 200, reason: 'le code du QR marche encore');
+  }, timeout: const Timeout(Duration(seconds: 30)));
 }

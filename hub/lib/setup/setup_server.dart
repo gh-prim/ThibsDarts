@@ -33,7 +33,7 @@ class SetupController extends ChangeNotifier {
   final OwnerStore store;
   final Random _rnd;
 
-  late final String code;
+  late String code;
   String get hotspotSsid => 'ThibsDarts-$code';
 
   SetupPhase phase = SetupPhase.waiting;
@@ -59,12 +59,82 @@ class SetupController extends ChangeNotifier {
     return Uri(scheme: 'thibsdarts', host: 'setup', queryParameters: q).toString();
   }
 
-  Future<void> start() async {
-    await wifi.startHotspot(hotspotSsid);
-    host = await _localAddress();
+  /// Progression gardée sur /data : une mise à jour ou un redémarrage pendant le setup
+  /// (le Pi a Internet dès qu'il est sur le Wi-Fi de la maison) ne relance pas tout.
+  File get _progressFile => File('${store.dir.path}/setup.json');
+
+  Future<void> start({Duration resumeWait = const Duration(seconds: 45)}) async {
+    final saved = _loadProgress();
+    final savedCode = saved?['code'];
+    if (savedCode is String && RegExp(r'^\d{4}$').hasMatch(savedCode)) code = savedCode;
+    final savedToken = saved?['token'];
+    if (savedToken is String && savedToken.isNotEmpty) _token = savedToken;
+    final wifiDone = saved?['phase'] == SetupPhase.profile.name || saved?['phase'] == SetupPhase.wifiConnecting.name;
+
     _server = await HttpServer.bind(InternetAddress.anyIPv4, port, shared: true);
     _server!.listen(_handle);
+
+    if (wifiDone) {
+      // Wi-Fi déjà donné avant le redémarrage : on attend que le Pi rejoigne la maison tout seul,
+      // surtout sans rouvrir le hotspot (il couperait le Wi-Fi de la maison).
+      ssid = saved?['ssid'] as String?;
+      phase = SetupPhase.profile;
+      wifiState = WifiState.ok;
+      notifyListeners();
+      if (await _waitConnected(resumeWait)) {
+        host = await _localAddress();
+        await _saveProgress();
+        notifyListeners();
+        return;
+      }
+      phase = SetupPhase.waiting;
+      wifiState = WifiState.idle;
+    }
+    await wifi.startHotspot(hotspotSsid);
+    host = await _localAddress();
+    await _saveProgress();
     notifyListeners();
+  }
+
+  Future<bool> _waitConnected(Duration max) async {
+    final end = DateTime.now().add(max);
+    while (true) {
+      if (await wifi.connected()) return true;
+      if (DateTime.now().isAfter(end)) return false;
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+  }
+
+  Map<String, Object?>? _loadProgress() {
+    try {
+      if (!_progressFile.existsSync()) return null;
+      return jsonDecode(_progressFile.readAsStringSync()) as Map<String, Object?>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saving = Future.value();
+
+  /// Écritures à la suite, jamais deux en même temps.
+  Future<void> _saveProgress() => _saving = _saving.then((_) => _writeProgress());
+
+  Future<void> _writeProgress() async {
+    try {
+      if (phase == SetupPhase.done) {
+        if (_progressFile.existsSync()) await _progressFile.delete();
+        return;
+      }
+      await store.dir.create(recursive: true);
+      final tmp = File('${_progressFile.path}.tmp');
+      await tmp.writeAsString(
+        jsonEncode({'code': code, 'token': _token, 'phase': phase.name, 'ssid': ssid}),
+        flush: true,
+      );
+      await tmp.rename(_progressFile.path);
+    } catch (e) {
+      stderr.writeln('setup: progression non sauvée : $e');
+    }
   }
 
   Future<void> stop() async {
@@ -98,6 +168,7 @@ class SetupController extends ChangeNotifier {
   void _set(void Function() f) {
     f();
     notifyListeners();
+    unawaited(_saveProgress());
   }
 
   Future<void> _handle(HttpRequest req) async {
@@ -106,7 +177,13 @@ class SetupController extends ChangeNotifier {
     try {
       final path = req.uri.path;
       if (req.method == 'GET' && path == '/api/setup/hello') {
-        return await _json(res, {'device': 'ThibsDarts', 'version': 1, 'setupDone': phase == SetupPhase.done});
+        return await _json(res, {
+          'device': 'ThibsDarts',
+          'version': 1,
+          'setupDone': phase == SetupPhase.done,
+          'phase': phase.name,
+          'host': host,
+        });
       }
       if (req.method == 'POST' && path == '/api/setup/pair') {
         final body = await _body(req);
@@ -167,6 +244,7 @@ class SetupController extends ChangeNotifier {
             owner = saved;
             phase = SetupPhase.done;
           });
+          await _saving;
           return await _json(res, {..._status(), 'player': profile.id, 'playerToken': token});
         case ('PUT', '/api/setup/photo'):
           final bytes = await req.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
@@ -202,7 +280,7 @@ class SetupController extends ChangeNotifier {
     }
   }
 
-  Map<String, Object?> _status() => {'phase': phase.name, 'wifi': wifiState.name, 'ssid': ssid};
+  Map<String, Object?> _status() => {'phase': phase.name, 'wifi': wifiState.name, 'ssid': ssid, 'host': host};
 
   static Future<Map<String, Object?>> _body(HttpRequest req) async {
     final text = await utf8.decoder.bind(req).join();

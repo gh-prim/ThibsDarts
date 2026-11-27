@@ -271,7 +271,8 @@ private struct PasswordStep: View {
     }
 
     private var hint: String {
-        switch model.wifiState {
+        if let h = model.wifiHint { return h }
+        return switch model.wifiState {
         case .error: "Mot de passe refusé. Ça arrive."
         case .success: "Connecté."
         case .loading: "Le Pi essaie..."
